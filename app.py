@@ -109,9 +109,14 @@ def detect_noise_api():
     findings = detect_noise(df, column_configs, duplicate_row_config=duplicate_row_config)
     flagged_rows_df = get_flagged_rows(df, findings)
 
-    # .to_dict(orient="records"): convert DataFrame -> list các dict, để
-    # jsonify() serialize được thành JSON gửi cho frontend.
-    flagged_rows_json = flagged_rows_df.reset_index(names="row_index").to_dict(orient="records")
+    # Pandas đánh số dòng bắt đầu từ 0 (dòng dữ liệu đầu tiên = 0), nhưng hầu
+    # hết công cụ xem CSV/spreadsheet (Excel, PyCharm CSV viewer...) đánh số
+    # dòng dữ liệu bắt đầu từ 1. Cộng thêm 1 ở đây để "row_number" trả về
+    # khớp với số dòng người dùng nhìn thấy khi mở file bằng các công cụ đó,
+    # tránh nhầm lẫn kiểu lệch 1 dòng.
+    flagged_rows_out = flagged_rows_df.copy()
+    flagged_rows_out.insert(0, "row_number", flagged_rows_out.index + 1)
+    flagged_rows_json = flagged_rows_out.to_dict(orient="records")
 
     return jsonify(
         {
@@ -119,7 +124,7 @@ def detect_noise_api():
             "total_flagged_rows": len(flagged_rows_df),
             "findings": [
                 {
-                    "row_index": int(f.row_index),
+                    "row_number": int(f.row_index) + 1,
                     "column": f.column,
                     "noise_type": f.noise_type,
                     "value": f.value,
