@@ -1,47 +1,279 @@
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --border: #e2e5e9;
+  --text: #1f2933;
+  --text-muted: #6b7280;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --danger: #dc2626;
+  --danger-bg: #fee2e2;
+  --warning: #d97706;
+  --warning-bg: #fef3c7;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+
+  /* Màu riêng cho từng loại noise -- dùng để tô badge trong bảng kết quả */
+  --c-missing: #6b7280;
+  --c-format: #d97706;
+  --c-range: #dc2626;
+  --c-outlier: #7c3aed;
+  --c-category: #0d9488;
+  --c-whitespace: #db2777;
+  --c-duplicate: #991b1b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
-  font-family: sans-serif;
-  max-width: 900px;
-  margin: 20px auto;
-  padding: 0 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 60px;
+}
+
+.page-header h1 {
+  margin-bottom: 4px;
+  font-size: 1.6em;
 }
 
 .hint {
-  color: #555;
+  color: var(--text-muted);
+  font-size: 0.9em;
+  margin-top: 0;
+}
+
+.hint code {
+  background: #eef0f2;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Thanh tiến trình 3 bước */
+.steps {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+  gap: 8px;
+}
+
+.step {
+  flex: 1;
+  text-align: center;
+  padding: 8px 4px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.step.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  margin-top: 0;
+  font-size: 1.1em;
+}
+
+/* Vùng kéo-thả file */
+.drop-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 90px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-bottom: 12px;
+  text-align: center;
+  padding: 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+  border-color: var(--primary);
+  background: #eff6ff;
+}
+
+.btn {
+  font-size: 0.95em;
+  font-weight: 600;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.status-text {
+  color: var(--text-muted);
   font-size: 0.9em;
 }
 
-section {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 16px;
+/* Danh sách config từng cột */
+.column-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-bottom: 16px;
 }
 
 .column-config {
-  border-bottom: 1px solid #eee;
-  padding: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.column-config .col-name {
+  font-weight: 700;
+  min-width: 110px;
 }
 
 .column-config label {
-  margin-right: 12px;
+  font-size: 0.9em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
+.column-config select,
+.column-config input[type="number"] {
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.column-config input[type="number"] {
+  width: 64px;
+}
+
+/* Thẻ thống kê nhanh ở bước 3 */
+.stat-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.stat-tile {
+  flex: 1;
+  min-width: 130px;
+  background: #eff6ff;
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  text-align: center;
+}
+
+.stat-tile-warning {
+  background: var(--warning-bg);
+}
+
+.stat-tile-danger {
+  background: var(--danger-bg);
+}
+
+.stat-value {
+  display: block;
+  font-size: 1.6em;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 0.8em;
+  color: var(--text-muted);
+}
+
+/* Bảng kết quả */
 .table-wrapper {
   overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 table {
   border-collapse: collapse;
   width: 100%;
+  font-size: 0.85em;
 }
 
 th, td {
-  border: 1px solid #ddd;
-  padding: 4px 8px;
-  font-size: 0.85em;
+  padding: 8px 10px;
   text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 th {
-  background: #f5f5f5;
+  background: #f8fafc;
+  position: sticky;
+  top: 0;
+}
+
+tbody tr:hover {
+  background: #f8fafc;
+}
+
+/* Badge màu cho từng loại noise, hiển thị trong cột noise_reasons */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: white;
+  margin: 1px 2px;
+}
+
+.badge-missing_value { background: var(--c-missing); }
+.badge-format_noise { background: var(--c-format); }
+.badge-out_of_range { background: var(--c-range); }
+.badge-outlier { background: var(--c-outlier); }
+.badge-inconsistent_category { background: var(--c-category); }
+.badge-whitespace_noise { background: var(--c-whitespace); }
+.badge-duplicate_row { background: var(--c-duplicate); }
+
+@media (max-width: 500px) {
+  .steps {
+    flex-direction: column;
+  }
 }

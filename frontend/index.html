@@ -2,41 +2,70 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Demo Noise Detection</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Demo: Attribute Noise Detection</h1>
-  <p class="hint">
-    Đây là bản demo tối giản để thấy Frontend -&gt; Backend -&gt; attribute_noise/
-    kết nối với nhau. Backend phải đang chạy ở http://localhost:5000 (python3 app.py).
-  </p>
+  <header class="page-header">
+    <h1>🧹 Attribute Noise Detection</h1>
+    <p class="hint">
+      Demo kết nối Frontend → Backend (Flask) → <code>attribute_noise/</code>.
+      Backend phải đang chạy ở <code>http://localhost:5000</code> (<code>python3 app.py</code>).
+    </p>
+  </header>
+
+  <!-- Thanh tiến trình 3 bước -->
+  <ol class="steps">
+    <li id="step-indicator-1" class="step active">1. Upload file</li>
+    <li id="step-indicator-2" class="step">2. Chọn noise</li>
+    <li id="step-indicator-3" class="step">3. Kết quả</li>
+  </ol>
 
   <!-- Bước 1: Upload file -->
-  <section id="upload-section">
+  <section id="upload-section" class="card">
     <h2>Bước 1: Upload file</h2>
-    <input type="file" id="file-input" accept=".csv,.xlsx" />
-    <button id="upload-btn">Upload</button>
-    <p id="upload-status"></p>
+    <label for="file-input" id="drop-zone" class="drop-zone">
+      <span id="drop-zone-text">📄 Kéo thả file vào đây, hoặc bấm để chọn file (.csv, .xlsx)</span>
+    </label>
+    <input type="file" id="file-input" accept=".csv,.xlsx" hidden />
+    <button id="upload-btn" class="btn btn-primary">Upload</button>
+    <p id="upload-status" class="status-text"></p>
   </section>
 
-  <!-- Bước 2: Chọn noise cho từng cột (chỉ hiện sau khi upload xong) -->
-  <section id="config-section" hidden>
+  <!-- Bước 2: Chọn noise cho từng cột -->
+  <section id="config-section" class="card" hidden>
     <h2>Bước 2: Chọn loại noise cho từng cột</h2>
-    <div id="column-config-list"></div>
-    <button id="detect-btn">Detect Noise</button>
+    <div id="column-config-list" class="column-config-list"></div>
+    <button id="detect-btn" class="btn btn-primary">🔍 Detect Noise</button>
   </section>
 
-  <!-- Bước 3: Xem kết quả (chỉ hiện sau khi bấm Detect) -->
-  <section id="result-section" hidden>
+  <!-- Bước 3: Kết quả -->
+  <section id="result-section" class="card" hidden>
     <h2>Bước 3: Kết quả</h2>
-    <p id="result-summary"></p>
+
+    <div class="stat-row">
+      <div class="stat-tile">
+        <span class="stat-value" id="stat-total-rows">0</span>
+        <span class="stat-label">Tổng số dòng</span>
+      </div>
+      <div class="stat-tile stat-tile-warning">
+        <span class="stat-value" id="stat-flagged-rows">0</span>
+        <span class="stat-label">Dòng có noise</span>
+      </div>
+      <div class="stat-tile stat-tile-danger">
+        <span class="stat-value" id="stat-total-findings">0</span>
+        <span class="stat-label">Ô lỗi phát hiện</span>
+      </div>
+    </div>
+
     <div class="table-wrapper">
       <table id="result-table">
         <thead><tr id="result-table-head"></tr></thead>
         <tbody id="result-table-body"></tbody>
       </table>
     </div>
+    <p id="result-empty" class="status-text" hidden>Không phát hiện noise nào 🎉</p>
   </section>
 
   <script src="script.js"></script>
