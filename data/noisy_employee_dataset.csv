@@ -1,0 +1,115 @@
+id,full_name,age,gender,email,department,salary,join_date,phone,performance_score
+95,Le Oanh,51,Female,le.oanh687@gmail.com,Finance,21412000.0,2017-07-21,0375679047,77.7
+39,Vu Uyen,95,Female,vu.uyen294@gmail.com,IT,21756000.0,2024-10-21,0772409658,69.9
+94,Vo Linh,48,Male,vo.linh144@gmail.com,Sales,38280000.0,2019-08-04,0341514326,89.9
+46,Le Hoa,46,Male,le.hoa724@gmail.com,IT,10055000.0,2021-06-18,0865804273,150
+73,Vo Linh,47,Male,vo.linh466@gmail.com,Sales,18065000.0,2020-02-25,0879067939,87.1
+90,Nguyen Viet,45,Male,nguyen.viet93@gmail.com,HR,18455000.0,2021-03-07,0582398083,89.4
+16,Tran Minh,23,Male,tran.minh603@gmail.com,IT,100000,2015-04-03,0354349361,53.2
+24,Bui Hoa,59,Male ,bui.hoa635@gmail.com,Sales,21415000.0,2024-10-17,0744999379,59.2
+84,Tran Quynh,32,Female,tran.quynh926@gmail.com,Sales,9472000.0,2015-05-12,0767805802,56.6
+1,Tran An,39,Male,tran.an229@gmail.com,IT,31567000.0,2023-02-19,0814265799,51.3
+70,Vo Linh,47,Female,vo.linh513@gmail.com,Finance,23801000.0,2016-10-02,0853261270,77.2
+9,Dang Khanh,59,Female,dang.khanh920@gmail.com,Finance,20781000.0,10/11/2023,0822201654,84.0
+8,Tran Giang,58,Female,tran.giang218@gmail.com,Marketing,NA,2022-03-09,0543101783,83.5
+34,Pham Oanh,43,Female,pham.oanh886@gmail.com,Sales,38940000.0,2019-06-21,-,80.6
+6,Huynh Phong,45,Female,huynh.phong@@gmail.com,HR,30458000.0,2016-10-21,0581691040,82.8
+7,Le Quynh,46,Female,le.quynh948@gmail.com,Finance,15028000.0,2020-01-08,+5-invalid,68.1
+35,Dang Minh,23,Male,dang.minh899@gmail.com,HR,13714000.0,2019-01-04,0968326160,65.6
+2,Pham Hoa,54,Male,pham.hoa575@gmail.com,IT,30913000.0,2023-07-08,0889089901,62.5
+55,Vu Nam,26,Female,vu.nam13@gmail.com,Marketing,34315000.0,2016-07-12,0830534124,69.6
+72,Bui Phuc,53,Male,bui.phuc482@gmail.com,hr,21067000.0,2020-11-04,0554265498,68.5
+81,Le Son,24,Male,le.son515@gmail.com,Finance,18624000.0,2016-08-04,0971327848,50.7
+13,Dang An,60,Female,dang.an501@gmail.com,Sales,-1000000,2020-05-08,0342329237,89.5
+17,Pham Khanh,53,Male,pham.khanh553@gmail.com,IT,50k,2024-10-16,0573481353,86.3
+78,Bui Thao,30,Male,bui.thao283@gmail.com,Marketing,18876000.0,2023-05-27,0347962005,82.7
+36,Huynh Phuc,0,Male,huynh.phuc395@gmail.com,Finance,14083000.0,2015-12-14,0379782527,91.7
+28,Le Khanh,40,Male,le.khanh735@gmail.com, HR,14515000.0,2019-09-16,0716818112,54.2
+50,Le Binh,38,Female,le.binh336@gmail.com,it,22550000.0,2020-07-09,0843859311,87.6
+58,Huynh Khanh,60,Female,huynh.khanh570@gmail.com,Sales,24532000.0,2018-02-08,0875575808,75.0
+61,Pham Minh,?,Male,pham.minh197@gmail.com,IT,31635000.0,2019-12-19,0990099897,62.7
+27,Hoang Yen,55,Male,hoang.yen684@gmail.com,finance,17580000.0,2016-03-09,0324366125,83.4
+98,Nguyen Binh,43,Male,nguyen.binh129@gmail.com,Finance,14567000.0,2023-04-19,0541272553,64.8
+53,Bui Dung,32,Female,bui.dung111@gmail.com,Finance,50k,2019-10-22,0863238057,92.4
+106,Vo Chi,27,Male,vo.chi96@gmail.com,Marketing,11090000.0,2020-03-18,0388714010,93.0
+93,Hoang Viet,46,Female,hoang.viet111@gmail.com,IT,23087000.0,2024-09-11,0939711402,79.1
+30,Dang An,29,Male,dang.an @gmail.com,IT,25459000.0,2020-10-18,0567684996,55.7
+85,Dang Phuc,58,Male,dang.phuc175@gmail.com,IT,10527000.0,2021-10-22,0576795767,91.1
+99,Le Yen,22,Female,le.yen880@gmail.com,IT,39601000.0,2023-05-26,0524754064,79.7
+71,Nguyen Chi,36,male,nguyen.chi784@gmail.com,HR,26440000.0,2017-08-17,0847333543,58.2
+79,Bui Viet,53,Male,bui.viet458@gmail.com,Finance,23499000.0,2020-09-25,0960628276,70.5
+4,Huynh Yen,twenty five,Male,huynh.yen748@gmail.com,Marketing,25159000.0,2021-02-18,0794374605,77.8
+65,Pham Dung,57,Female,pham.dung621@gmail.com,Finance,33304000.0,2018-09-13,0794-794-8972,63.4
+18,Pham Dung,28,Female,pham.dung @gmail.com,Marketing,21155000.0,2015-11-21,0318135295,68.1
+102,Dang Linh,51,Male,dang.linh63@gmail.com,Marketing,35114000.0,2021-11-04,0869533928,53.3
+100,Nguyen Em,22,Female,nguyen.em809@gmail.com,IT,26843000.0,2015-03-09,0327013243,83.4
+48,Dang Yen,36,FEMALE,dang.yen225@gmail.com,HR,21947000.0,2015-07-11,0832151928,87.8
+6,Huynh Viet,49,Female,huynh.phong@@gmail.com,HR,30458000.0,2016-10-21,0581691040,82.8
+5,Huynh Viet,34,Male,huynh.viet47@gmail.com,IT,"20,000,000 VND",2016-04-28,0361019678,62.5
+101,Dang Dung,26,Female,dang.dung460@gmail.com,HR,24424000.0,2016-08-17,0592558242,52.0
+67,Pham Phong,57,M,pham.phong161@gmail.com,Sales,21073000.0,2024-08-10,0341068214,63.0
+92,Tran Em,36,Female,tran.em991@gmail.com,Finance,19705000.0,2021-01-09,0926587799,70.5
+110,Le Em,58,Female,le.em72@gmail.com,IT,31711000.0,2015-02-24,0938874646,66.9
+21,Vu Binh,32,Female,vu.binh3@gmail.com,NA,16486000.0,2022-05-14,0998834863,82.3
+88,Bui Nam,58,Female,bui.nam717@gmail.com,HR,8702000.0,2021-05-01,0916582607,91.0
+41,Pham Em,23,NA,pham.em251@gmail.com,Marketing,27561000.0,2016-08-14,0936096655,82.3
+105,Pham Phuc,43,Female,pham.phuc409@gmail.com,Marketing,31348000.0,2020-07-11,0760237832,92.9
+62,Tran Giang,40,Male,tran.giang370@gmail.com,IT,17673000.0,2023-03-09,0317318358,74.9
+57,Vo Hoa,51,Female,vo.hoa345@gmail.com,Sales,23818000.0,2020-03-16,0557623800,85.9
+87,Huynh Viet,41,Female,huynh.viet707@gmail.com,HR,22619000.0,2019-04-13,0824314759,60.7
+86,Le Hoa,51,Female,le.hoa471@gmail.com,HR,29339000.0,2022-05-22,0931203129,53.3
+109,Vu Uyen,57,Male,vu.uyen624@gmail.com,HR,8927000.0,2019-12-25,0755610493,65.8
+63,Le Son,28,Male,le.son588@gmail.com,HR,23021000.0,2022-06-06,0343887075,92.3
+37,Dang Giang,45,Female,dang.giang72@gmail.com,HR,27941000.0,2016-12-10,0951511484,5.0
+49,Le Yen,56,Male,le.yen929@gmail.com,Marketing,26941000.0,2015-02-21,0828213276,None
+60,Huynh Son,57,Female,huynh.son436@gmail.com,Finance,18585000.0,2022-05-10,0740942292,55.4
+64,Vo Dung,26,Female,vo.dung @gmail.com,Sales,26465000.0,2015-03-05,0950780112,53.8
+69,  Pham Em	,39,Male,pham.em74@gmail.com,Sales,13310000.0,2019-10-24,0948736657,69.8
+83,Huynh Son,56,Male,huynh.son633@gmail.com,Sales,15513000.0,2019-04-24,0368246664,94.0
+20,Tran Quynh,57,Male,tran.quynh52@gmail.com,Finance,34753000.0,20/07/2018,0875181648,71.7
+23,Vo Thao,55,MALE,vo.thao59@gmail.com,Finance,10564000.0,2017-02-20,0341568532,68.2
+26,Tran Uyen,35,Female,NA,HR,36188000.0,2018-06-10,0568812137,87.5
+33,Tran Oanh###,24,Female,tran.oanh228@gmail.com,IT,34131000.0,2022-06-10,0539920292,51.1
+75,Dang Em,40,Female,dang.em902@gmail.com,Marketing,11886000.0,2024-04-23,0551708177,74.8
+96,Hoang Binh,45,Male,hoang.binh455@gmail.com,Marketing,38418000.0,2020-02-22,0783076970,90.6
+31,Hoang Nam,24,Female,hoang.nam216@gmail.com,IT,29342000.0,2020-09-28,06655,83.7
+19,Huynh Dung,37,Male,huynh.dung195@gmail.com,Finance,22356000.0,2021-03-09,09abcde123,89.4
+77,Hoang Thao,39,Female,hoang.thao855@gmail.com,Marketing,39368000.0,2018-08-18,0561484043,58.6
+45,Dang Son,37,Female,dang.son451@gmail.com,Sales,30833000.0,2018-05-11,0782498004,N/A25
+25,Huynh Hoa,38,Female,huynh.hoa135@gmail.com, HR,22631000.0,2016-01-15,0985563727,94.8
+1,Tran An,39,Male,tran.an229@gmail.com,IT,31567000.0,2023-02-19,0814265799,51.3
+11,Nguyen Dung,-5,Female,nguyen.dung788@gmail.com,HR,11570000.0,2021-03-15,0345351479,93.7
+108,Dang Giang,31,Female,dang.giang230@gmail.com,Sales,19204000.0,2023-06-04,0787054398,60.2
+66,Bui Phuc,41,Male,bui.phuc625@gmail.com,Sales,38323000.0,unknown,0798641164,53.7
+10,Tran Em,twenty five,Female,tran.em611@gmail.com,Sales,20313000.0,2024-08-17,0784252722,88.7
+104,Dang Linh,51,Female,dang.linh102@gmail.com,Sales,35289000.0,2023-12-28,0567723010,70.3
+43,Dang Hoa,29,Female,dang.hoa137@gmail.com,Marketing,29362000.0,2023-10-11,+2-invalid,86.7
+29,  Vu Khanh	,24,Male,vu.khanh342@gmail.com,IT,28388000.0,2019-03-24,0884045292,81.8
+44,Dang Phuc,57,Female,dang.phuc919@gmail.com,IT,31797000.0,2017-13-10,0595585469,62.5
+40,  Pham Thao	,52,Male,pham.thao675@gmail.com,Sales,17081000.0,2024-06-03,0551663795,60.1
+51,  Vo An	,56,Male,vo.an975@gmail.com,HR,15175000.0,2016-11-02,0343189803,59.0
+11,Nguyen Dung,-5,Female,nguyen.dung788@gmail.com,HR,11570000.0,2021-03-15,0345351479,93.7
+68,Hoang Quynh,26,Male,hoang.quynh947@gmail.com, HR,33210000.0,2024-11-26,0567061186,55.2
+107,Dang Minh,29,Female,dang.minh363@gmail.com,Marketing,35779000.0,2015-05-20,0757197152,54.7
+76,Dang Phuc,27,Male,dang.phuc862@gmail.com,Sales,22766000.0,2016-11-27,0576890827,92.0
+97,Huynh Binh,47,Female,huynh.binh195@gmail.com,Sales,38368000.0,2022-02-22,0596128115,78.8
+32,Pham Phong,33,Female,pham.phong26@gmail.com,IT,31570000.0,2015-04-45,0545810056,57.2
+14,Tran Chi,53,Male,tran.chi779@gmail.com,Finance,500000000,2017-11-16,0932162965,61.9
+56,?,56,Female,dang.khanh477@gmail.com,Marketing,34424000.0,2024-05-11,0521631697,62.6
+12,Le Thao,250,Female,le.thao862@gmail.com,Finance,27487000.0,2017-06-25,0582394227,92.9
+47,Vu Oanh,59,Male,vu.oanh878@gmail.com,Finance,20172000.0,2015-06-10,0866240084,-20
+89,Vo Linh,36,Female,vo.linh225@gmail.com,IT,27869000.0,2017-11-04,0351464269,85.5
+59,Pham Son,53,Female,pham.son812@gmail.com,Sales,10978000.0,2018-07-23,0551098277,79.9
+80,Huynh Giang,37,Female,huynh.giang240@gmail.com,Marketing,9397000.0,2022-12-26,0861818612,94.5
+103,Tran Minh,60,Male,tran.minh68@gmail.com,IT,16801000.0,2024-09-23,0761124122,94.8
+22,Le Giang,40,MALE,le.giang992@gmail.com,Sales,26534000.0,2023-01-24,0717672593,52.3
+42,Vu Son,47,Male,vu.son @gmail.com,Sales,36565000.0,2016-07-08,0579519112,70.9
+3,Nguyen Phong,null,Female,nguyen.phong285@gmail.com,IT,14890000.0,2020-02-03,0822981052,66.2
+21,Vu Binh,32,Female,vu.binh3@gmail.com,NA,16486000.0,2022-05-14,0998834863,82.3
+15,Bui Phuc,35,Male,bui.phuc731@gmail.com,HR,20768000.0,N/A,0826240908,61.2
+38,Huynh Oanh,40,Male,huynh.oanh197@gmail.com,Marketing,29278000.0,2021-11-24,0592613013,99.9
+54,Pham Chi,59,Male,pham.chi105@gmail.com,HR,35209000.0,2024-02-26,0915512205,65.6
+82,Le Phuc,31,Male,le.phuc481@gmail.com,HR,18834000.0,2021-11-03,0781621574,67.1
+91,Huynh Thao,54,Female,huynh.thao851@gmail.com,IT,16223000.0,2022-05-24,0725457816,71.1
+52,Nguyen Yen###,31,Male,nguyen.yen130@gmail.com,Marketing,29423000.0,2024-04-15,0759512272,57.6
+74,Nguyen Uyen,51,Female,nguyen.uyen56@gmail.com,IT,24590000.0,2024-08-21,0816927215,59.2
