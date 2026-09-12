@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Demo Noise Detection</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>Demo: Attribute Noise Detection</h1>
+  <p class="hint">
+    Đây là bản demo tối giản để thấy Frontend -&gt; Backend -&gt; attribute_noise/
+    kết nối với nhau. Backend phải đang chạy ở http://localhost:5000 (python3 app.py).
+  </p>
+
+  <!-- Bước 1: Upload file -->
+  <section id="upload-section">
+    <h2>Bước 1: Upload file</h2>
+    <input type="file" id="file-input" accept=".csv,.xlsx" />
+    <button id="upload-btn">Upload</button>
+    <p id="upload-status"></p>
+  </section>
+
+  <!-- Bước 2: Chọn noise cho từng cột (chỉ hiện sau khi upload xong) -->
+  <section id="config-section" hidden>
+    <h2>Bước 2: Chọn loại noise cho từng cột</h2>
+    <div id="column-config-list"></div>
+    <button id="detect-btn">Detect Noise</button>
+  </section>
+
+  <!-- Bước 3: Xem kết quả (chỉ hiện sau khi bấm Detect) -->
+  <section id="result-section" hidden>
+    <h2>Bước 3: Kết quả</h2>
+    <p id="result-summary"></p>
+    <div class="table-wrapper">
+      <table id="result-table">
+        <thead><tr id="result-table-head"></tr></thead>
+        <tbody id="result-table-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <script src="script.js"></script>
+</body>
+</html>
