@@ -202,10 +202,10 @@ function createRuleRow(columns) {
   row.innerHTML = `
     <div class="rule-row-header">
       <select class="rule-type-select">
-        <option value="compare">So sánh 2 cột (A so_sánh B)</option>
-        <option value="conditional">Điều kiện (NẾU cột A... THÌ cột B...)</option>
-        <option value="functional_dependency">Functional dependency (A luôn xác định đúng 1 B)</option>
-        <option value="formula">Công thức (vd C = A × B)</option>
+        <option value="compare">So sánh 2 cột (A lớn hơn/nhỏ hơn/bằng B)</option>
+        <option value="conditional">Điều kiện (NẾU cột này... THÌ cột kia...)</option>
+        <option value="functional_dependency">1 cột luôn xác định đúng 1 cột kia (functional dependency)</option>
+        <option value="formula">Công thức tính toán (vd C = A × B)</option>
       </select>
       <input type="text" class="rule-label" placeholder="Tên rule (tuỳ chọn)" />
       <button type="button" class="remove-rule-btn" title="Xoá rule này">✕</button>
@@ -213,52 +213,80 @@ function createRuleRow(columns) {
 
     <!-- Khối field cho COMPARE -->
     <div class="rule-fields rule-fields-compare">
-      <select class="column-a">${colOptions}</select>
-      <select class="compare-operator">${OPERATOR_OPTIONS_HTML}</select>
-      <select class="column-b">${colOptions}</select>
-      <label>Kiểu:
-        <select class="value-type">
-          <option value="number">Số</option>
-          <option value="date">Ngày</option>
-          <option value="text">Chữ</option>
-        </select>
-      </label>
-      <input type="text" class="date-format" placeholder="Format ngày, vd %Y-%m-%d" value="%Y-%m-%d" hidden />
+      <p class="hint rule-hint">
+        So sánh giá trị giữa 2 cột trên CÙNG 1 dòng. Vd: cột "ngày bắt đầu làm"
+        phải ≤ cột "ngày nghỉ việc".
+      </p>
+      <div class="rule-fields-row">
+        <select class="column-a">${colOptions}</select>
+        <select class="compare-operator">${OPERATOR_OPTIONS_HTML}</select>
+        <select class="column-b">${colOptions}</select>
+        <label>Kiểu so sánh:
+          <select class="value-type">
+            <option value="number">Số</option>
+            <option value="date">Ngày</option>
+            <option value="text">Chữ</option>
+          </select>
+        </label>
+        <input type="text" class="date-format" placeholder="Format ngày, vd %Y-%m-%d" value="%Y-%m-%d" hidden />
+      </div>
     </div>
 
     <!-- Khối field cho CONDITIONAL -->
     <div class="rule-fields rule-fields-conditional" hidden>
-      <span class="rule-word">NẾU</span>
-      <select class="if-column">${colOptions}</select>
-      <select class="if-operator">${OPERATOR_OPTIONS_HTML}</select>
-      <input type="text" class="if-value" placeholder="giá trị" />
-      <select class="if-value-type">
-        <option value="text">Chữ</option>
-        <option value="number">Số</option>
-      </select>
-      <span class="rule-word">THÌ</span>
-      <select class="then-column">${colOptions}</select>
-      <select class="then-operator">${OPERATOR_OPTIONS_HTML}</select>
-      <input type="text" class="then-value" placeholder="giá trị" />
-      <select class="then-value-type">
-        <option value="text">Chữ</option>
-        <option value="number">Số</option>
-      </select>
+      <p class="hint rule-hint">
+        Chỉ kiểm tra vế "THÌ" khi vế "NẾU" đúng. Vd: NẾU chức_vụ = "Giám đốc"
+        THÌ tuổi phải ≥ 25.
+      </p>
+      <div class="rule-fields-row">
+        <span class="rule-word">NẾU</span>
+        <select class="if-column">${colOptions}</select>
+        <select class="if-operator">${OPERATOR_OPTIONS_HTML}</select>
+        <input type="text" class="if-value" placeholder="giá trị" />
+        <select class="if-value-type">
+          <option value="text">Chữ</option>
+          <option value="number">Số</option>
+        </select>
+      </div>
+      <div class="rule-fields-row">
+        <span class="rule-word">THÌ</span>
+        <select class="then-column">${colOptions}</select>
+        <select class="then-operator">${OPERATOR_OPTIONS_HTML}</select>
+        <input type="text" class="then-value" placeholder="giá trị" />
+        <select class="then-value-type">
+          <option value="text">Chữ</option>
+          <option value="number">Số</option>
+        </select>
+      </div>
     </div>
 
     <!-- Khối field cho FUNCTIONAL_DEPENDENCY -->
     <div class="rule-fields rule-fields-functional_dependency" hidden>
-      <select class="determinant-column">${colOptions}</select>
-      <span class="rule-word">→ luôn xác định đúng 1 giá trị của →</span>
-      <select class="dependent-column">${colOptions}</select>
+      <p class="hint rule-hint">
+        Mỗi giá trị của cột thứ 1 chỉ nên gắn với ĐÚNG 1 giá trị của cột thứ
+        2 trong toàn bộ file. Vd: mỗi "mã nhân viên" chỉ nên ứng với 1 "tên
+        nhân viên" duy nhất — nếu cùng mã mà tên khác nhau ở 2 dòng thì bị
+        tính là lỗi.
+      </p>
+      <div class="rule-fields-row">
+        <label>Cột thứ 1: <select class="determinant-column">${colOptions}</select></label>
+        <span class="rule-word">→ luôn tương ứng đúng 1 giá trị của →</span>
+        <label>Cột thứ 2: <select class="dependent-column">${colOptions}</select></label>
+      </div>
     </div>
 
     <!-- Khối field cho FORMULA -->
     <div class="rule-fields rule-fields-formula" hidden>
-      <input type="text" class="formula-input" placeholder="vd: thanh_tien == so_luong * don_gia" />
-      <label>Sai số cho phép:
-        <input type="number" class="formula-tolerance" value="0.01" step="0.01" />
-      </label>
+      <p class="hint rule-hint">
+        Biểu thức TOÁN HỌC so sánh giữa các cột SỐ (chỉ dùng +, -, *, / và
+        tên cột). Vd: "thanh_tien == so_luong * don_gia".
+      </p>
+      <div class="rule-fields-row">
+        <input type="text" class="formula-input" placeholder="vd: thanh_tien == so_luong * don_gia" />
+        <label>Sai số cho phép:
+          <input type="number" class="formula-tolerance" value="0.01" step="0.01" />
+        </label>
+      </div>
     </div>
   `;
 

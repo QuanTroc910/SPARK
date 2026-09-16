@@ -249,13 +249,27 @@ body {
 
 /* Từng khối field riêng cho compare/conditional/functional_dependency/formula
    -- chỉ 1 khối hiện ra tuỳ theo <select class="rule-type-select"> (xử lý ở
-   script.js, xem toggleRuleFields()). */
+   script.js, xem toggleRuleFields()).
+
+   QUAN TRỌNG: phải có rule [hidden] riêng bên dưới, KHÔNG được để thiếu.
+   Lý do: thuộc tính HTML "hidden" vốn được trình duyệt ẩn đi nhờ 1 rule CSS
+   mặc định "[hidden] { display: none }", nhưng đó là CSS "hạng thấp nhất"
+   (user-agent stylesheet) -- CSS do CHÍNH TRANG WEB định nghĩa (như dòng
+   "display: flex" ngay dưới đây) LUÔN LUÔN thắng CSS mặc định của trình
+   duyệt, bất kể độ ưu tiên (specificity). Nếu không có rule ".rule-fields
+   [hidden] { display: none }" thì "display: flex" sẽ đè mất "display: none"
+   của [hidden] -- khiến CẢ 4 khối field cùng hiện ra 1 lúc dù JS đã set
+   đúng "hidden" (đây chính là bug làm form rối, đã xảy ra thực tế). */
 .rule-fields {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 0.9em;
+}
+
+.rule-fields[hidden] {
+  display: none;
 }
 
 .rule-fields select,
@@ -275,6 +289,22 @@ body {
   font-weight: 700;
   color: var(--primary);
   font-size: 0.85em;
+}
+
+/* Dòng gợi ý ngắn (kèm ví dụ) hiện ngay trên các ô nhập của từng loại rule
+   -- giúp người dùng hiểu rule đang làm gì TRƯỚC KHI phải tự đoán qua các
+   dropdown. Kế thừa màu/cỡ chữ từ .hint đã có, chỉ chỉnh khoảng cách. */
+.rule-hint {
+  width: 100%;
+  margin: 0 0 6px;
+}
+
+.rule-fields-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
 }
 
 .detect-btn-wrapper {
