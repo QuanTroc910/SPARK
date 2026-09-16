@@ -14,7 +14,17 @@ from pathlib import Path
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from attribute_noise.config import ColumnDType, ColumnNoiseConfig, DuplicateRowConfig, NoiseType
+from attribute_noise.config import (
+    ColumnDType,
+    ColumnNoiseConfig,
+    CompareOperator,
+    CrossFieldRuleConfig,
+    DuplicateRowConfig,
+    NoiseType,
+    RuleType,
+    RuleValueType,
+)
+from attribute_noise.cross_field_rules import FormulaError
 from attribute_noise.pipeline import detect_noise, get_flagged_rows, load_data
 
 app = Flask(__name__)
@@ -84,6 +94,38 @@ def _config_from_json(item: dict) -> ColumnNoiseConfig:
     )
 
 
+def _cross_field_rule_from_json(item: dict) -> CrossFieldRuleConfig:
+    """Convert 1 object JSON rule liên cột (frontend gửi lên) thành
+    CrossFieldRuleConfig -- vai trò giống _config_from_json() ở trên, nhưng
+    cho rule liên cột (compare/conditional/formula/functional_dependency).
+
+    Frontend chỉ gửi các field ỨNG VỚI rule_type đang chọn (vd rule "compare"
+    thì không gửi if_column/then_column...), nên mọi field ở đây dùng
+    .get(...) với default None/giá trị mặc định -- không bắt buộc phải có đủ.
+    """
+    return CrossFieldRuleConfig(
+        rule_type=RuleType(item["rule_type"]),
+        label=item.get("label"),
+        date_format=item.get("date_format"),
+        column_a=item.get("column_a"),
+        operator=CompareOperator(item["operator"]) if item.get("operator") else None,
+        column_b=item.get("column_b"),
+        value_type=RuleValueType(item.get("value_type", "number")),
+        if_column=item.get("if_column"),
+        if_operator=CompareOperator(item["if_operator"]) if item.get("if_operator") else None,
+        if_value=item.get("if_value"),
+        if_value_type=RuleValueType(item.get("if_value_type", "text")),
+        then_column=item.get("then_column"),
+        then_operator=CompareOperator(item["then_operator"]) if item.get("then_operator") else None,
+        then_value=item.get("then_value"),
+        then_value_type=RuleValueType(item.get("then_value_type", "text")),
+        formula=item.get("formula"),
+        tolerance=item.get("tolerance", 0.01),
+        determinant_column=item.get("determinant_column"),
+        dependent_column=item.get("dependent_column"),
+    )
+
+
 @app.route("/api/detect-noise", methods=["POST"])
 def detect_noise_api():
     """Bước 2: Frontend gửi lên file_id (từ bước upload) + cấu hình noise
@@ -98,15 +140,34 @@ def detect_noise_api():
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
 
-    column_configs = [_config_from_json(item) for item in payload.get("column_configs", [])]
+    # "Phiên dịch" toàn bộ JSON của request thành các object Python mà
+    # detect_noise() cần. Việc này (parse rule_type/operator/value_type từ
+    # chuỗi JSON, hoặc formula sai cú pháp) CÓ THỂ lỗi nếu người dùng khai
+    # rule sai (vd chọn cột không tồn tại, gõ formula sai) -- nên bọc trong
+    # try/except để trả lỗi rõ ràng (400) cho FE hiển thị, thay vì để Flask
+    # trả lỗi 500 chung không rõ nguyên nhân.
+    try:
+        column_configs = [_config_from_json(item) for item in payload.get("column_configs", [])]
 
-    duplicate_row_config = None
-    if payload.get("check_duplicate_row"):
-        duplicate_row_config = DuplicateRowConfig(
-            subset_columns=payload.get("duplicate_subset_columns")
+        duplicate_row_config = None
+        if payload.get("check_duplicate_row"):
+            duplicate_row_config = DuplicateRowConfig(
+                subset_columns=payload.get("duplicate_subset_columns")
+            )
+
+        cross_field_rules = [
+            _cross_field_rule_from_json(item) for item in payload.get("cross_field_rules", [])
+        ]
+
+        findings = detect_noise(
+            df,
+            column_configs,
+            duplicate_row_config=duplicate_row_config,
+            cross_field_rules=cross_field_rules,
         )
+    except (FormulaError, ValueError, KeyError, TypeError) as exc:
+        return jsonify({"error": f"Cấu hình rule/noise không hợp lệ: {exc}"}), 400
 
-    findings = detect_noise(df, column_configs, duplicate_row_config=duplicate_row_config)
     flagged_rows_df = get_flagged_rows(df, findings)
 
     # Pandas đánh số dòng bắt đầu từ 0 (dòng dữ liệu đầu tiên = 0), nhưng hầu

@@ -21,6 +21,14 @@
   --c-category: #0d9488;
   --c-whitespace: #db2777;
   --c-duplicate: #991b1b;
+
+  /* Màu riêng cho 4 loại rule liên cột -- tách nhóm màu riêng (xanh dương
+     đậm/nâu/xanh lá/cam gạch) để phân biệt trực quan với badge noise theo
+     cột ở trên, dù cùng nằm trong 1 bảng kết quả. */
+  --c-rule-compare: #0369a1;
+  --c-rule-conditional: #b45309;
+  --c-rule-fd: #4d7c0f;
+  --c-rule-formula: #9a3412;
 }
 
 * {
@@ -135,6 +143,16 @@ body {
   background: var(--primary-hover);
 }
 
+.btn-secondary {
+  background: var(--surface);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.btn-secondary:hover {
+  background: #eff6ff;
+}
+
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -185,6 +203,82 @@ body {
 
 .column-config input[type="number"] {
   width: 64px;
+}
+
+/* Danh sách rule liên cột (Bước 2, phần "Rule liên cột (tuỳ chọn)") */
+.cross-field-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.rule-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #fafbfc;
+}
+
+.rule-row-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.rule-row-header .rule-label {
+  flex: 1;
+  min-width: 140px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.remove-rule-btn {
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1em;
+  padding: 2px 8px;
+  margin-left: auto;
+}
+
+/* Từng khối field riêng cho compare/conditional/functional_dependency/formula
+   -- chỉ 1 khối hiện ra tuỳ theo <select class="rule-type-select"> (xử lý ở
+   script.js, xem toggleRuleFields()). */
+.rule-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+}
+
+.rule-fields select,
+.rule-fields input[type="text"],
+.rule-fields input[type="number"] {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.rule-fields .formula-input {
+  flex: 1;
+  min-width: 220px;
+}
+
+.rule-word {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 0.85em;
+}
+
+.detect-btn-wrapper {
+  margin-top: 16px;
 }
 
 /* Thẻ thống kê nhanh ở bước 3 */
@@ -271,6 +365,14 @@ tbody tr:hover {
 .badge-inconsistent_category { background: var(--c-category); }
 .badge-whitespace_noise { background: var(--c-whitespace); }
 .badge-duplicate_row { background: var(--c-duplicate); }
+
+/* Badge cho rule liên cột -- class được sanitize từ "rule:xxx" thành
+   "rule-xxx" ở script.js (xem noiseBadge()), vd "rule:functional_dependency"
+   -> class "badge-rule-functional_dependency". */
+.badge-rule-compare { background: var(--c-rule-compare); }
+.badge-rule-conditional { background: var(--c-rule-conditional); }
+.badge-rule-functional_dependency { background: var(--c-rule-fd); }
+.badge-rule-formula { background: var(--c-rule-formula); }
 
 @media (max-width: 500px) {
   .steps {

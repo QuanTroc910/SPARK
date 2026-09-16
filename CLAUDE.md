@@ -13,13 +13,27 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
   - `detectors.py` — 7 hàm detect: `missing_value`, `format_noise`,
     `out_of_range`, `outlier`, `inconsistent_category`, `whitespace_noise`,
     `duplicate_row` + registry `DETECTORS`.
-  - `pipeline.py` — `load_data()`, `detect_noise()`, `get_flagged_rows()`.
+  - `cross_field_rules.py` — 4 hàm detect RULE LIÊN CỘT (mục 7 dưới đây):
+    `detect_compare_rule`, `detect_conditional_rule`, `detect_formula_rule`,
+    `detect_functional_dependency_rule` + registry `CROSS_FIELD_RULE_DETECTORS`
+    + `describe_rule()`. Formula dùng "máy diễn giải" `ast` tự viết tay
+    (whitelist theo NODE TYPE: chỉ +,-,*,/, số, tên cột) -- KHÔNG dùng
+    `eval()`/`exec()` (đã test kỹ, xem `FormulaError`).
+  - `pipeline.py` — `load_data()`, `detect_noise()` (nhận thêm
+    `cross_field_rules` tuỳ chọn), `get_flagged_rows()`.
 - `app.py` — Flask backend, CHỈ đóng vai trò "phiên dịch" JSON ⟷ Python object,
   KHÔNG chứa logic detect (logic nằm hết ở `attribute_noise/`).
-  Endpoints: `POST /api/upload`, `POST /api/detect-noise`.
+  Endpoints: `POST /api/upload`, `POST /api/detect-noise` (payload có thêm
+  field `cross_field_rules`, xem mẫu JSON trong `_cross_field_rule_from_json()`).
+  Rule/config sai (formula lỗi cú pháp, cột không tồn tại...) trả HTTP 400
+  kèm message rõ ràng, không crash 500.
 - `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), demo UI có 3 bước
-  (upload → chọn noise theo cột → xem kết quả). Hiện form FE mới hỗ trợ 3/7
-  loại noise (missing/format/out_of_range) để demo gọn; backend đã hỗ trợ đủ 7.
+  (upload → chọn noise theo cột + rule liên cột → xem kết quả). Form chọn
+  noise theo cột mới hỗ trợ 3/7 loại (missing/format/out_of_range) để demo
+  gọn; backend đã hỗ trợ đủ 7. Phần "Rule liên cột (tuỳ chọn)" ở Bước 2 đã
+  hỗ trợ ĐỦ cả 4 loại rule (compare/conditional/functional_dependency/formula),
+  UI cho phép thêm nhiều rule cùng lúc, mỗi rule tự đổi form field theo loại
+  đã chọn (xem `createRuleRow()`/`buildCrossFieldRules()` trong `script.js`).
 - `demo.py` — script test CLI cho logic detect, KHÔNG phải sản phẩm cuối.
 - `data/` — sample data test:
   - `noisy_employee_dataset.csv` + `noise_ground_truth.csv` — bộ gốc, 114 dòng.
@@ -61,7 +75,9 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
    | DATE | missing_value, format_noise | remove row / giá trị cố định |
    | (cấp dòng) | duplicate_row | giữ 1 bản (đầu/cuối), xóa các bản còn lại |
 
-7. **Cross-field rule (mâu thuẫn LOGIC giữa các cột, đang thiết kế, chưa code):**
+7. **Cross-field rule (mâu thuẫn LOGIC giữa các cột) — ĐÃ CODE XONG cả backend
+   + frontend cho đủ 4 loại (`attribute_noise/cross_field_rules.py` +
+   phần "Rule liên cột" ở Bước 2 trên FE):**
    7 detector hiện tại + `duplicate_row` đều KHÔNG kiểm tra quan hệ giữa 2 cột
    khác nhau (mỗi detector chỉ nhận 1 `Series`, hoặc so khớp y hệt cả dòng
    chứ không hiểu ý nghĩa quan hệ). Đây là khoảng trống thật sự cần thêm 1
@@ -97,8 +113,11 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
       (`noisy_employee_dataset_large.csv`).
-- [ ] Cross-field rule detection (mục 7 ở trên) — làm TRƯỚC handling, vì cần
-      thực hành/hiểu rõ hiện trạng detect trước khi mở rộng thêm.
+- [x] Cross-field rule detection (mục 7 ở trên) — backend
+      (`cross_field_rules.py`, tích hợp vào `pipeline.py`/`app.py`) + frontend
+      (phần "Rule liên cột" ở Bước 2) đã xong cho đủ 4 loại, đã test qua
+      HTTP thật (upload + detect-noise) và test riêng khả năng chống code
+      injection của formula (whitelist theo AST node type).
 - [ ] `attribute_handling.py` — implement bảng quyết định dtype×noise_type ở
       trên qua hàm `get_available_actions(dtype, noise_type) -> list[str]`,
       cộng các hàm thực thi (remove_rows, impute_mean/median/knn, cap_to_range,

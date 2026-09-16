@@ -4,6 +4,9 @@ const API_BASE = "http://localhost:5000";
 // Biến "nhớ" trạng thái hiện tại của trang (giống như state trong React,
 // nhưng ở đây làm bằng tay vì chưa dùng framework).
 let currentFileId = null;
+// Lưu lại danh sách cột của file đã upload, để dùng khi user bấm "+ Thêm
+// rule" SAU KHI đã upload (lúc đó mới biết có cột nào để đổ vào <select>).
+let currentColumns = [];
 
 const fileInput = document.getElementById("file-input");
 const dropZone = document.getElementById("drop-zone");
@@ -80,6 +83,7 @@ uploadBtn.addEventListener("click", async () => {
     `✅ Đã upload: ${data.row_count} dòng, ${data.columns.length} cột.`;
 
   renderColumnConfigForm(data.columns);
+  renderCrossFieldRuleBuilder(data.columns);
   document.getElementById("config-section").hidden = false;
   setStepActive(2);
 });
@@ -164,11 +168,193 @@ function buildColumnConfigs() {
   return configs;
 }
 
+// ====== RULE LIÊN CỘT (4 loại: compare / conditional / functional_dependency / formula) ======
+// Khác hẳn checkbox noise theo cột ở trên: đây là kiểm tra MÂU THUẪN LOGIC
+// GIỮA 2 CỘT, nên bắt buộc người dùng phải tự chọn cột + quan hệ (xem
+// CLAUDE.md mục 7 -- máy không tự suy ra được, vì mỗi file có ý nghĩa khác
+// nhau, ví dụ y hệt "chuc_vu -> muc_luong" hợp lý ở file này nhưng vô lý ở
+// file khác).
+
+// Markup các <option> phép so sánh, dùng lại cho cả rule COMPARE và 2 vế
+// NẾU/THÌ của rule CONDITIONAL -- viết thành hằng số để không phải lặp lại.
+const OPERATOR_OPTIONS_HTML = `
+  <option value="<=">&le; (nhỏ hơn hoặc bằng)</option>
+  <option value="<">&lt; (nhỏ hơn)</option>
+  <option value=">=">&ge; (lớn hơn hoặc bằng)</option>
+  <option value=">">&gt; (lớn hơn)</option>
+  <option value="==">= (bằng)</option>
+  <option value="!=">&ne; (khác)</option>
+`;
+
+function columnOptionsHTML(columns) {
+  return columns.map((c) => `<option value="${c}">${c}</option>`).join("");
+}
+
+// Dựng HTML cho 1 dòng rule. Mỗi dòng có ĐỦ 4 khối field cho 4 loại rule
+// (compare/conditional/functional_dependency/formula) nhưng CHỈ khối khớp
+// với <select class="rule-type-select"> đang chọn mới hiện ra -- cách này
+// đơn giản hơn việc render lại DOM mỗi lần user đổi loại rule.
+function createRuleRow(columns) {
+  const row = document.createElement("div");
+  row.className = "rule-row";
+  const colOptions = columnOptionsHTML(columns);
+
+  row.innerHTML = `
+    <div class="rule-row-header">
+      <select class="rule-type-select">
+        <option value="compare">So sánh 2 cột (A so_sánh B)</option>
+        <option value="conditional">Điều kiện (NẾU cột A... THÌ cột B...)</option>
+        <option value="functional_dependency">Functional dependency (A luôn xác định đúng 1 B)</option>
+        <option value="formula">Công thức (vd C = A × B)</option>
+      </select>
+      <input type="text" class="rule-label" placeholder="Tên rule (tuỳ chọn)" />
+      <button type="button" class="remove-rule-btn" title="Xoá rule này">✕</button>
+    </div>
+
+    <!-- Khối field cho COMPARE -->
+    <div class="rule-fields rule-fields-compare">
+      <select class="column-a">${colOptions}</select>
+      <select class="compare-operator">${OPERATOR_OPTIONS_HTML}</select>
+      <select class="column-b">${colOptions}</select>
+      <label>Kiểu:
+        <select class="value-type">
+          <option value="number">Số</option>
+          <option value="date">Ngày</option>
+          <option value="text">Chữ</option>
+        </select>
+      </label>
+      <input type="text" class="date-format" placeholder="Format ngày, vd %Y-%m-%d" value="%Y-%m-%d" hidden />
+    </div>
+
+    <!-- Khối field cho CONDITIONAL -->
+    <div class="rule-fields rule-fields-conditional" hidden>
+      <span class="rule-word">NẾU</span>
+      <select class="if-column">${colOptions}</select>
+      <select class="if-operator">${OPERATOR_OPTIONS_HTML}</select>
+      <input type="text" class="if-value" placeholder="giá trị" />
+      <select class="if-value-type">
+        <option value="text">Chữ</option>
+        <option value="number">Số</option>
+      </select>
+      <span class="rule-word">THÌ</span>
+      <select class="then-column">${colOptions}</select>
+      <select class="then-operator">${OPERATOR_OPTIONS_HTML}</select>
+      <input type="text" class="then-value" placeholder="giá trị" />
+      <select class="then-value-type">
+        <option value="text">Chữ</option>
+        <option value="number">Số</option>
+      </select>
+    </div>
+
+    <!-- Khối field cho FUNCTIONAL_DEPENDENCY -->
+    <div class="rule-fields rule-fields-functional_dependency" hidden>
+      <select class="determinant-column">${colOptions}</select>
+      <span class="rule-word">→ luôn xác định đúng 1 giá trị của →</span>
+      <select class="dependent-column">${colOptions}</select>
+    </div>
+
+    <!-- Khối field cho FORMULA -->
+    <div class="rule-fields rule-fields-formula" hidden>
+      <input type="text" class="formula-input" placeholder="vd: thanh_tien == so_luong * don_gia" />
+      <label>Sai số cho phép:
+        <input type="number" class="formula-tolerance" value="0.01" step="0.01" />
+      </label>
+    </div>
+  `;
+
+  // Chỉ hiện đúng 1 khối field khớp với loại rule đang chọn trong dropdown.
+  const typeSelect = row.querySelector(".rule-type-select");
+  function toggleRuleFields() {
+    const selected = typeSelect.value;
+    row.querySelectorAll(".rule-fields").forEach((div) => {
+      div.hidden = !div.classList.contains(`rule-fields-${selected}`);
+    });
+  }
+  typeSelect.addEventListener("change", toggleRuleFields);
+  toggleRuleFields(); // hiện đúng khối mặc định (compare) ngay khi tạo dòng
+
+  // Ô "date-format" chỉ cần hiện khi value_type = date (chỉ dùng cho compare
+  // -- conditional dùng if/then-value-type riêng, hiện chỉ number/text vì
+  // literal người dùng gõ tay ít khi cần so sánh theo ngày).
+  const valueTypeSelect = row.querySelector(".value-type");
+  const dateFormatInput = row.querySelector(".date-format");
+  valueTypeSelect.addEventListener("change", () => {
+    dateFormatInput.hidden = valueTypeSelect.value !== "date";
+  });
+
+  row.querySelector(".remove-rule-btn").addEventListener("click", () => row.remove());
+
+  return row;
+}
+
+function renderCrossFieldRuleBuilder(columns) {
+  currentColumns = columns;
+  document.getElementById("cross-field-rule-list").innerHTML = ""; // reset khi upload file mới
+}
+
+document.getElementById("add-rule-btn").addEventListener("click", () => {
+  document.getElementById("cross-field-rule-list").appendChild(createRuleRow(currentColumns));
+});
+
+// Đọc lại toàn bộ các dòng rule đang có trên form -> dựng thành mảng JSON,
+// ĐÚNG format mà backend (_cross_field_rule_from_json trong app.py) mong
+// đợi. Field nào rule_type không dùng tới thì không gửi -- backend dùng
+// .get(key, default) nên thiếu field không sao.
+function buildCrossFieldRules() {
+  const rules = [];
+
+  document.querySelectorAll(".rule-row").forEach((row) => {
+    const ruleType = row.querySelector(".rule-type-select").value;
+    const label = row.querySelector(".rule-label").value || null;
+    const base = { rule_type: ruleType, label };
+
+    if (ruleType === "compare") {
+      rules.push({
+        ...base,
+        column_a: row.querySelector(".column-a").value,
+        operator: row.querySelector(".compare-operator").value,
+        column_b: row.querySelector(".column-b").value,
+        value_type: row.querySelector(".value-type").value,
+        date_format: row.querySelector(".date-format").value || null,
+      });
+    } else if (ruleType === "conditional") {
+      rules.push({
+        ...base,
+        if_column: row.querySelector(".if-column").value,
+        if_operator: row.querySelector(".if-operator").value,
+        if_value: row.querySelector(".if-value").value,
+        if_value_type: row.querySelector(".if-value-type").value,
+        then_column: row.querySelector(".then-column").value,
+        then_operator: row.querySelector(".then-operator").value,
+        then_value: row.querySelector(".then-value").value,
+        then_value_type: row.querySelector(".then-value-type").value,
+      });
+    } else if (ruleType === "functional_dependency") {
+      rules.push({
+        ...base,
+        determinant_column: row.querySelector(".determinant-column").value,
+        dependent_column: row.querySelector(".dependent-column").value,
+      });
+    } else if (ruleType === "formula") {
+      const formula = row.querySelector(".formula-input").value.trim();
+      if (!formula) return; // formula rỗng -> bỏ qua dòng rule này, tránh gửi lên backend gây lỗi
+      rules.push({
+        ...base,
+        formula,
+        tolerance: parseFloat(row.querySelector(".formula-tolerance").value) || 0.01,
+      });
+    }
+  });
+
+  return rules;
+}
+
 // ====== BƯỚC 3: GỌI BACKEND DETECT + HIỂN THỊ KẾT QUẢ ======
 detectBtn.addEventListener("click", async () => {
   const columnConfigs = buildColumnConfigs();
-  if (columnConfigs.length === 0) {
-    alert("Hãy chọn ít nhất 1 loại noise cho ít nhất 1 cột");
+  const crossFieldRules = buildCrossFieldRules();
+  if (columnConfigs.length === 0 && crossFieldRules.length === 0) {
+    alert("Hãy chọn ít nhất 1 loại noise cho 1 cột, hoặc thêm ít nhất 1 rule liên cột");
     return;
   }
 
@@ -179,7 +365,11 @@ detectBtn.addEventListener("click", async () => {
     response = await fetch(`${API_BASE}/api/detect-noise`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ file_id: currentFileId, column_configs: columnConfigs }),
+      body: JSON.stringify({
+        file_id: currentFileId,
+        column_configs: columnConfigs,
+        cross_field_rules: crossFieldRules,
+      }),
     });
   } catch (err) {
     alert("Không gọi được backend.");
@@ -190,7 +380,16 @@ detectBtn.addEventListener("click", async () => {
   setButtonLoading(detectBtn, false, "Đang detect...", "🔍 Detect Noise");
 
   if (!response.ok) {
-    alert("Detect thất bại, kiểm tra console/backend log.");
+    // Backend trả {"error": "..."} kèm lý do cụ thể (vd formula sai cú pháp,
+    // cột không tồn tại) -- hiển thị đúng lý do đó thay vì thông báo chung.
+    let message = "Detect thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      // Backend không trả JSON (vd lỗi 500 không mong muốn) -- giữ message mặc định.
+    }
+    alert(message);
     return;
   }
 
@@ -199,20 +398,32 @@ detectBtn.addEventListener("click", async () => {
   setStepActive(3);
 });
 
-// Map noise_type -> tên class badge CSS tương ứng (định nghĩa màu trong style.css)
+// Map noise_type -> tên class badge CSS tương ứng (định nghĩa màu trong
+// style.css). noise_type của rule liên cột có dạng "rule:compare" (chứa dấu
+// ":") -- CSS không cho phép ":" trong tên class 1 cách an toàn, nên thay
+// hết ký tự không phải chữ/số/"_" thành "-" khi ghép class (vd "rule:compare"
+// -> "rule-compare"), còn TEXT hiển thị vẫn giữ nguyên "rule:compare".
 function noiseBadge(noiseType) {
-  return `<span class="badge badge-${noiseType}">${noiseType}</span>`;
+  const cssClass = noiseType.replace(/[^a-zA-Z0-9_]/g, "-");
+  return `<span class="badge badge-${cssClass}">${noiseType}</span>`;
 }
 
-// Cột "noise_reasons" backend trả về dạng chuỗi "age:out_of_range, email:format_noise".
-// Hàm này tách chuỗi đó ra và vẽ lại thành các badge màu cho dễ nhìn.
+// Cột "noise_reasons" backend trả về dạng chuỗi ghép nhiều lý do bằng ", ",
+// mỗi lý do dạng "cột:loại_noise" (vd "age:out_of_range, email:format_noise").
+// Với rule liên cột, "cột" có thể là "cot_a & cot_b" và "loại_noise" có thể
+// tự chứa dấu ":" (vd "rule:compare") -- nên KHÔNG dùng split(":") thô (sẽ
+// cắt nhầm ngay dấu ":" đầu của "rule:compare"), mà tự tìm vị trí dấu ":"
+// ĐẦU TIÊN bằng indexOf() để tách đúng "cột" và "phần còn lại".
 function formatNoiseReasons(value) {
   if (!value) return "";
   return value
-    .split(",")
+    .split(", ")
     .map((part) => {
-      const [column, noiseType] = part.trim().split(":");
-      if (!noiseType) return part;
+      const trimmed = part.trim();
+      const sepIndex = trimmed.indexOf(":");
+      if (sepIndex === -1) return trimmed;
+      const column = trimmed.slice(0, sepIndex);
+      const noiseType = trimmed.slice(sepIndex + 1);
       return `<strong>${column}</strong> ${noiseBadge(noiseType)}`;
     })
     .join(" ");

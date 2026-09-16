@@ -37,7 +37,25 @@
   <section id="config-section" class="card" hidden>
     <h2>Bước 2: Chọn loại noise cho từng cột</h2>
     <div id="column-config-list" class="column-config-list"></div>
-    <button id="detect-btn" class="btn btn-primary">🔍 Detect Noise</button>
+
+    <!-- Rule liên cột: khác noise theo từng cột ở trên -- đây là kiểm tra
+         MÂU THUẪN LOGIC giữa 2 cột khác nhau (vd "ngày bắt đầu <= ngày nghỉ
+         việc"). Máy không tự suy ra được quan hệ này, nên LUÔN cần người
+         dùng tự khai (xem CLAUDE.md mục 7). Phần này là TUỲ CHỌN -- không
+         thêm rule nào cũng detect được bình thường như trước. -->
+    <h3>Rule liên cột (tuỳ chọn)</h3>
+    <p class="hint">
+      Kiểm tra mâu thuẫn giữa 2 cột, vd "tuổi phải ≤ điểm đánh giá" hay
+      "mã nhân viên phải luôn gắn với đúng 1 tên". Bạn cần tự chọn cột và
+      quan hệ — hệ thống không tự đoán được, vì mỗi file dữ liệu có ý nghĩa
+      khác nhau.
+    </p>
+    <div id="cross-field-rule-list" class="cross-field-rule-list"></div>
+    <button id="add-rule-btn" class="btn btn-secondary" type="button">+ Thêm rule</button>
+
+    <div class="detect-btn-wrapper">
+      <button id="detect-btn" class="btn btn-primary">🔍 Detect Noise</button>
+    </div>
   </section>
 
   <!-- Bước 3: Kết quả -->
