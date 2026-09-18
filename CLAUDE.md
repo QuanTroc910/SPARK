@@ -50,25 +50,47 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
     ghi đè bản gốc).
   Rule/config sai (formula lỗi cú pháp, cột không tồn tại...) trả HTTP 400
   kèm message rõ ràng, không crash 500.
-- `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI có **4 bước**
-  (upload → chọn noise theo cột + duplicate_row + rule liên cột → xem kết quả
-  → xử lý & tải file). Bước 2 đã hỗ trợ **ĐỦ 7 loại noise** theo cột (mỗi loại
-  1 checkbox + tham số riêng, tự ẩn/hiện theo dtype qua
-  `toggleColumnFieldsByDtype()`) + 1 khối riêng bật/tắt kiểm tra
-  `duplicate_row` (noise cấp dòng, không thuộc `ColumnNoiseConfig`). Phần
-  "Rule liên cột (tuỳ chọn)" ở Bước 2 hỗ trợ ĐỦ cả 4 loại rule (compare/
-  conditional/functional_dependency/formula), UI cho phép thêm nhiều rule
-  cùng lúc, mỗi rule tự đổi form field theo loại đã chọn (xem
-  `createRuleRow()`/`buildCrossFieldRules()` trong `script.js`). Bước 4 (MỚI)
-  chỉ hiện đúng các cặp (cột, loại noise) THỰC SỰ có trong kết quả detect
-  (`renderHandlingSection()`), dropdown hành động dựng từ bảng `ACTION_TABLE`
-  ở FE (PHẢI khớp `_ACTION_TABLE` trong `attribute_handling.py` -- xem comment
-  tại đó), bấm áp dụng sẽ gọi `/api/apply-handling` rồi tự tải file CSV kết
-  quả về máy qua `/api/download/<id>`. CSS có 1 rule CHUNG
-  `[hidden] { display: none !important }` ở đầu `style.css` để tránh lặp lại
-  bug "mọi khối field cùng hiện" đã từng gặp thực tế ở phần rule liên cột
-  (author stylesheet luôn thắng user-agent stylesheet mặc định của trình
-  duyệt).
+- `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI dạng "panel theo
+  bước" (chỉ 1 `.panel.is-active` hiện tại 1 thời điểm) với **5 bước**:
+  1. Tải file lên → `POST /api/upload`.
+  2. Hướng xử lý — chọn Attribute noise hay Class noise (thẻ Class noise bị
+     khoá "Sắp làm", chỉ Attribute bấm được — khớp đúng roadmap ở trên).
+  3. Cấu hình noise — mỗi cột hiện dạng "chip" (nút bo tròn bật/tắt) cho ĐỦ 7
+     loại noise, chỉ hiện chip hợp lý với dtype đang chọn (`COLUMN_TYPES` map
+     dtype → danh sách noise khả dụng trong `script.js`); tick chip nào thì
+     panel tham số của chip đó (`param-panel`) mới xổ ra. State mỗi cột lưu
+     trong `state.columnConfig[tên cột]` (object, KHÔNG đọc lại DOM mỗi lần
+     submit — khác cách làm cũ), đồng bộ qua 1 listener `change` gắn trên
+     `#col-list` (event delegation, xem `role`/`data-role`). Cộng khối
+     `duplicate_row` riêng + "Rule liên cột" (đủ 4 loại, y hệt logic cũ, chỉ
+     đổi class CSS: `createRuleRow()`/`buildCrossFieldRules()`).
+  4. Kết quả — 3 thẻ thống kê, ô tìm kiếm (debounce) + chip lọc theo loại
+     noise (dựng động từ các loại THỰC SỰ có trong `findings`), bảng có phân
+     trang (20 dòng/trang) và TÔ MÀU TỪNG Ô theo đúng loại noise của ô đó
+     (dựng trực tiếp từ `findings` qua `state.rowFindingsMap`, KHÔNG parse
+     chuỗi `noise_reasons` bằng string-split nữa như bản cũ — mạnh hơn hẳn).
+  5. Xử lý & xuất file — y hệt logic `renderHandlingSection()`/
+     `apply-handling-btn` bản trước, chỉ đổi giao diện: chỉ hiện đúng cặp
+     (cột, loại noise) THỰC SỰ có trong kết quả, dropdown hành động dựng từ
+     `ACTION_TABLE` ở FE (PHẢI khớp `_ACTION_TABLE` trong
+     `attribute_handling.py`), bấm áp dụng gọi `/api/apply-handling` rồi tự
+     tải file CSV về qua `/api/download/<id>`.
+
+  11 "family" màu (`NOISE_TYPE_META` trong `script.js`, khớp biến CSS
+  `--<family>-text/soft/border` trong `style.css`) dùng chung cho chip/badge/
+  tag/tô màu ô — 1 màu riêng cho mỗi loại trong 7 attribute noise + 4 rule
+  liên cột.
+
+  **QUAN TRỌNG — quyết định kiến trúc đã chốt:** trang KHÔNG có chế độ "phân
+  tích cục bộ trong trình duyệt" (không viết lại IQR/regex/... bằng JS). Mọi
+  detect/xử lý LUÔN gọi backend Flask thật; nếu backend chưa chạy,
+  `checkBackendHealth()` sẽ báo rõ ràng ở góc trên bên phải + khoá nút Upload,
+  KHÔNG âm thầm tính bằng 1 bộ máy JS khác (tránh 2 bộ máy lệch kết quả nhau).
+
+  CSS có 1 rule CHUNG `[hidden] { display: none !important }` ở đầu
+  `style.css` để tránh lặp lại bug "mọi khối field cùng hiện" đã từng gặp
+  thực tế ở phần rule liên cột (author stylesheet luôn thắng user-agent
+  stylesheet mặc định của trình duyệt).
 - `demo.py` — script test CLI cho logic detect, KHÔNG phải sản phẩm cuối.
 - `data/` — sample data test:
   - `noisy_employee_dataset.csv` + `noise_ground_truth.csv` — bộ gốc, 114 dòng.
@@ -163,8 +185,13 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
       (Playwright, luồng đủ 4 bước, tải file CSV về thành công).
 - [x] API endpoint áp dụng xử lý + xuất file CSV mới cho user tải về
       (`POST /api/apply-handling` + `GET /api/download/<id>`).
-- [x] Mở rộng frontend form để chọn được đủ cả 7 loại noise (Bước 2) + khối
-      bật/tắt `duplicate_row` riêng + Bước 4 chọn cách xử lý & tải file.
+- [x] Mở rộng frontend form để chọn được đủ cả 7 loại noise + khối bật/tắt
+      `duplicate_row` riêng + bước chọn cách xử lý & tải file.
+- [x] Thiết kế lại giao diện frontend theo mockup người dùng gửi: 5 bước
+      (thêm bước "Hướng xử lý" chọn Attribute/Class), chip UI cho noise theo
+      cột, bảng kết quả có tìm kiếm + lọc theo loại + phân trang + tô màu ô,
+      khung rộng hơn (1440px). KHÔNG mang theo bộ máy detect cục bộ bằng JS
+      của mockup (xem lý do ở mục `frontend/` trên).
 - [ ] Class noise: CHỈ bắt đầu sau khi xong HẾT các mục trên (rule + handling
       + FE đủ 7 loại — nay đã xong cả 3). Detect (distance-based / ensemble-
       based / single-learner) + handle (robust / filtering / polishing) —
