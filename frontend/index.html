@@ -3,124 +3,205 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Demo Noise Detection</title>
+  <title>SPARK — Attribute Noise Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;650;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="page-header">
-    <h1>🧹 Attribute Noise Detection</h1>
-    <p class="hint">
-      Demo kết nối Frontend → Backend (Flask) → <code>attribute_noise/</code>.
-      Backend phải đang chạy ở <code>http://localhost:5000</code> (<code>python3 app.py</code>).
-    </p>
+  <header class="app-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <div class="brand-text">
+          <span class="brand-title">🧹 SPARK — Attribute Noise Detection</span>
+          <span class="brand-sub">Backend Flask (attribute_noise/) là nơi DUY NHẤT thực sự chạy detect/xử lý — trang này chỉ gọi API thật, không tự tính toán</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <span id="backend-dot" class="status-dot is-offline"></span>
+        <span id="backend-status-text">Backend: đang kiểm tra…</span>
+      </div>
+    </div>
   </header>
 
-  <!-- Thanh tiến trình 4 bước -->
-  <ol class="steps">
-    <li id="step-indicator-1" class="step active">1. Upload file</li>
-    <li id="step-indicator-2" class="step">2. Chọn noise</li>
-    <li id="step-indicator-3" class="step">3. Kết quả</li>
-    <li id="step-indicator-4" class="step">4. Xử lý & tải về</li>
-  </ol>
+  <main class="container main-area">
 
-  <!-- Bước 1: Upload file -->
-  <section id="upload-section" class="card">
-    <h2>Bước 1: Upload file</h2>
-    <label for="file-input" id="drop-zone" class="drop-zone">
-      <span id="drop-zone-text">📄 Kéo thả file vào đây, hoặc bấm để chọn file (.csv, .xlsx)</span>
-    </label>
-    <input type="file" id="file-input" accept=".csv,.xlsx" hidden />
-    <button id="upload-btn" class="btn btn-primary">Upload</button>
-    <p id="upload-status" class="status-text"></p>
-  </section>
+    <!-- Thanh tiến trình 5 bước -->
+    <nav class="stepper" id="stepper">
+      <div class="stepper-track"></div>
+      <div class="step" data-step="1"><span class="step-circle">1</span><span class="step-label">Tải file lên</span></div>
+      <div class="step" data-step="2"><span class="step-circle">2</span><span class="step-label">Hướng xử lý</span></div>
+      <div class="step" data-step="3"><span class="step-circle">3</span><span class="step-label">Cấu hình noise</span></div>
+      <div class="step" data-step="4"><span class="step-circle">4</span><span class="step-label">Kết quả</span></div>
+      <div class="step" data-step="5"><span class="step-circle">5</span><span class="step-label">Xử lý & xuất file</span></div>
+    </nav>
 
-  <!-- Bước 2: Chọn noise cho từng cột -->
-  <section id="config-section" class="card" hidden>
-    <h2>Bước 2: Chọn loại noise cho từng cột</h2>
-    <p class="hint">
-      Với mỗi cột, chọn đúng kiểu dữ liệu rồi tick các loại noise muốn kiểm
-      tra. Các ô tham số (min/max, ngưỡng outlier, danh sách category chuẩn...)
-      chỉ hiện ra khi kiểu dữ liệu phù hợp.
-    </p>
-    <div id="column-config-list" class="column-config-list"></div>
+    <!-- Panel 1: Upload -->
+    <section class="panel is-active" id="panel-1">
+      <h2 class="panel-title">Bước 1: Tải file dữ liệu lên</h2>
+      <p class="panel-desc">
+        Chọn file CSV/Excel cần kiểm tra. File được gửi thẳng lên backend Flask
+        (<code>POST /api/upload</code>) — backend đọc file bằng
+        <code>attribute_noise/pipeline.py::load_data()</code> rồi trả về danh sách cột để bạn cấu hình ở Bước 3.
+      </p>
 
-    <!-- Duplicate_row là noise CẤP DÒNG (so cả dòng, không thuộc 1 cột riêng
-         lẻ) nên tách khỏi danh sách theo cột ở trên -- xem CLAUDE.md mục 3. -->
-    <div class="duplicate-row-config">
-      <label>
-        <input type="checkbox" id="dup-check" /> Kiểm tra trùng dòng (duplicate_row)
+      <label for="file-input" class="dropzone" id="dropzone">
+        <div class="dropzone-idle" id="dropzone-idle">
+          <span>📄</span>
+          <p><strong>Kéo thả file vào đây</strong> hoặc bấm để chọn file (.csv, .xlsx)</p>
+        </div>
+        <div class="dropzone-file" id="dropzone-file">
+          <span style="font-size: 22px;">📄</span>
+          <div>
+            <p class="file-name" id="file-name-text"></p>
+            <p class="file-meta" id="file-meta-text"></p>
+          </div>
+        </div>
       </label>
-      <label class="dup-subset-label">
-        Chỉ so theo các cột này (để trống = so toàn bộ), cách nhau dấu phẩy:
-        <input type="text" id="dup-subset-columns" placeholder="vd id" />
-      </label>
-    </div>
+      <input type="file" id="file-input" accept=".csv,.xlsx" hidden />
 
-    <!-- Rule liên cột: khác noise theo từng cột ở trên -- đây là kiểm tra
-         MÂU THUẪN LOGIC giữa 2 cột khác nhau (vd "ngày bắt đầu <= ngày nghỉ
-         việc"). Máy không tự suy ra được quan hệ này, nên LUÔN cần người
-         dùng tự khai (xem CLAUDE.md mục 7). Phần này là TUỲ CHỌN -- không
-         thêm rule nào cũng detect được bình thường như trước. -->
-    <h3>Rule liên cột (tuỳ chọn)</h3>
-    <p class="hint">
-      Kiểm tra mâu thuẫn giữa 2 cột, vd "tuổi phải ≤ điểm đánh giá" hay
-      "mã nhân viên phải luôn gắn với đúng 1 tên". Bạn cần tự chọn cột và
-      quan hệ — hệ thống không tự đoán được, vì mỗi file dữ liệu có ý nghĩa
-      khác nhau.
-    </p>
-    <div id="cross-field-rule-list" class="cross-field-rule-list"></div>
-    <button id="add-rule-btn" class="btn btn-secondary" type="button">+ Thêm rule</button>
+      <p class="hint-note" id="upload-notice">Đang kiểm tra kết nối tới backend…</p>
 
-    <div class="detect-btn-wrapper">
-      <button id="detect-btn" class="btn btn-primary">🔍 Detect Noise</button>
-    </div>
-  </section>
-
-  <!-- Bước 3: Kết quả -->
-  <section id="result-section" class="card" hidden>
-    <h2>Bước 3: Kết quả</h2>
-
-    <div class="stat-row">
-      <div class="stat-tile">
-        <span class="stat-value" id="stat-total-rows">0</span>
-        <span class="stat-label">Tổng số dòng</span>
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="upload-btn" disabled>Tải lên &amp; tiếp tục</button>
+        <span class="status-text" id="upload-status"></span>
       </div>
-      <div class="stat-tile stat-tile-warning">
-        <span class="stat-value" id="stat-flagged-rows">0</span>
-        <span class="stat-label">Dòng có noise</span>
+    </section>
+
+    <!-- Panel 2: Hướng xử lý -->
+    <section class="panel" id="panel-2">
+      <h2 class="panel-title">Bước 2: Chọn hướng xử lý</h2>
+      <p class="panel-desc">
+        Noise trong dữ liệu được chia theo 2 hướng, mỗi hướng có bộ luật phát hiện + xử lý riêng
+        (xem <code>CLAUDE.md</code>). Attribute noise code trước, Class noise làm sau.
+      </p>
+
+      <div class="direction-grid">
+        <div class="direction-card" data-direction="attribute" tabindex="0" role="button">
+          <h3>📊 Attribute Noise</h3>
+          <p>Lỗi ở từng thuộc tính/cột: thiếu giá trị, sai định dạng, ngoài khoảng, giá trị bất thường, không nhất quán, khoảng trắng thừa, trùng dòng — cộng rule mâu thuẫn LOGIC giữa 2 cột.</p>
+        </div>
+        <div class="direction-card is-disabled" data-direction="class">
+          <span class="badge-soon">Sắp làm</span>
+          <h3>🏷️ Class Noise</h3>
+          <p>Lỗi ở nhãn/lớp phân loại: nhãn sai, nhãn mâu thuẫn với các thuộc tính khác trong cùng dòng.</p>
+        </div>
       </div>
-      <div class="stat-tile stat-tile-danger">
-        <span class="stat-value" id="stat-total-findings">0</span>
-        <span class="stat-label">Ô lỗi phát hiện</span>
+
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="continue-step2-btn" disabled>Tiếp tục</button>
       </div>
-    </div>
+    </section>
 
-    <div class="table-wrapper">
-      <table id="result-table">
-        <thead><tr id="result-table-head"></tr></thead>
-        <tbody id="result-table-body"></tbody>
-      </table>
-    </div>
-    <p id="result-empty" class="status-text" hidden>Không phát hiện noise nào 🎉</p>
+    <!-- Panel 3: Cấu hình noise -->
+    <section class="panel" id="panel-3">
+      <h2 class="panel-title">Bước 3: Cấu hình noise cho từng cột</h2>
+      <p class="panel-desc">
+        Với mỗi cột, chọn đúng kiểu dữ liệu rồi bật các loại noise cần kiểm tra. Các trường tham số
+        (min/max, ngưỡng outlier, danh sách category chuẩn...) chỉ hiện khi phù hợp với kiểu dữ liệu đã chọn.
+      </p>
 
-    <div class="detect-btn-wrapper">
-      <button id="goto-handling-btn" class="btn btn-primary" hidden>➡️ Sang Bước 4: Xử lý noise</button>
-    </div>
-  </section>
+      <p class="empty-state" id="col-list-empty" hidden>Chưa có dữ liệu — quay lại Bước 1 để tải file.</p>
+      <div class="col-list" id="col-list"></div>
 
-  <!-- Bước 4: Xử lý noise đã phát hiện + tải file CSV đã làm sạch -->
-  <section id="handling-section" class="card" hidden>
-    <h2>Bước 4: Xử lý & tải file đã làm sạch</h2>
-    <p class="hint">
-      Với MỖI loại lỗi thực sự tìm thấy ở Bước 3 (theo đúng cặp cột + loại
-      noise), chọn 1 cách xử lý bên dưới. Rule liên cột (vd
-      <code>rule:compare</code>) hiện CHƯA hỗ trợ xử lý tự động ở bước này —
-      chỉ 7 loại attribute noise theo cột + duplicate_row.
-    </p>
-    <div id="handling-list" class="handling-list"></div>
-    <button id="apply-handling-btn" class="btn btn-primary">✅ Áp dụng xử lý & tải file CSV</button>
-    <p id="handling-status" class="status-text"></p>
-  </section>
+      <div class="sub-section duplicate-row-config">
+        <h3 class="sub-title">Trùng dòng (duplicate_row)</h3>
+        <p class="panel-desc">Noise cấp DÒNG — so cả dòng (hoặc 1 nhóm cột chỉ định) với các dòng khác, không thuộc riêng 1 cột nào.</p>
+        <label class="switch-row">
+          <input type="checkbox" id="dup-enable" />
+          <span>Kiểm tra trùng dòng</span>
+        </label>
+        <div class="field field-grow">
+          <label>Chỉ so theo các cột này (để trống = so toàn bộ), cách nhau bởi dấu phẩy</label>
+          <input type="text" class="input" id="dup-subset-columns" placeholder="vd id" />
+        </div>
+      </div>
+
+      <div class="sub-section">
+        <h3 class="sub-title">Rule liên cột (tuỳ chọn)</h3>
+        <p class="panel-desc">
+          Kiểm tra mâu thuẫn LOGIC giữa 2 cột — vd "tuổi phải ≤ điểm đánh giá" hay "mã nhân viên phải luôn
+          gắn với đúng 1 tên". Bạn tự chọn cột và quan hệ, hệ thống không tự đoán được vì mỗi file dữ liệu
+          có ý nghĩa khác nhau (xem <code>CLAUDE.md</code> mục 7).
+        </p>
+        <div class="rules-list" id="rules-list"></div>
+        <button class="btn btn-ghost" id="add-rule-btn" type="button">+ Thêm rule</button>
+      </div>
+
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="detect-btn" type="button">🔍 Detect Noise</button>
+        <span class="status-text" id="detect-status"></span>
+      </div>
+    </section>
+
+    <!-- Panel 4: Kết quả -->
+    <section class="panel" id="panel-4">
+      <div class="panel-head-row">
+        <div>
+          <h2 class="panel-title">Bước 4: Kết quả phát hiện</h2>
+          <p class="panel-desc">Rà soát các dòng và ô bị gắn cờ noise trước khi sang bước xử lý.</p>
+        </div>
+        <span class="source-badge">Nguồn: attribute_noise/ (Flask backend thật)</span>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value mono" id="stat-total-rows">0</span>
+          <span class="stat-label">Tổng số dòng</span>
+        </div>
+        <div class="stat-card stat-amber">
+          <span class="stat-value mono" id="stat-flagged-rows">0</span>
+          <span class="stat-label">Dòng có noise</span>
+        </div>
+        <div class="stat-card stat-crimson">
+          <span class="stat-value mono" id="stat-total-findings">0</span>
+          <span class="stat-label">Ô lỗi phát hiện</span>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <input type="search" class="input search-input" id="search-input" placeholder="Tìm theo giá trị hoặc loại lỗi…" />
+        <div class="filter-chips" id="filter-chips"></div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="results-table" id="result-table">
+          <thead id="result-table-head"></thead>
+          <tbody id="result-table-body"></tbody>
+        </table>
+      </div>
+      <p id="result-empty" class="empty-state" hidden>Không phát hiện noise nào 🎉</p>
+
+      <div class="pagination" id="pagination" hidden>
+        <button class="btn btn-ghost" id="page-prev" type="button">Trước</button>
+        <span id="page-indicator" class="mono"></span>
+        <button class="btn btn-ghost" id="page-next" type="button">Sau</button>
+      </div>
+
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="goto-handling-btn" type="button" disabled>Tiếp tục: xử lý &amp; xuất file</button>
+      </div>
+    </section>
+
+    <!-- Panel 5: Xử lý & xuất file -->
+    <section class="panel" id="panel-5">
+      <h2 class="panel-title">Bước 5: Xử lý &amp; xuất file</h2>
+      <p class="panel-desc">
+        Với MỖI cặp (cột, loại noise) THỰC SỰ có trong kết quả Bước 4, chọn 1 cách xử lý bên dưới —
+        hành động khả dụng được quyết định theo bảng (dtype, noise_type) trong
+        <code>attribute_noise/attribute_handling.py</code>. Rule liên cột hiện CHƯA hỗ trợ xử lý tự động
+        ở bước này, chỉ 7 loại attribute noise theo cột + duplicate_row.
+      </p>
+
+      <div id="handling-list" class="handling-list"></div>
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="apply-handling-btn" type="button">✅ Áp dụng xử lý &amp; tải file CSV</button>
+        <span class="status-text" id="handling-status"></span>
+      </div>
+    </section>
+
+  </main>
 
   <script src="script.js"></script>
 </body>

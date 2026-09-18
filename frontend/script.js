@@ -1,62 +1,215 @@
-// Địa chỉ backend Flask. Đổi lại nếu bạn chạy backend ở port/host khác.
+"use strict";
+
+/* ============================================================
+   SPARK — Attribute Noise Detection, frontend logic.
+
+   QUAN TRỌNG (khác với bản mockup tham khảo): file này KHÔNG có chế độ
+   "phân tích cục bộ trong trình duyệt" khi backend không kết nối được.
+   Toàn bộ logic detect/xử lý CHỈ được phép sống trong attribute_noise/
+   (Python) -- đây là quyết định kiến trúc đã ghi trong CLAUDE.md
+   ("app.py KHÔNG chứa logic detect/handle"). Nếu viết thêm 1 bộ máy detect
+   bằng JS chạy song song, sớm muộn 2 bộ máy sẽ lệch kết quả với nhau (khác
+   ngôn ngữ, khác thư viện số học) và không ai biết tin bộ nào -- nên trang
+   này LUÔN gọi backend thật, và báo lỗi rõ ràng nếu backend chưa chạy thay
+   vì âm thầm tính sai bằng JS.
+   ============================================================ */
+
 const API_BASE = "http://localhost:5000";
 
-// Biến "nhớ" trạng thái hiện tại của trang (giống như state trong React,
-// nhưng ở đây làm bằng tay vì chưa dùng framework).
-let currentFileId = null;
-// Lưu lại danh sách cột của file đã upload, để dùng khi user bấm "+ Thêm
-// rule" SAU KHI đã upload (lúc đó mới biết có cột nào để đổ vào <select>).
-let currentColumns = [];
+const $ = (id) => document.getElementById(id);
 
-const fileInput = document.getElementById("file-input");
-const dropZone = document.getElementById("drop-zone");
-const dropZoneText = document.getElementById("drop-zone-text");
-const uploadBtn = document.getElementById("upload-btn");
-const detectBtn = document.getElementById("detect-btn");
-
-// ====== KÉO-THẢ FILE (chỉ để tiện, không bắt buộc phải dùng) ======
-dropZone.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  dropZone.classList.add("drag-over");
-});
-dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
-dropZone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  dropZone.classList.remove("drag-over");
-  if (e.dataTransfer.files.length > 0) {
-    fileInput.files = e.dataTransfer.files;
-    dropZoneText.textContent = `📄 Đã chọn: ${fileInput.files[0].name}`;
-  }
-});
-fileInput.addEventListener("change", () => {
-  if (fileInput.files.length > 0) {
-    dropZoneText.textContent = `📄 Đã chọn: ${fileInput.files[0].name}`;
-  }
-});
-
-function setStepActive(stepNumber) {
-  [1, 2, 3, 4].forEach((n) => {
-    document.getElementById(`step-indicator-${n}`).classList.toggle("active", n <= stepNumber);
-  });
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
 }
-
+const escapeAttr = escapeHtml;
+function cssEscape(s) {
+  return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, "\\$&");
+}
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
 function setButtonLoading(button, isLoading, loadingText, normalText) {
   button.disabled = isLoading;
   button.textContent = isLoading ? loadingText : normalText;
 }
 
-// ====== BƯỚC 1: UPLOAD FILE ======
-uploadBtn.addEventListener("click", async () => {
-  const file = fileInput.files[0];
-  if (!file) {
-    alert("Hãy chọn 1 file trước đã");
-    return;
+// ====== Bảng metadata 11 loại (7 attribute noise + 4 rule liên cột) ======
+// Dùng chung cho badge/tag/chip lọc/tô màu ô trong bảng kết quả -- family
+// phải khớp đúng tên trong style.css (.tag-<family>, .cell-flag-<family>).
+const NOISE_TYPE_META = {
+  missing_value: { label: "Thiếu giá trị", family: "slate" },
+  format_noise: { label: "Sai định dạng", family: "amber" },
+  out_of_range: { label: "Ngoài khoảng", family: "crimson" },
+  outlier: { label: "Giá trị bất thường", family: "violet" },
+  inconsistent_category: { label: "Không nhất quán", family: "teal" },
+  whitespace_noise: { label: "Khoảng trắng thừa", family: "rose" },
+  duplicate_row: { label: "Trùng dòng", family: "maroon" },
+  "rule:compare": { label: "Rule so sánh", family: "indigo" },
+  "rule:conditional": { label: "Rule điều kiện", family: "brown" },
+  "rule:formula": { label: "Rule công thức", family: "orange" },
+  "rule:functional_dependency": { label: "Rule phụ thuộc hàm", family: "green" },
+};
+function noiseMeta(noiseType) {
+  return NOISE_TYPE_META[noiseType] || { label: noiseType, family: "slate" };
+}
+function tagHTML(column, noiseType) {
+  const meta = noiseMeta(noiseType);
+  return `<span class="tag tag-${meta.family}">${escapeHtml(column)} <b>${meta.label}</b></span>`;
+}
+
+// 7 dtype thật của backend (attribute_noise/config.py::ColumnDType) -> nhãn
+// hiển thị + danh sách noise_type khả dụng cho dtype đó (khớp CLAUDE.md mục 6:
+// hành động HANDLE chỉ định nghĩa cho các cặp cụ thể, nên DETECT cũng chỉ nên
+// cho chọn những loại thực sự hợp lý với dtype, tránh người dùng tick nhầm).
+const COLUMN_TYPES = {
+  text: { label: "Văn bản (text)", noises: ["missing_value", "format_noise", "whitespace_noise"] },
+  integer: { label: "Số nguyên (integer)", noises: ["missing_value", "format_noise", "out_of_range", "outlier"] },
+  float: { label: "Số thực (float)", noises: ["missing_value", "format_noise", "out_of_range", "outlier"] },
+  email: { label: "Email", noises: ["missing_value", "format_noise"] },
+  phone: { label: "Số điện thoại", noises: ["missing_value", "format_noise"] },
+  date: { label: "Ngày tháng (date)", noises: ["missing_value", "format_noise"] },
+  category: { label: "Phân loại (category)", noises: ["missing_value", "format_noise", "inconsistent_category"] },
+};
+
+function defaultColumnConfig() {
+  return {
+    dtype: "text",
+    missing_value: true,
+    format_noise: true,
+    out_of_range: { enabled: false, min: "", max: "" },
+    outlier: { enabled: false, method: "iqr", coef: 1.5 },
+    inconsistent_category: { enabled: false, standard: "", threshold: 0.85 },
+    whitespace_noise: { enabled: false, regex: "" },
+    date_format: "%Y-%m-%d",
+  };
+}
+
+// ====== State chung của trang (giống "state" trong React nhưng viết tay) ======
+const state = {
+  selectedFile: null,
+  fileId: null,
+  headers: [],
+  columnConfig: {}, // { [tên cột]: cấu hình -- xem defaultColumnConfig() }
+  direction: null,
+  backendAvailable: false,
+  currentStep: 1,
+  maxReached: 1,
+  // Nhớ lại đúng config + kết quả lần detect gần nhất -- Bước 5 (xử lý) cần
+  // dùng lại NGUYÊN VẸN config này (backend tự chạy lại detect_noise() với
+  // đúng config đó để đảm bảo xử lý khớp với những gì người dùng đã thấy).
+  lastColumnConfigs: [],
+  lastDuplicateConfig: null, // { subset_columns } hoặc null
+  lastFindings: [],
+  lastFlaggedRows: [],
+  rowFindingsMap: new Map(), // row_number -> [{column, noise_type, value}, ...]
+  resultsPage: 1,
+  resultsPerPage: 20,
+  resultsFilter: { text: "", types: new Set() },
+};
+
+// ====== Stepper (5 bước) ======
+function renderStepper() {
+  document.querySelectorAll(".step").forEach((el) => {
+    const n = parseInt(el.dataset.step, 10);
+    const complete = n < state.maxReached;
+    const active = n === state.currentStep;
+    const reachable = n <= state.maxReached;
+    el.classList.toggle("is-complete", complete);
+    el.classList.toggle("is-active", active);
+    el.classList.toggle("is-reachable", reachable);
+    el.querySelector(".step-circle").textContent = complete && !active ? "✓" : String(n);
+  });
+}
+function goStep(n) {
+  if (n > state.maxReached) return;
+  state.currentStep = n;
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
+  $("panel-" + n).classList.add("is-active");
+  renderStepper();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function unlockStep(n) {
+  if (n > state.maxReached) state.maxReached = n;
+  renderStepper();
+}
+$("stepper").addEventListener("click", (e) => {
+  const el = e.target.closest(".step");
+  if (!el) return;
+  const n = parseInt(el.dataset.step, 10);
+  if (n <= state.maxReached) goStep(n);
+});
+
+// ====== BƯỚC 1: kiểm tra backend + upload ======
+function renderBackendStatus() {
+  const dot = $("backend-dot");
+  const text = $("backend-status-text");
+  const notice = $("upload-notice");
+  if (state.backendAvailable) {
+    dot.className = "status-dot is-online";
+    text.textContent = "Backend: đã kết nối";
+    notice.textContent = `Đã kết nối backend Flask tại ${API_BASE}.`;
+  } else {
+    dot.className = "status-dot is-offline";
+    text.textContent = "Backend: chưa kết nối";
+    notice.textContent =
+      `Không kết nối được backend tại ${API_BASE}. Hãy chạy "python3 app.py" ở 1 terminal riêng rồi thử lại ` +
+      `-- trang này không có chế độ phân tích cục bộ, mọi phép detect/xử lý đều phải qua backend thật (attribute_noise/).`;
   }
+}
+function updateUploadButtonState() {
+  $("upload-btn").disabled = !(state.selectedFile && state.backendAvailable);
+}
+async function checkBackendHealth() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 1500);
+    const res = await fetch(`${API_BASE}/`, { method: "GET", signal: ctrl.signal });
+    clearTimeout(t);
+    state.backendAvailable = !!res; // chỉ cần server phản hồi (kể cả 404) là coi như "đang chạy"
+  } catch (err) {
+    state.backendAvailable = false;
+  }
+  renderBackendStatus();
+  updateUploadButtonState();
+}
 
-  setButtonLoading(uploadBtn, true, "Đang upload...", "Upload");
+const dropzone = $("dropzone");
+const fileInput = $("file-input");
+dropzone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropzone.classList.add("is-dragover");
+});
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("is-dragover"));
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("is-dragover");
+  if (e.dataTransfer.files.length > 0) handleFileSelected(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length > 0) handleFileSelected(fileInput.files[0]);
+});
 
-  // FormData: cách trình duyệt gửi FILE lên server (không dùng JSON thường
-  // được vì JSON không chứa được dữ liệu nhị phân của file).
+function handleFileSelected(file) {
+  state.selectedFile = file;
+  $("dropzone-idle").hidden = true;
+  $("dropzone-file").hidden = false;
+  $("file-name-text").textContent = file.name;
+  $("file-meta-text").textContent = `${(file.size / 1024).toFixed(1)} KB`;
+  checkBackendHealth(); // re-check phòng khi user vừa bật backend lên
+}
+
+$("upload-btn").addEventListener("click", async () => {
+  const file = state.selectedFile;
+  if (!file) return;
+
+  setButtonLoading($("upload-btn"), true, "Đang upload...", "Tải lên & tiếp tục");
+
   const formData = new FormData();
   formData.append("file", file);
 
@@ -65,11 +218,10 @@ uploadBtn.addEventListener("click", async () => {
     response = await fetch(`${API_BASE}/api/upload`, { method: "POST", body: formData });
   } catch (err) {
     alert("Không gọi được backend. Kiểm tra xem python3 app.py có đang chạy không.");
-    setButtonLoading(uploadBtn, false, "Đang upload...", "Upload");
+    setButtonLoading($("upload-btn"), false, "Đang upload...", "Tải lên & tiếp tục");
     return;
   }
-
-  setButtonLoading(uploadBtn, false, "Đang upload...", "Upload");
+  setButtonLoading($("upload-btn"), false, "Đang upload...", "Tải lên & tiếp tục");
 
   if (!response.ok) {
     alert("Upload thất bại, kiểm tra lại file hoặc log của backend.");
@@ -77,191 +229,190 @@ uploadBtn.addEventListener("click", async () => {
   }
 
   const data = await response.json(); // { file_id, columns, row_count }
-  currentFileId = data.file_id;
+  state.fileId = data.file_id;
+  state.headers = data.columns;
+  state.columnConfig = {};
+  state.headers.forEach((h) => (state.columnConfig[h] = defaultColumnConfig()));
+  $("rules-list").innerHTML = ""; // reset rule liên cột khi upload file mới
 
-  document.getElementById("upload-status").textContent =
-    `✅ Đã upload: ${data.row_count} dòng, ${data.columns.length} cột.`;
-
-  renderColumnConfigForm(data.columns);
-  renderCrossFieldRuleBuilder(data.columns);
-  document.getElementById("config-section").hidden = false;
-  setStepActive(2);
+  $("upload-status").textContent = `✅ Đã upload: ${data.row_count} dòng, ${data.columns.length} cột.`;
+  unlockStep(2);
+  goStep(2);
 });
 
-// ====== BƯỚC 2: DỰNG FORM CHỌN NOISE CHO TỪNG CỘT (ĐỦ 7 LOẠI) ======
-// Mỗi loại noise có 1 checkbox riêng + (tuỳ loại) ô tham số đi kèm. Các khối
-// tham số CHỈ HỢP LÝ với 1 số dtype nhất định (vd out_of_range/outlier chỉ
-// hợp lý với số, inconsistent_category chỉ hợp lý với category...) nên được
-// ẩn/hiện động theo <select class="dtype"> đang chọn -- xem toggleColumnFieldsByDtype().
-function renderColumnConfigForm(columns) {
-  const container = document.getElementById("column-config-list");
-  container.innerHTML = "";
-
-  columns.forEach((col) => {
-    const div = document.createElement("div");
-    div.className = "column-config";
-    div.dataset.col = col; // gắn tên cột vào chính div để lát nữa dễ đọc lại
-    div.innerHTML = `
-      <span class="col-name">${col}</span>
-      <label>Kiểu:
-        <select class="dtype">
-          <option value="text">text</option>
-          <option value="integer">integer</option>
-          <option value="float">float</option>
-          <option value="email">email</option>
-          <option value="phone">phone</option>
-          <option value="date">date</option>
-          <option value="category">category</option>
-        </select>
-      </label>
-
-      <label><input type="checkbox" class="nt-missing" checked /> Missing value</label>
-
-      <span class="field-group">
-        <label><input type="checkbox" class="nt-format" /> Format noise</label>
-        <input type="text" class="date-format-input" placeholder="Format ngày, vd %Y-%m-%d" value="%Y-%m-%d" hidden />
-      </span>
-
-      <span class="field-group nt-numeric-only">
-        <label><input type="checkbox" class="nt-range" /> Out of range</label>
-        min <input type="number" class="min-value" />
-        max <input type="number" class="max-value" />
-      </span>
-
-      <span class="field-group nt-numeric-only">
-        <label><input type="checkbox" class="nt-outlier" /> Outlier</label>
-        <select class="outlier-method">
-          <option value="iqr">IQR</option>
-          <option value="zscore">Z-score</option>
-        </select>
-        hệ số <input type="number" class="outlier-threshold" value="1.5" step="0.1" />
-      </span>
-
-      <span class="field-group nt-category-only">
-        <label><input type="checkbox" class="nt-category" /> Inconsistent category</label>
-        <input type="text" class="valid-categories" placeholder="giá trị chuẩn, cách nhau bởi dấu phẩy, vd Male,Female" />
-        ngưỡng giống <input type="number" class="category-threshold" value="0.85" step="0.05" min="0" max="1" />
-      </span>
-
-      <span class="field-group nt-text-only">
-        <label><input type="checkbox" class="nt-whitespace" /> Whitespace noise</label>
-        ký tự cấm (regex, tuỳ chọn) <input type="text" class="disallowed-chars" placeholder="vd [#@$%]" />
-      </span>
-    `;
-    container.appendChild(div);
-
-    const dtypeSelect = div.querySelector(".dtype");
-    const formatCheckbox = div.querySelector(".nt-format");
-    const dateFormatInput = div.querySelector(".date-format-input");
-
-    function toggleColumnFieldsByDtype() {
-      const dtype = dtypeSelect.value;
-      const isNumeric = dtype === "integer" || dtype === "float";
-      div.querySelectorAll(".nt-numeric-only").forEach((el) => (el.hidden = !isNumeric));
-      div.querySelectorAll(".nt-category-only").forEach((el) => (el.hidden = dtype !== "category"));
-      div.querySelectorAll(".nt-text-only").forEach((el) => (el.hidden = dtype !== "text"));
-      dateFormatInput.hidden = !(dtype === "date" && formatCheckbox.checked);
-    }
-    dtypeSelect.addEventListener("change", toggleColumnFieldsByDtype);
-    formatCheckbox.addEventListener("change", toggleColumnFieldsByDtype);
-    toggleColumnFieldsByDtype(); // ẩn/hiện đúng ngay từ đầu (mặc định dtype = text)
+// ====== BƯỚC 2: chọn hướng xử lý ======
+document.querySelectorAll(".direction-card").forEach((card) => {
+  card.addEventListener("click", () => {
+    if (card.classList.contains("is-disabled")) return;
+    document.querySelectorAll(".direction-card").forEach((c) => c.classList.remove("is-selected"));
+    card.classList.add("is-selected");
+    state.direction = card.dataset.direction;
+    $("continue-step2-btn").disabled = false;
   });
+});
+$("continue-step2-btn").addEventListener("click", () => {
+  if (state.direction !== "attribute") return;
+  unlockStep(3);
+  renderColumnList();
+  goStep(3);
+});
+
+// ====== BƯỚC 3: cấu hình noise theo cột (chip UI, đủ 7 loại) ======
+function paramTemplate(noiseKey, c) {
+  switch (noiseKey) {
+    case "format_noise":
+      if (c.dtype !== "date") return "";
+      return `<div class="field"><label>Định dạng chuẩn</label><input type="text" class="input mono" data-role="dateFormat" value="${escapeAttr(c.date_format)}" placeholder="%Y-%m-%d" /></div>`;
+    case "out_of_range":
+      return `<div class="field-row">
+        <div class="field"><label>Min</label><input type="number" class="input" data-role="orMin" value="${escapeAttr(c.out_of_range.min)}" /></div>
+        <div class="field"><label>Max</label><input type="number" class="input" data-role="orMax" value="${escapeAttr(c.out_of_range.max)}" /></div>
+      </div>`;
+    case "outlier":
+      return `<div class="field-row">
+        <div class="field"><label>Phương pháp</label>
+          <select class="select" data-role="outMethod">
+            <option value="iqr" ${c.outlier.method === "iqr" ? "selected" : ""}>IQR</option>
+            <option value="zscore" ${c.outlier.method === "zscore" ? "selected" : ""}>Z-score</option>
+          </select>
+        </div>
+        <div class="field"><label>Hệ số</label><input type="number" step="0.1" class="input" data-role="outCoef" value="${escapeAttr(c.outlier.coef)}" /></div>
+      </div>`;
+    case "inconsistent_category":
+      return `<div class="field-row">
+        <div class="field field-grow"><label>Giá trị chuẩn (cách nhau bởi dấu phẩy)</label><input type="text" class="input" data-role="incStandard" value="${escapeAttr(c.inconsistent_category.standard)}" placeholder="vd Male,Female" /></div>
+        <div class="field"><label>Ngưỡng giống</label><input type="number" step="0.05" min="0" max="1" class="input" data-role="incThreshold" value="${escapeAttr(c.inconsistent_category.threshold)}" /></div>
+      </div>`;
+    case "whitespace_noise":
+      return `<div class="field"><label>Ký tự cấm (regex, tuỳ chọn)</label><input type="text" class="input mono" data-role="wsRegex" value="${escapeAttr(c.whitespace_noise.regex)}" placeholder="vd [#@$%]" /></div>`;
+    default:
+      return "";
+  }
 }
+function chipChecked(c, noiseKey) {
+  if (noiseKey === "missing_value") return c.missing_value;
+  if (noiseKey === "format_noise") return c.format_noise;
+  return c[noiseKey] && c[noiseKey].enabled;
+}
+function chipTemplate(noiseKey, c) {
+  const meta = noiseMeta(noiseKey);
+  const checked = chipChecked(c, noiseKey);
+  const paramHtml = paramTemplate(noiseKey, c);
+  return `<div class="chip-wrap">
+    <label class="chip tag-${meta.family} ${checked ? "is-checked" : ""}">
+      <input type="checkbox" data-role="noise" data-noise="${noiseKey}" ${checked ? "checked" : ""} />
+      <span>${meta.label}</span>
+    </label>
+    ${paramHtml ? `<div class="param-panel ${checked ? "is-open" : ""}" data-role="param-${noiseKey}">${paramHtml}</div>` : ""}
+  </div>`;
+}
+function columnRowTemplate(h) {
+  const c = state.columnConfig[h];
+  const typeOptions = Object.keys(COLUMN_TYPES)
+    .map((t) => `<option value="${t}" ${c.dtype === t ? "selected" : ""}>${COLUMN_TYPES[t].label}</option>`)
+    .join("");
+  const chips = COLUMN_TYPES[c.dtype].noises.map((nKey) => chipTemplate(nKey, c)).join("");
+  return `<div class="col-row" data-col="${escapeAttr(h)}">
+    <div class="col-row-head">
+      <span class="col-name mono">${escapeHtml(h)}</span>
+      <select class="select col-type-select" data-role="dtype">${typeOptions}</select>
+    </div>
+    <div class="chip-row" data-role="chips">${chips}</div>
+  </div>`;
+}
+function renderColumnList() {
+  const wrap = $("col-list");
+  const empty = $("col-list-empty");
+  if (!state.headers.length) {
+    wrap.innerHTML = "";
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  wrap.innerHTML = state.headers.map((h) => columnRowTemplate(h)).join("");
+}
+function renderSingleColumnRow(h) {
+  const wrap = $("col-list");
+  const old = wrap.querySelector(`.col-row[data-col="${cssEscape(h)}"]`);
+  if (!old) return;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = columnRowTemplate(h).trim();
+  old.replaceWith(tmp.firstElementChild);
+}
+$("col-list").addEventListener("change", (e) => {
+  const row = e.target.closest(".col-row");
+  if (!row) return;
+  const h = row.dataset.col;
+  const c = state.columnConfig[h];
+  const role = e.target.dataset.role;
 
-// Đọc lại toàn bộ form -> dựng thành mảng JSON config, ĐÚNG format mà
-// backend (_config_from_json trong app.py) đang mong đợi.
-function buildColumnConfigs() {
+  if (role === "dtype") {
+    c.dtype = e.target.value;
+    renderSingleColumnRow(h);
+    return;
+  }
+  if (role === "noise") {
+    const nKey = e.target.dataset.noise;
+    const checked = e.target.checked;
+    if (nKey === "missing_value") c.missing_value = checked;
+    else if (nKey === "format_noise") c.format_noise = checked;
+    else c[nKey].enabled = checked;
+    e.target.closest(".chip").classList.toggle("is-checked", checked);
+    const panel = row.querySelector(`[data-role="param-${nKey}"]`);
+    if (panel) panel.classList.toggle("is-open", checked);
+    return;
+  }
+  if (role === "dateFormat") c.date_format = e.target.value;
+  else if (role === "orMin") c.out_of_range.min = e.target.value;
+  else if (role === "orMax") c.out_of_range.max = e.target.value;
+  else if (role === "outMethod") c.outlier.method = e.target.value;
+  else if (role === "outCoef") c.outlier.coef = e.target.value;
+  else if (role === "wsRegex") c.whitespace_noise.regex = e.target.value;
+  else if (role === "incStandard") c.inconsistent_category.standard = e.target.value;
+  else if (role === "incThreshold") c.inconsistent_category.threshold = e.target.value;
+});
+
+function buildColumnConfigsFromState() {
   const configs = [];
-
-  document.querySelectorAll(".column-config").forEach((div) => {
-    const column = div.dataset.col;
-    const dtype = div.querySelector(".dtype").value;
+  state.headers.forEach((h) => {
+    const c = state.columnConfig[h];
     const noiseTypes = [];
-
-    if (div.querySelector(".nt-missing").checked) {
-      noiseTypes.push("missing_value");
-    }
-
-    let dateFormat = null;
-    if (div.querySelector(".nt-format").checked) {
-      noiseTypes.push("format_noise");
-      const dateFormatRaw = div.querySelector(".date-format-input").value.trim();
-      dateFormat = dateFormatRaw || null;
-    }
-
-    let minValue = null;
-    let maxValue = null;
-    if (div.querySelector(".nt-range").checked) {
-      noiseTypes.push("out_of_range");
-      const minRaw = div.querySelector(".min-value").value;
-      const maxRaw = div.querySelector(".max-value").value;
-      minValue = minRaw === "" ? null : parseFloat(minRaw);
-      maxValue = maxRaw === "" ? null : parseFloat(maxRaw);
-    }
-
-    let outlierMethod = "iqr";
-    let outlierThreshold = 1.5;
-    if (div.querySelector(".nt-outlier").checked) {
-      noiseTypes.push("outlier");
-      outlierMethod = div.querySelector(".outlier-method").value;
-      outlierThreshold = parseFloat(div.querySelector(".outlier-threshold").value) || 1.5;
-    }
-
-    let validCategories = null;
-    let categoryThreshold = 0.85;
-    if (div.querySelector(".nt-category").checked) {
-      noiseTypes.push("inconsistent_category");
-      const raw = div.querySelector(".valid-categories").value.trim();
-      validCategories = raw ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [];
-      categoryThreshold = parseFloat(div.querySelector(".category-threshold").value) || 0.85;
-    }
-
-    let disallowedChars = null;
-    if (div.querySelector(".nt-whitespace").checked) {
-      noiseTypes.push("whitespace_noise");
-      const raw = div.querySelector(".disallowed-chars").value.trim();
-      disallowedChars = raw || null;
-    }
-
-    // Cột nào user không tick gì cả thì bỏ qua, không gửi lên backend.
-    if (noiseTypes.length === 0) return;
+    if (c.missing_value) noiseTypes.push("missing_value");
+    if (c.format_noise) noiseTypes.push("format_noise");
+    if (c.out_of_range.enabled) noiseTypes.push("out_of_range");
+    if (c.outlier.enabled) noiseTypes.push("outlier");
+    if (c.inconsistent_category.enabled) noiseTypes.push("inconsistent_category");
+    if (c.whitespace_noise.enabled) noiseTypes.push("whitespace_noise");
+    if (noiseTypes.length === 0) return; // cột không tick gì -> không gửi lên backend
 
     configs.push({
-      column,
-      dtype,
+      column: h,
+      dtype: c.dtype,
       noise_types: noiseTypes,
-      min_value: minValue,
-      max_value: maxValue,
-      date_format: dateFormat,
-      outlier_method: outlierMethod,
-      outlier_threshold: outlierThreshold,
-      valid_categories: validCategories,
-      category_similarity_threshold: categoryThreshold,
-      disallowed_chars_pattern: disallowedChars,
+      min_value: c.out_of_range.min === "" ? null : parseFloat(c.out_of_range.min),
+      max_value: c.out_of_range.max === "" ? null : parseFloat(c.out_of_range.max),
+      date_format: c.date_format || null,
+      outlier_method: c.outlier.method,
+      outlier_threshold: parseFloat(c.outlier.coef) || 1.5,
+      valid_categories: c.inconsistent_category.standard
+        ? c.inconsistent_category.standard.split(",").map((s) => s.trim()).filter(Boolean)
+        : null,
+      category_similarity_threshold: parseFloat(c.inconsistent_category.threshold) || 0.85,
+      disallowed_chars_pattern: c.whitespace_noise.regex || null,
     });
   });
-
   return configs;
 }
 
-// ====== DUPLICATE_ROW (noise cấp DÒNG, tách khỏi form theo cột ở trên) ======
-function buildDuplicateHandlingBase() {
-  const enabled = document.getElementById("dup-check").checked;
-  if (!enabled) return null;
-  const raw = document.getElementById("dup-subset-columns").value.trim();
+// ====== Trùng dòng (duplicate_row) -- noise cấp DÒNG, đọc trực tiếp từ DOM ======
+function buildDuplicateConfig() {
+  if (!$("dup-enable").checked) return null;
+  const raw = $("dup-subset-columns").value.trim();
   const subsetColumns = raw ? raw.split(",").map((s) => s.trim()).filter(Boolean) : null;
   return { subset_columns: subsetColumns };
 }
 
-// ====== RULE LIÊN CỘT (4 loại: compare / conditional / functional_dependency / formula) ======
-// Khác hẳn checkbox noise theo cột ở trên: đây là kiểm tra MÂU THUẪN LOGIC
-// GIỮA 2 CỘT, nên bắt buộc người dùng phải tự chọn cột + quan hệ (xem
-// CLAUDE.md mục 7 -- máy không tự suy ra được, vì mỗi file có ý nghĩa khác
-// nhau, ví dụ y hệt "chuc_vu -> muc_luong" hợp lý ở file này nhưng vô lý ở
-// file khác).
-
-// Markup các <option> phép so sánh, dùng lại cho cả rule COMPARE và 2 vế
-// NẾU/THÌ của rule CONDITIONAL -- viết thành hằng số để không phải lặp lại.
+// ====== Rule liên cột (4 loại: compare / conditional / functional_dependency / formula) ======
 const OPERATOR_OPTIONS_HTML = `
   <option value="<=">&le; (nhỏ hơn hoặc bằng)</option>
   <option value="<">&lt; (nhỏ hơn)</option>
@@ -270,15 +421,10 @@ const OPERATOR_OPTIONS_HTML = `
   <option value="==">= (bằng)</option>
   <option value="!=">&ne; (khác)</option>
 `;
-
 function columnOptionsHTML(columns) {
-  return columns.map((c) => `<option value="${c}">${c}</option>`).join("");
+  return columns.map((c) => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join("");
 }
 
-// Dựng HTML cho 1 dòng rule. Mỗi dòng có ĐỦ 4 khối field cho 4 loại rule
-// (compare/conditional/functional_dependency/formula) nhưng CHỈ khối khớp
-// với <select class="rule-type-select"> đang chọn mới hiện ra -- cách này
-// đơn giản hơn việc render lại DOM mỗi lần user đổi loại rule.
 function createRuleRow(columns) {
   const row = document.createElement("div");
   row.className = "rule-row";
@@ -286,96 +432,77 @@ function createRuleRow(columns) {
 
   row.innerHTML = `
     <div class="rule-row-header">
-      <select class="rule-type-select">
+      <select class="select rule-type-select">
         <option value="compare">So sánh 2 cột (A lớn hơn/nhỏ hơn/bằng B)</option>
         <option value="conditional">Điều kiện (NẾU cột này... THÌ cột kia...)</option>
         <option value="functional_dependency">1 cột luôn xác định đúng 1 cột kia (functional dependency)</option>
         <option value="formula">Công thức tính toán (vd C = A × B)</option>
       </select>
-      <input type="text" class="rule-label" placeholder="Tên rule (tuỳ chọn)" />
-      <button type="button" class="remove-rule-btn" title="Xoá rule này">✕</button>
+      <input type="text" class="input rule-label" placeholder="Tên rule (tuỳ chọn)" />
+      <button type="button" class="btn-icon remove-rule-btn" title="Xoá rule này">✕</button>
     </div>
 
-    <!-- Khối field cho COMPARE -->
     <div class="rule-fields rule-fields-compare">
-      <p class="hint rule-hint">
-        So sánh giá trị giữa 2 cột trên CÙNG 1 dòng. Vd: cột "ngày bắt đầu làm"
-        phải ≤ cột "ngày nghỉ việc".
-      </p>
+      <p class="rule-hint">So sánh giá trị giữa 2 cột trên CÙNG 1 dòng. Vd: cột "ngày bắt đầu làm" phải ≤ cột "ngày nghỉ việc".</p>
       <div class="rule-fields-row">
-        <select class="column-a">${colOptions}</select>
-        <select class="compare-operator">${OPERATOR_OPTIONS_HTML}</select>
-        <select class="column-b">${colOptions}</select>
+        <select class="select column-a">${colOptions}</select>
+        <select class="select compare-operator">${OPERATOR_OPTIONS_HTML}</select>
+        <select class="select column-b">${colOptions}</select>
         <label>Kiểu so sánh:
-          <select class="value-type">
+          <select class="select value-type">
             <option value="number">Số</option>
             <option value="date">Ngày</option>
             <option value="text">Chữ</option>
           </select>
         </label>
-        <input type="text" class="date-format" placeholder="Format ngày, vd %Y-%m-%d" value="%Y-%m-%d" hidden />
+        <input type="text" class="input date-format" placeholder="Format ngày, vd %Y-%m-%d" value="%Y-%m-%d" hidden />
       </div>
     </div>
 
-    <!-- Khối field cho CONDITIONAL -->
     <div class="rule-fields rule-fields-conditional" hidden>
-      <p class="hint rule-hint">
-        Chỉ kiểm tra vế "THÌ" khi vế "NẾU" đúng. Vd: NẾU chức_vụ = "Giám đốc"
-        THÌ tuổi phải ≥ 25.
-      </p>
+      <p class="rule-hint">Chỉ kiểm tra vế "THÌ" khi vế "NẾU" đúng. Vd: NẾU chức_vụ = "Giám đốc" THÌ tuổi phải ≥ 25.</p>
       <div class="rule-fields-row">
         <span class="rule-word">NẾU</span>
-        <select class="if-column">${colOptions}</select>
-        <select class="if-operator">${OPERATOR_OPTIONS_HTML}</select>
-        <input type="text" class="if-value" placeholder="giá trị" />
-        <select class="if-value-type">
+        <select class="select if-column">${colOptions}</select>
+        <select class="select if-operator">${OPERATOR_OPTIONS_HTML}</select>
+        <input type="text" class="input if-value" placeholder="giá trị" />
+        <select class="select if-value-type">
           <option value="text">Chữ</option>
           <option value="number">Số</option>
         </select>
       </div>
       <div class="rule-fields-row">
         <span class="rule-word">THÌ</span>
-        <select class="then-column">${colOptions}</select>
-        <select class="then-operator">${OPERATOR_OPTIONS_HTML}</select>
-        <input type="text" class="then-value" placeholder="giá trị" />
-        <select class="then-value-type">
+        <select class="select then-column">${colOptions}</select>
+        <select class="select then-operator">${OPERATOR_OPTIONS_HTML}</select>
+        <input type="text" class="input then-value" placeholder="giá trị" />
+        <select class="select then-value-type">
           <option value="text">Chữ</option>
           <option value="number">Số</option>
         </select>
       </div>
     </div>
 
-    <!-- Khối field cho FUNCTIONAL_DEPENDENCY -->
     <div class="rule-fields rule-fields-functional_dependency" hidden>
-      <p class="hint rule-hint">
-        Mỗi giá trị của cột thứ 1 chỉ nên gắn với ĐÚNG 1 giá trị của cột thứ
-        2 trong toàn bộ file. Vd: mỗi "mã nhân viên" chỉ nên ứng với 1 "tên
-        nhân viên" duy nhất — nếu cùng mã mà tên khác nhau ở 2 dòng thì bị
-        tính là lỗi.
-      </p>
+      <p class="rule-hint">Mỗi giá trị của cột thứ 1 chỉ nên gắn với ĐÚNG 1 giá trị của cột thứ 2 trong toàn bộ file. Vd: mỗi "mã nhân viên" chỉ nên ứng với 1 "tên nhân viên" duy nhất — nếu cùng mã mà tên khác nhau ở 2 dòng thì bị tính là lỗi.</p>
       <div class="rule-fields-row">
-        <label>Cột thứ 1: <select class="determinant-column">${colOptions}</select></label>
+        <label>Cột thứ 1: <select class="select determinant-column">${colOptions}</select></label>
         <span class="rule-word">→ luôn tương ứng đúng 1 giá trị của →</span>
-        <label>Cột thứ 2: <select class="dependent-column">${colOptions}</select></label>
+        <label>Cột thứ 2: <select class="select dependent-column">${colOptions}</select></label>
       </div>
     </div>
 
-    <!-- Khối field cho FORMULA -->
     <div class="rule-fields rule-fields-formula" hidden>
-      <p class="hint rule-hint">
-        Biểu thức TOÁN HỌC so sánh giữa các cột SỐ (chỉ dùng +, -, *, / và
-        tên cột). Vd: "thanh_tien == so_luong * don_gia".
-      </p>
+      <p class="rule-hint">Biểu thức TOÁN HỌC so sánh giữa các cột SỐ (chỉ dùng +, -, *, / và tên cột). Vd: "thanh_tien == so_luong * don_gia".</p>
       <div class="rule-fields-row">
-        <input type="text" class="formula-input" placeholder="vd: thanh_tien == so_luong * don_gia" />
+        <input type="text" class="input formula-input" placeholder="vd: thanh_tien == so_luong * don_gia" />
         <label>Sai số cho phép:
-          <input type="number" class="formula-tolerance" value="0.01" step="0.01" />
+          <input type="number" class="input formula-tolerance" value="0.01" step="0.01" />
         </label>
       </div>
     </div>
   `;
 
-  // Chỉ hiện đúng 1 khối field khớp với loại rule đang chọn trong dropdown.
   const typeSelect = row.querySelector(".rule-type-select");
   function toggleRuleFields() {
     const selected = typeSelect.value;
@@ -384,11 +511,8 @@ function createRuleRow(columns) {
     });
   }
   typeSelect.addEventListener("change", toggleRuleFields);
-  toggleRuleFields(); // hiện đúng khối mặc định (compare) ngay khi tạo dòng
+  toggleRuleFields();
 
-  // Ô "date-format" chỉ cần hiện khi value_type = date (chỉ dùng cho compare
-  // -- conditional dùng if/then-value-type riêng, hiện chỉ number/text vì
-  // literal người dùng gõ tay ít khi cần so sánh theo ngày).
   const valueTypeSelect = row.querySelector(".value-type");
   const dateFormatInput = row.querySelector(".date-format");
   valueTypeSelect.addEventListener("change", () => {
@@ -399,23 +523,12 @@ function createRuleRow(columns) {
 
   return row;
 }
-
-function renderCrossFieldRuleBuilder(columns) {
-  currentColumns = columns;
-  document.getElementById("cross-field-rule-list").innerHTML = ""; // reset khi upload file mới
-}
-
-document.getElementById("add-rule-btn").addEventListener("click", () => {
-  document.getElementById("cross-field-rule-list").appendChild(createRuleRow(currentColumns));
+$("add-rule-btn").addEventListener("click", () => {
+  $("rules-list").appendChild(createRuleRow(state.headers));
 });
 
-// Đọc lại toàn bộ các dòng rule đang có trên form -> dựng thành mảng JSON,
-// ĐÚNG format mà backend (_cross_field_rule_from_json trong app.py) mong
-// đợi. Field nào rule_type không dùng tới thì không gửi -- backend dùng
-// .get(key, default) nên thiếu field không sao.
 function buildCrossFieldRules() {
   const rules = [];
-
   document.querySelectorAll(".rule-row").forEach((row) => {
     const ruleType = row.querySelector(".rule-type-select").value;
     const label = row.querySelector(".rule-label").value || null;
@@ -450,7 +563,7 @@ function buildCrossFieldRules() {
       });
     } else if (ruleType === "formula") {
       const formula = row.querySelector(".formula-input").value.trim();
-      if (!formula) return; // formula rỗng -> bỏ qua dòng rule này, tránh gửi lên backend gây lỗi
+      if (!formula) return;
       rules.push({
         ...base,
         formula,
@@ -458,28 +571,31 @@ function buildCrossFieldRules() {
       });
     }
   });
-
   return rules;
 }
 
-// ====== BƯỚC 3: GỌI BACKEND DETECT + HIỂN THỊ KẾT QUẢ ======
-// Nhớ lại đúng config/kết quả lần detect gần nhất -- Bước 4 (xử lý) cần dùng
-// lại NGUYÊN VẸN các config này (backend sẽ tự chạy lại detect_noise() với
-// đúng config đó để đảm bảo xử lý khớp với những gì người dùng đã thấy).
-let lastColumnConfigs = [];
-let lastDuplicateConfig = null; // { subset_columns } hoặc null nếu không bật
-let lastFindings = [];
+// ====== Gọi backend detect ======
+function buildRowFindingsMap(findings) {
+  const map = new Map();
+  findings.forEach((f) => {
+    if (!map.has(f.row_number)) map.set(f.row_number, []);
+    map.get(f.row_number).push(f);
+  });
+  return map;
+}
 
-detectBtn.addEventListener("click", async () => {
-  const columnConfigs = buildColumnConfigs();
+$("detect-btn").addEventListener("click", async () => {
+  const columnConfigs = buildColumnConfigsFromState();
   const crossFieldRules = buildCrossFieldRules();
-  const duplicateConfig = buildDuplicateHandlingBase();
+  const duplicateConfig = buildDuplicateConfig();
   if (columnConfigs.length === 0 && crossFieldRules.length === 0 && !duplicateConfig) {
     alert("Hãy chọn ít nhất 1 loại noise cho 1 cột, thêm 1 rule liên cột, hoặc bật kiểm tra trùng dòng");
     return;
   }
 
-  setButtonLoading(detectBtn, true, "Đang detect...", "🔍 Detect Noise");
+  const btn = $("detect-btn");
+  setButtonLoading(btn, true, "Đang detect...", "🔍 Detect Noise");
+  $("detect-status").textContent = "";
 
   let response;
   try {
@@ -487,7 +603,7 @@ detectBtn.addEventListener("click", async () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        file_id: currentFileId,
+        file_id: state.fileId,
         column_configs: columnConfigs,
         cross_field_rules: crossFieldRules,
         check_duplicate_row: duplicateConfig !== null,
@@ -496,128 +612,174 @@ detectBtn.addEventListener("click", async () => {
     });
   } catch (err) {
     alert("Không gọi được backend.");
-    setButtonLoading(detectBtn, false, "Đang detect...", "🔍 Detect Noise");
+    setButtonLoading(btn, false, "Đang detect...", "🔍 Detect Noise");
     return;
   }
-
-  setButtonLoading(detectBtn, false, "Đang detect...", "🔍 Detect Noise");
+  setButtonLoading(btn, false, "Đang detect...", "🔍 Detect Noise");
 
   if (!response.ok) {
-    // Backend trả {"error": "..."} kèm lý do cụ thể (vd formula sai cú pháp,
-    // cột không tồn tại) -- hiển thị đúng lý do đó thay vì thông báo chung.
     let message = "Detect thất bại, kiểm tra console/backend log.";
     try {
       const errorData = await response.json();
       if (errorData.error) message = errorData.error;
     } catch (parseErr) {
-      // Backend không trả JSON (vd lỗi 500 không mong muốn) -- giữ message mặc định.
+      /* backend không trả JSON -- giữ message mặc định */
     }
     alert(message);
     return;
   }
 
   const data = await response.json();
-  lastColumnConfigs = columnConfigs;
-  lastDuplicateConfig = duplicateConfig;
-  lastFindings = data.findings;
+  state.lastColumnConfigs = columnConfigs;
+  state.lastDuplicateConfig = duplicateConfig;
+  state.lastFindings = data.findings;
+  state.lastFlaggedRows = data.flagged_rows;
+  state.rowFindingsMap = buildRowFindingsMap(data.findings);
+  state.resultsPage = 1;
+  state.resultsFilter = { text: "", types: new Set() };
+  $("search-input").value = "";
 
-  renderResults(data);
-  setStepActive(3);
-
-  const gotoHandlingBtn = document.getElementById("goto-handling-btn");
-  gotoHandlingBtn.hidden = data.findings.length === 0; // không có gì để xử lý thì ẩn nút đi
+  unlockStep(4);
+  renderStep4(data);
+  goStep(4);
+  $("goto-handling-btn").disabled = data.findings.length === 0;
 });
 
-document.getElementById("goto-handling-btn").addEventListener("click", () => {
-  renderHandlingSection();
-  document.getElementById("handling-section").hidden = false;
-  document.getElementById("handling-section").scrollIntoView({ behavior: "smooth" });
-  setStepActive(4);
-});
-
-// Map noise_type -> tên class badge CSS tương ứng (định nghĩa màu trong
-// style.css). noise_type của rule liên cột có dạng "rule:compare" (chứa dấu
-// ":") -- CSS không cho phép ":" trong tên class 1 cách an toàn, nên thay
-// hết ký tự không phải chữ/số/"_" thành "-" khi ghép class (vd "rule:compare"
-// -> "rule-compare"), còn TEXT hiển thị vẫn giữ nguyên "rule:compare".
-function noiseBadge(noiseType) {
-  const cssClass = noiseType.replace(/[^a-zA-Z0-9_]/g, "-");
-  return `<span class="badge badge-${cssClass}">${noiseType}</span>`;
-}
-
-// Cột "noise_reasons" backend trả về dạng chuỗi ghép nhiều lý do bằng ", ",
-// mỗi lý do dạng "cột:loại_noise" (vd "age:out_of_range, email:format_noise").
-// Với rule liên cột, "cột" có thể là "cot_a & cot_b" và "loại_noise" có thể
-// tự chứa dấu ":" (vd "rule:compare") -- nên KHÔNG dùng split(":") thô (sẽ
-// cắt nhầm ngay dấu ":" đầu của "rule:compare"), mà tự tìm vị trí dấu ":"
-// ĐẦU TIÊN bằng indexOf() để tách đúng "cột" và "phần còn lại".
-function formatNoiseReasons(value) {
-  if (!value) return "";
-  return value
-    .split(", ")
-    .map((part) => {
-      const trimmed = part.trim();
-      const sepIndex = trimmed.indexOf(":");
-      if (sepIndex === -1) return trimmed;
-      const column = trimmed.slice(0, sepIndex);
-      const noiseType = trimmed.slice(sepIndex + 1);
-      return `<strong>${column}</strong> ${noiseBadge(noiseType)}`;
+// ====== BƯỚC 4: kết quả (tìm kiếm + lọc theo loại + phân trang) ======
+function renderFilterChips() {
+  const present = new Set();
+  state.lastFindings.forEach((f) => present.add(f.noise_type));
+  const wrap = $("filter-chips");
+  wrap.innerHTML = Array.from(present)
+    .map((t) => {
+      const meta = noiseMeta(t);
+      const checked = state.resultsFilter.types.has(t);
+      return `<label class="filter-chip tag-${meta.family} ${checked ? "is-checked" : ""}"><input type="checkbox" value="${escapeAttr(t)}" ${checked ? "checked" : ""}/><span>${meta.label}</span></label>`;
     })
-    .join(" ");
+    .join("");
+}
+$("filter-chips").addEventListener("change", (e) => {
+  if (e.target.type !== "checkbox") return;
+  if (e.target.checked) state.resultsFilter.types.add(e.target.value);
+  else state.resultsFilter.types.delete(e.target.value);
+  e.target.closest(".filter-chip").classList.toggle("is-checked", e.target.checked);
+  state.resultsPage = 1;
+  renderResultsTable();
+});
+$("search-input").addEventListener(
+  "input",
+  debounce((e) => {
+    state.resultsFilter.text = e.target.value;
+    state.resultsPage = 1;
+    renderResultsTable();
+  }, 200)
+);
+
+function getFilteredRows() {
+  const text = state.resultsFilter.text.trim().toLowerCase();
+  const types = state.resultsFilter.types;
+  return state.lastFlaggedRows.filter((row) => {
+    const rowFindings = state.rowFindingsMap.get(row.row_number) || [];
+    if (types.size) {
+      const matched = rowFindings.some((f) => types.has(f.noise_type));
+      if (!matched) return false;
+    }
+    if (text) {
+      const hay = (JSON.stringify(row) + " " + rowFindings.map((f) => f.column + " " + f.noise_type).join(" ")).toLowerCase();
+      if (!hay.includes(text)) return false;
+    }
+    return true;
+  });
 }
 
-function renderResults(data) {
-  document.getElementById("result-section").hidden = false;
+function renderResultsTable() {
+  const table = $("result-table");
+  const emptyMsg = $("result-empty");
+  const pagination = $("pagination");
 
-  document.getElementById("stat-total-rows").textContent = data.total_rows;
-  document.getElementById("stat-flagged-rows").textContent = data.total_flagged_rows;
-  document.getElementById("stat-total-findings").textContent = data.findings.length;
-
-  const rows = data.flagged_rows;
-  const head = document.getElementById("result-table-head");
-  const body = document.getElementById("result-table-body");
-  const emptyMsg = document.getElementById("result-empty");
-  head.innerHTML = "";
-  body.innerHTML = "";
-
-  if (rows.length === 0) {
+  if (!state.lastFlaggedRows.length) {
+    table.hidden = true;
+    pagination.hidden = true;
     emptyMsg.hidden = false;
-    document.getElementById("result-table").hidden = true;
     return;
   }
   emptyMsg.hidden = true;
-  document.getElementById("result-table").hidden = false;
+  table.hidden = false;
+  pagination.hidden = false;
 
-  // Dùng chính các key của object đầu tiên để làm tên cột cho bảng HTML.
-  const columns = Object.keys(rows[0]);
-  columns.forEach((c) => {
-    const th = document.createElement("th");
-    th.textContent = c;
-    head.appendChild(th);
-  });
+  // Cột hiển thị: dùng đúng thứ tự key backend trả (row_number, các cột gốc,
+  // noise_reasons) -- bỏ noise_reasons thô, tự render lại thành tag màu.
+  const dataColumns = Object.keys(state.lastFlaggedRows[0]).filter((k) => k !== "noise_reasons");
+  $("result-table-head").innerHTML =
+    "<tr>" + dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") + "<th>noise_reasons</th></tr>";
 
-  rows.forEach((row) => {
-    const tr = document.createElement("tr");
-    columns.forEach((c) => {
-      const td = document.createElement("td");
-      if (c === "noise_reasons") {
-        td.innerHTML = formatNoiseReasons(row[c]); // render badge màu thay vì text thô
-      } else {
-        td.textContent = row[c];
-      }
-      tr.appendChild(td);
-    });
-    body.appendChild(tr);
-  });
+  const filtered = getFilteredRows();
+  const perPage = state.resultsPerPage;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  if (state.resultsPage > totalPages) state.resultsPage = totalPages;
+  const start = (state.resultsPage - 1) * perPage;
+  const pageRows = filtered.slice(start, start + perPage);
+  const tbody = $("result-table-body");
+
+  if (!pageRows.length) {
+    tbody.innerHTML = `<tr><td colspan="${dataColumns.length + 1}" class="empty-cell">Không có dòng nào khớp bộ lọc.</td></tr>`;
+  } else {
+    tbody.innerHTML = pageRows
+      .map((row) => {
+        const rowFindings = state.rowFindingsMap.get(row.row_number) || [];
+        const flagByColumn = {};
+        rowFindings.forEach((f) => {
+          if (!flagByColumn[f.column]) flagByColumn[f.column] = f.noise_type;
+        });
+        const cells = dataColumns
+          .map((c) => {
+            const type = flagByColumn[c];
+            const cls = type ? ` class="cell-flag-${noiseMeta(type).family}"` : "";
+            const value = row[c] === undefined || row[c] === null ? "" : row[c];
+            return `<td${cls}>${escapeHtml(String(value))}</td>`;
+          })
+          .join("");
+        const tags = rowFindings.map((f) => tagHTML(f.column, f.noise_type)).join(" ");
+        return `<tr>${cells}<td class="reasons-cell">${tags}</td></tr>`;
+      })
+      .join("");
+  }
+
+  $("page-indicator").textContent = `Trang ${state.resultsPage}/${totalPages} · ${filtered.length} dòng`;
+  $("page-prev").disabled = state.resultsPage <= 1;
+  $("page-next").disabled = state.resultsPage >= totalPages;
+}
+$("page-prev").addEventListener("click", () => {
+  if (state.resultsPage > 1) {
+    state.resultsPage--;
+    renderResultsTable();
+  }
+});
+$("page-next").addEventListener("click", () => {
+  state.resultsPage++;
+  renderResultsTable();
+});
+
+function renderStep4(data) {
+  $("stat-total-rows").textContent = data.total_rows;
+  $("stat-flagged-rows").textContent = data.total_flagged_rows;
+  $("stat-total-findings").textContent = data.findings.length;
+  renderFilterChips();
+  renderResultsTable();
 }
 
-// ====== BƯỚC 4: XỬ LÝ NOISE + TẢI FILE ĐÃ LÀM SẠCH ======
+$("goto-handling-btn").addEventListener("click", () => {
+  unlockStep(5);
+  renderHandlingSection();
+  goStep(5);
+});
+
+// ====== BƯỚC 5: xử lý noise + tải file đã làm sạch ======
 // Bảng quyết định (dtype, noise_type) -> hành động khả dụng -- PHẢI khớp
 // đúng _ACTION_TABLE trong attribute_noise/attribute_handling.py (xem
-// CLAUDE.md mục 6). Trùng lặp logic này ở FE là chấp nhận được vì đây chỉ là
-// bảng tra cứu TĨNH dùng để dựng dropdown cho người dùng chọn -- backend vẫn
-// là nơi THỰC SỰ áp dụng xử lý, FE sai bảng nhiều lắm chỉ khiến dropdown
-// thiếu/thừa lựa chọn, không gây sai dữ liệu.
+// CLAUDE.md mục 6). Trùng lặp bảng TĨNH này ở FE là chấp nhận được (chỉ dùng
+// để dựng dropdown, KHÔNG tự thực thi xử lý) -- backend vẫn là nơi DUY NHẤT
+// thực sự áp dụng thay đổi lên dữ liệu.
 const ACTION_TABLE = {
   "integer|missing_value": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
   "integer|format_noise": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
@@ -637,7 +799,6 @@ const ACTION_TABLE = {
   "date|missing_value": ["remove_row", "fixed_value"],
   "date|format_noise": ["remove_row", "fixed_value"],
 };
-
 const ACTION_LABELS = {
   remove_row: "Xoá cả dòng",
   impute_mean: "Điền = trung bình (mean)",
@@ -651,15 +812,16 @@ const ACTION_LABELS = {
   keep: "Giữ nguyên (không sửa)",
 };
 
-// Dựng danh sách các cặp (cột, loại noise) THỰC SỰ có trong lastFindings, kèm
-// số lượng ô bị lỗi -- chỉ hiện đúng những gì người dùng đã thấy ở Bước 3,
-// không hiện sẵn mọi khả năng để tránh rối. Bỏ qua noise_type dạng "rule:..."
-// (rule liên cột) và "duplicate_row" (xử lý riêng, xem bên dưới).
-function summarizeFindingsForHandling() {
-  const counts = new Map(); // key "column|noise_type" -> số lượng
-  let duplicateCount = 0;
+function renderHandlingSection() {
+  const container = $("handling-list");
+  container.innerHTML = "";
 
-  lastFindings.forEach((f) => {
+  const configByColumn = {};
+  state.lastColumnConfigs.forEach((cfg) => (configByColumn[cfg.column] = cfg));
+
+  const counts = new Map();
+  let duplicateCount = 0;
+  state.lastFindings.forEach((f) => {
     if (f.noise_type === "duplicate_row") {
       duplicateCount += 1;
       return;
@@ -669,37 +831,27 @@ function summarizeFindingsForHandling() {
     counts.set(key, (counts.get(key) || 0) + 1);
   });
 
-  return { counts, duplicateCount };
-}
-
-function renderHandlingSection() {
-  const container = document.getElementById("handling-list");
-  container.innerHTML = "";
-
-  const configByColumn = {};
-  lastColumnConfigs.forEach((cfg) => (configByColumn[cfg.column] = cfg));
-
-  const { counts, duplicateCount } = summarizeFindingsForHandling();
-
   counts.forEach((count, key) => {
     const [column, noiseType] = key.split("|");
     const dtype = configByColumn[column] ? configByColumn[column].dtype : null;
     const availableActions = ACTION_TABLE[`${dtype}|${noiseType}`] || [];
-    if (availableActions.length === 0) return; // chưa có hành động nào định nghĩa cho cặp này
+    if (availableActions.length === 0) return;
 
+    const meta = noiseMeta(noiseType);
     const row = document.createElement("div");
     row.className = "handling-row";
     row.dataset.column = column;
     row.dataset.noiseType = noiseType;
     row.innerHTML = `
       <div class="handling-row-header">
-        <strong>${column}</strong> ${noiseBadge(noiseType)}
-        <span class="hint">(${count} ô)</span>
+        <strong>${escapeHtml(column)}</strong>
+        <span class="tag tag-${meta.family}">${meta.label}</span>
+        <span class="status-text">(${count} ô)</span>
       </div>
-      <select class="handling-action">
+      <select class="select handling-action">
         ${availableActions.map((a) => `<option value="${a}">${ACTION_LABELS[a]}</option>`).join("")}
       </select>
-      <input type="text" class="handling-fixed-value" placeholder="giá trị cố định" hidden />
+      <input type="text" class="input handling-fixed-value" placeholder="giá trị cố định" hidden />
     `;
     const actionSelect = row.querySelector(".handling-action");
     const fixedValueInput = row.querySelector(".handling-fixed-value");
@@ -708,21 +860,22 @@ function renderHandlingSection() {
     }
     actionSelect.addEventListener("change", toggleFixedValue);
     toggleFixedValue();
-
     container.appendChild(row);
   });
 
   if (duplicateCount > 0) {
+    const meta = noiseMeta("duplicate_row");
     const row = document.createElement("div");
     row.className = "handling-row";
     row.dataset.duplicateRow = "true";
     row.innerHTML = `
       <div class="handling-row-header">
-        <strong>Duplicate row</strong> ${noiseBadge("duplicate_row")}
-        <span class="hint">(${duplicateCount} dòng)</span>
+        <strong>Duplicate row</strong>
+        <span class="tag tag-${meta.family}">${meta.label}</span>
+        <span class="status-text">(${duplicateCount} dòng)</span>
       </div>
       <label>Giữ lại bản:
-        <select class="duplicate-keep">
+        <select class="select duplicate-keep">
           <option value="first">Đầu tiên</option>
           <option value="last">Cuối cùng</option>
         </select>
@@ -731,15 +884,14 @@ function renderHandlingSection() {
     container.appendChild(row);
   }
 
-  if (container.children.length === 0) {
-    container.innerHTML =
-      '<p class="hint">Không có loại noise nào (ngoài rule liên cột) có hành động xử lý khả dụng.</p>';
+  if (!container.children.length) {
+    container.innerHTML = '<p class="empty-state">Không có loại noise nào (ngoài rule liên cột) có hành động xử lý khả dụng.</p>';
   }
 }
 
-document.getElementById("apply-handling-btn").addEventListener("click", async () => {
-  const btn = document.getElementById("apply-handling-btn");
-  const statusEl = document.getElementById("handling-status");
+$("apply-handling-btn").addEventListener("click", async () => {
+  const btn = $("apply-handling-btn");
+  const statusEl = $("handling-status");
   const handlingChoices = [];
   let duplicateHandling = null;
 
@@ -748,16 +900,12 @@ document.getElementById("apply-handling-btn").addEventListener("click", async ()
       duplicateHandling = {
         enabled: true,
         keep: row.querySelector(".duplicate-keep").value,
-        subset_columns: lastDuplicateConfig ? lastDuplicateConfig.subset_columns : null,
+        subset_columns: state.lastDuplicateConfig ? state.lastDuplicateConfig.subset_columns : null,
       };
       return;
     }
     const action = row.querySelector(".handling-action").value;
-    const choice = {
-      column: row.dataset.column,
-      noise_type: row.dataset.noiseType,
-      action,
-    };
+    const choice = { column: row.dataset.column, noise_type: row.dataset.noiseType, action };
     if (action === "fixed_value") {
       choice.fixed_value = row.querySelector(".handling-fixed-value").value;
     }
@@ -773,8 +921,8 @@ document.getElementById("apply-handling-btn").addEventListener("click", async ()
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        file_id: currentFileId,
-        column_configs: lastColumnConfigs,
+        file_id: state.fileId,
+        column_configs: state.lastColumnConfigs,
         handling_choices: handlingChoices,
         duplicate_handling: duplicateHandling,
       }),
@@ -784,7 +932,6 @@ document.getElementById("apply-handling-btn").addEventListener("click", async ()
     setButtonLoading(btn, false, "Đang xử lý...", "✅ Áp dụng xử lý & tải file CSV");
     return;
   }
-
   setButtonLoading(btn, false, "Đang xử lý...", "✅ Áp dụng xử lý & tải file CSV");
 
   if (!response.ok) {
@@ -793,7 +940,7 @@ document.getElementById("apply-handling-btn").addEventListener("click", async ()
       const errorData = await response.json();
       if (errorData.error) message = errorData.error;
     } catch (parseErr) {
-      // giữ message mặc định
+      /* giữ message mặc định */
     }
     alert(message);
     return;
@@ -801,12 +948,9 @@ document.getElementById("apply-handling-btn").addEventListener("click", async ()
 
   const data = await response.json();
   statusEl.textContent =
-    `✅ Đã xử lý xong: ${data.original_row_count} dòng gốc -> ` +
-    `${data.final_row_count} dòng còn lại (đã xoá ${data.removed_row_count} dòng). Đang tải file...`;
+    `✅ Đã xử lý xong: ${data.original_row_count} dòng gốc -> ${data.final_row_count} dòng còn lại ` +
+    `(đã xoá ${data.removed_row_count} dòng). Đang tải file...`;
 
-  // Tải file CSV về: gọi /api/download/<id>, đọc thành blob, rồi tạo 1 thẻ
-  // <a> ẩn để "click hộ" người dùng -- cách chuẩn để tải file bằng JS mà
-  // không cần điều hướng cả trang sang URL khác.
   const downloadResponse = await fetch(`${API_BASE}/api/download/${data.download_id}`);
   const blob = await downloadResponse.blob();
   const url = window.URL.createObjectURL(blob);
@@ -818,3 +962,7 @@ document.getElementById("apply-handling-btn").addEventListener("click", async ()
   a.remove();
   window.URL.revokeObjectURL(url);
 });
+
+// ====== Khởi động ======
+renderStepper();
+checkBackendHealth();
