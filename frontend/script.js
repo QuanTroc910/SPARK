@@ -692,6 +692,33 @@ function getFilteredRows() {
   });
 }
 
+// Cột hiển thị: dùng đúng thứ tự key backend trả (row_number, các cột gốc,
+// noise_reasons) -- bỏ noise_reasons thô, tự render lại thành tag màu.
+// Dùng chung cho cả bảng Kết quả (Bước 4) lẫn bảng chi tiết xổ ra ở Bước 5.
+function getDataColumns() {
+  return state.lastFlaggedRows.length
+    ? Object.keys(state.lastFlaggedRows[0]).filter((k) => k !== "noise_reasons")
+    : [];
+}
+
+function rowToTableRowHTML(row, dataColumns) {
+  const rowFindings = state.rowFindingsMap.get(row.row_number) || [];
+  const flagByColumn = {};
+  rowFindings.forEach((f) => {
+    if (!flagByColumn[f.column]) flagByColumn[f.column] = f.noise_type;
+  });
+  const cells = dataColumns
+    .map((c) => {
+      const type = flagByColumn[c];
+      const cls = type ? ` class="cell-flag-${noiseMeta(type).family}"` : "";
+      const value = row[c] === undefined || row[c] === null ? "" : row[c];
+      return `<td${cls}>${escapeHtml(String(value))}</td>`;
+    })
+    .join("");
+  const tags = rowFindings.map((f) => tagHTML(f.column, f.noise_type)).join(" ");
+  return `<tr>${cells}<td class="reasons-cell">${tags}</td></tr>`;
+}
+
 function renderResultsTable() {
   const table = $("result-table");
   const emptyMsg = $("result-empty");
@@ -707,9 +734,7 @@ function renderResultsTable() {
   table.hidden = false;
   pagination.hidden = false;
 
-  // Cột hiển thị: dùng đúng thứ tự key backend trả (row_number, các cột gốc,
-  // noise_reasons) -- bỏ noise_reasons thô, tự render lại thành tag màu.
-  const dataColumns = Object.keys(state.lastFlaggedRows[0]).filter((k) => k !== "noise_reasons");
+  const dataColumns = getDataColumns();
   $("result-table-head").innerHTML =
     "<tr>" + dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") + "<th>noise_reasons</th></tr>";
 
@@ -724,25 +749,7 @@ function renderResultsTable() {
   if (!pageRows.length) {
     tbody.innerHTML = `<tr><td colspan="${dataColumns.length + 1}" class="empty-cell">Không có dòng nào khớp bộ lọc.</td></tr>`;
   } else {
-    tbody.innerHTML = pageRows
-      .map((row) => {
-        const rowFindings = state.rowFindingsMap.get(row.row_number) || [];
-        const flagByColumn = {};
-        rowFindings.forEach((f) => {
-          if (!flagByColumn[f.column]) flagByColumn[f.column] = f.noise_type;
-        });
-        const cells = dataColumns
-          .map((c) => {
-            const type = flagByColumn[c];
-            const cls = type ? ` class="cell-flag-${noiseMeta(type).family}"` : "";
-            const value = row[c] === undefined || row[c] === null ? "" : row[c];
-            return `<td${cls}>${escapeHtml(String(value))}</td>`;
-          })
-          .join("");
-        const tags = rowFindings.map((f) => tagHTML(f.column, f.noise_type)).join(" ");
-        return `<tr>${cells}<td class="reasons-cell">${tags}</td></tr>`;
-      })
-      .join("");
+    tbody.innerHTML = pageRows.map((row) => rowToTableRowHTML(row, dataColumns)).join("");
   }
 
   $("page-indicator").textContent = `Trang ${state.resultsPage}/${totalPages} · ${filtered.length} dòng`;
@@ -843,15 +850,19 @@ function renderHandlingSection() {
     row.dataset.column = column;
     row.dataset.noiseType = noiseType;
     row.innerHTML = `
-      <div class="handling-row-header">
-        <strong>${escapeHtml(column)}</strong>
-        <span class="tag tag-${meta.family}">${meta.label}</span>
-        <span class="status-text">(${count} ô)</span>
+      <div class="handling-row-top">
+        <button type="button" class="handling-row-summary" aria-expanded="false">
+          <span class="handling-toggle-icon">▸</span>
+          <strong>${escapeHtml(column)}</strong>
+          <span class="tag tag-${meta.family}">${meta.label}</span>
+          <span class="status-text">(${count} ô — bấm để xem các dòng)</span>
+        </button>
+        <select class="select handling-action">
+          ${availableActions.map((a) => `<option value="${a}">${ACTION_LABELS[a]}</option>`).join("")}
+        </select>
+        <input type="text" class="input handling-fixed-value" placeholder="giá trị cố định" hidden />
       </div>
-      <select class="select handling-action">
-        ${availableActions.map((a) => `<option value="${a}">${ACTION_LABELS[a]}</option>`).join("")}
-      </select>
-      <input type="text" class="input handling-fixed-value" placeholder="giá trị cố định" hidden />
+      <div class="handling-detail" hidden></div>
     `;
     const actionSelect = row.querySelector(".handling-action");
     const fixedValueInput = row.querySelector(".handling-fixed-value");
@@ -869,17 +880,21 @@ function renderHandlingSection() {
     row.className = "handling-row";
     row.dataset.duplicateRow = "true";
     row.innerHTML = `
-      <div class="handling-row-header">
-        <strong>Duplicate row</strong>
-        <span class="tag tag-${meta.family}">${meta.label}</span>
-        <span class="status-text">(${duplicateCount} dòng)</span>
+      <div class="handling-row-top">
+        <button type="button" class="handling-row-summary" aria-expanded="false">
+          <span class="handling-toggle-icon">▸</span>
+          <strong>Duplicate row</strong>
+          <span class="tag tag-${meta.family}">${meta.label}</span>
+          <span class="status-text">(${duplicateCount} dòng — bấm để xem các dòng)</span>
+        </button>
+        <label>Giữ lại bản:
+          <select class="select duplicate-keep">
+            <option value="first">Đầu tiên</option>
+            <option value="last">Cuối cùng</option>
+          </select>
+        </label>
       </div>
-      <label>Giữ lại bản:
-        <select class="select duplicate-keep">
-          <option value="first">Đầu tiên</option>
-          <option value="last">Cuối cùng</option>
-        </select>
-      </label>
+      <div class="handling-detail" hidden></div>
     `;
     container.appendChild(row);
   }
@@ -888,6 +903,51 @@ function renderHandlingSection() {
     container.innerHTML = '<p class="empty-state">Không có loại noise nào (ngoài rule liên cột) có hành động xử lý khả dụng.</p>';
   }
 }
+
+// Lấy đúng các dòng (từ state.lastFlaggedRows) đang bị 1 cặp (cột, loại
+// noise) cụ thể -- dùng để xổ ra bảng chi tiết khi người dùng bấm vào 1 dòng
+// xử lý ở Bước 5, để họ tự xem lại dữ liệu thật trước khi chọn cách xử lý.
+function rowsForHandlingKey(column, noiseType) {
+  const rowNumbers = new Set(
+    state.lastFindings.filter((f) => f.column === column && f.noise_type === noiseType).map((f) => f.row_number)
+  );
+  return state.lastFlaggedRows.filter((r) => rowNumbers.has(r.row_number));
+}
+function rowsForDuplicateHandling() {
+  const rowNumbers = new Set(
+    state.lastFindings.filter((f) => f.noise_type === "duplicate_row").map((f) => f.row_number)
+  );
+  return state.lastFlaggedRows.filter((r) => rowNumbers.has(r.row_number));
+}
+function handlingDetailTableHTML(rows) {
+  if (!rows.length) return '<p class="empty-state">Không có dòng nào.</p>';
+  const dataColumns = getDataColumns();
+  const head = "<tr>" + dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") + "<th>noise_reasons</th></tr>";
+  const body = rows.map((r) => rowToTableRowHTML(r, dataColumns)).join("");
+  return `<div class="table-wrap handling-detail-table"><table class="results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+// Bấm vào tên cột/loại noise (nút .handling-row-summary) -> xổ/thu gọn bảng
+// chi tiết ngay bên dưới. Chỉ render nội dung bảng LẦN ĐẦU mở ra (lazy), lần
+// sau chỉ ẩn/hiện lại cho nhanh.
+$("handling-list").addEventListener("click", (e) => {
+  const btn = e.target.closest(".handling-row-summary");
+  if (!btn) return;
+  const row = btn.closest(".handling-row");
+  const detail = row.querySelector(".handling-detail");
+  const expanded = btn.getAttribute("aria-expanded") === "true";
+
+  if (!expanded && !detail.dataset.rendered) {
+    const rows = row.dataset.duplicateRow === "true"
+      ? rowsForDuplicateHandling()
+      : rowsForHandlingKey(row.dataset.column, row.dataset.noiseType);
+    detail.innerHTML = handlingDetailTableHTML(rows);
+    detail.dataset.rendered = "true";
+  }
+  detail.hidden = expanded;
+  btn.setAttribute("aria-expanded", String(!expanded));
+  btn.querySelector(".handling-toggle-icon").textContent = expanded ? "▸" : "▾";
+});
 
 $("apply-handling-btn").addEventListener("click", async () => {
   const btn = $("apply-handling-btn");

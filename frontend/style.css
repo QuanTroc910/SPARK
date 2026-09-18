@@ -228,10 +228,22 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 
 /* ===== Step 5: xử lý & xuất file ===== */
 .handling-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
-.handling-row { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 14px; background: var(--surface-2); display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.handling-row-header { display: flex; align-items: center; gap: 8px; min-width: 260px; }
-.handling-summary { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
-.handling-summary .stat-card { flex: 1; min-width: 160px; }
+.handling-row { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 14px; background: var(--surface-2); display: flex; flex-direction: column; gap: 8px; }
+.handling-row-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+/* Nút bấm vào tên cột/loại noise để xổ/thu bảng chi tiết ở Bước 5 -- là 1
+   <button> thật (không phải div) để có sẵn accessibility (focus/Enter/Space)
+   miễn phí, chỉ cần reset lại style mặc định của trình duyệt cho <button>. */
+.handling-row-summary {
+  background: none; border: none; padding: 4px 2px; margin: 0; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px; min-width: 260px;
+  font: inherit; color: inherit; text-align: left;
+}
+.handling-toggle-icon { color: var(--ink-faint); font-size: 11px; transition: transform 0.15s ease; }
+.handling-row-summary[aria-expanded="true"] .handling-toggle-icon { color: var(--signal); }
+
+.handling-detail { margin-top: 2px; }
+.handling-detail-table { max-height: 320px; }
 
 /* ===== 11 family màu: chip/tag/badge/cell dùng chung 1 công thức ===== */
 .chip.tag-slate.is-checked, .filter-chip.tag-slate.is-checked, .tag.tag-slate { background: var(--slate-soft); border-color: var(--slate-border); color: var(--slate-text); }
