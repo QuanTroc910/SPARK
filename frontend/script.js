@@ -35,7 +35,7 @@ fileInput.addEventListener("change", () => {
 });
 
 function setStepActive(stepNumber) {
-  [1, 2, 3].forEach((n) => {
+  [1, 2, 3, 4].forEach((n) => {
     document.getElementById(`step-indicator-${n}`).classList.toggle("active", n <= stepNumber);
   });
 }
@@ -88,11 +88,11 @@ uploadBtn.addEventListener("click", async () => {
   setStepActive(2);
 });
 
-// ====== BƯỚC 2: DỰNG FORM CHỌN NOISE CHO TỪNG CỘT ======
-// Demo này chỉ làm 3 loại noise cơ bản (missing_value, format_noise,
-// out_of_range) cho dễ nhìn. Muốn thêm outlier/inconsistent_category/... thì
-// làm tương tự: thêm checkbox + input tham số, rồi đọc lại trong
-// buildColumnConfigs() bên dưới.
+// ====== BƯỚC 2: DỰNG FORM CHỌN NOISE CHO TỪNG CỘT (ĐỦ 7 LOẠI) ======
+// Mỗi loại noise có 1 checkbox riêng + (tuỳ loại) ô tham số đi kèm. Các khối
+// tham số CHỈ HỢP LÝ với 1 số dtype nhất định (vd out_of_range/outlier chỉ
+// hợp lý với số, inconsistent_category chỉ hợp lý với category...) nên được
+// ẩn/hiện động theo <select class="dtype"> đang chọn -- xem toggleColumnFieldsByDtype().
 function renderColumnConfigForm(columns) {
   const container = document.getElementById("column-config-list");
   container.innerHTML = "";
@@ -114,15 +114,57 @@ function renderColumnConfigForm(columns) {
           <option value="category">category</option>
         </select>
       </label>
-      <label><input type="checkbox" class="nt-missing" /> Missing value</label>
-      <label><input type="checkbox" class="nt-format" /> Format noise</label>
-      <label>
-        <input type="checkbox" class="nt-range" /> Out of range
+
+      <label><input type="checkbox" class="nt-missing" checked /> Missing value</label>
+
+      <span class="field-group">
+        <label><input type="checkbox" class="nt-format" /> Format noise</label>
+        <input type="text" class="date-format-input" placeholder="Format ngày, vd %Y-%m-%d" value="%Y-%m-%d" hidden />
+      </span>
+
+      <span class="field-group nt-numeric-only">
+        <label><input type="checkbox" class="nt-range" /> Out of range</label>
         min <input type="number" class="min-value" />
         max <input type="number" class="max-value" />
-      </label>
+      </span>
+
+      <span class="field-group nt-numeric-only">
+        <label><input type="checkbox" class="nt-outlier" /> Outlier</label>
+        <select class="outlier-method">
+          <option value="iqr">IQR</option>
+          <option value="zscore">Z-score</option>
+        </select>
+        hệ số <input type="number" class="outlier-threshold" value="1.5" step="0.1" />
+      </span>
+
+      <span class="field-group nt-category-only">
+        <label><input type="checkbox" class="nt-category" /> Inconsistent category</label>
+        <input type="text" class="valid-categories" placeholder="giá trị chuẩn, cách nhau bởi dấu phẩy, vd Male,Female" />
+        ngưỡng giống <input type="number" class="category-threshold" value="0.85" step="0.05" min="0" max="1" />
+      </span>
+
+      <span class="field-group nt-text-only">
+        <label><input type="checkbox" class="nt-whitespace" /> Whitespace noise</label>
+        ký tự cấm (regex, tuỳ chọn) <input type="text" class="disallowed-chars" placeholder="vd [#@$%]" />
+      </span>
     `;
     container.appendChild(div);
+
+    const dtypeSelect = div.querySelector(".dtype");
+    const formatCheckbox = div.querySelector(".nt-format");
+    const dateFormatInput = div.querySelector(".date-format-input");
+
+    function toggleColumnFieldsByDtype() {
+      const dtype = dtypeSelect.value;
+      const isNumeric = dtype === "integer" || dtype === "float";
+      div.querySelectorAll(".nt-numeric-only").forEach((el) => (el.hidden = !isNumeric));
+      div.querySelectorAll(".nt-category-only").forEach((el) => (el.hidden = dtype !== "category"));
+      div.querySelectorAll(".nt-text-only").forEach((el) => (el.hidden = dtype !== "text"));
+      dateFormatInput.hidden = !(dtype === "date" && formatCheckbox.checked);
+    }
+    dtypeSelect.addEventListener("change", toggleColumnFieldsByDtype);
+    formatCheckbox.addEventListener("change", toggleColumnFieldsByDtype);
+    toggleColumnFieldsByDtype(); // ẩn/hiện đúng ngay từ đầu (mặc định dtype = text)
   });
 }
 
@@ -139,8 +181,12 @@ function buildColumnConfigs() {
     if (div.querySelector(".nt-missing").checked) {
       noiseTypes.push("missing_value");
     }
+
+    let dateFormat = null;
     if (div.querySelector(".nt-format").checked) {
       noiseTypes.push("format_noise");
+      const dateFormatRaw = div.querySelector(".date-format-input").value.trim();
+      dateFormat = dateFormatRaw || null;
     }
 
     let minValue = null;
@@ -153,6 +199,30 @@ function buildColumnConfigs() {
       maxValue = maxRaw === "" ? null : parseFloat(maxRaw);
     }
 
+    let outlierMethod = "iqr";
+    let outlierThreshold = 1.5;
+    if (div.querySelector(".nt-outlier").checked) {
+      noiseTypes.push("outlier");
+      outlierMethod = div.querySelector(".outlier-method").value;
+      outlierThreshold = parseFloat(div.querySelector(".outlier-threshold").value) || 1.5;
+    }
+
+    let validCategories = null;
+    let categoryThreshold = 0.85;
+    if (div.querySelector(".nt-category").checked) {
+      noiseTypes.push("inconsistent_category");
+      const raw = div.querySelector(".valid-categories").value.trim();
+      validCategories = raw ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+      categoryThreshold = parseFloat(div.querySelector(".category-threshold").value) || 0.85;
+    }
+
+    let disallowedChars = null;
+    if (div.querySelector(".nt-whitespace").checked) {
+      noiseTypes.push("whitespace_noise");
+      const raw = div.querySelector(".disallowed-chars").value.trim();
+      disallowedChars = raw || null;
+    }
+
     // Cột nào user không tick gì cả thì bỏ qua, không gửi lên backend.
     if (noiseTypes.length === 0) return;
 
@@ -162,10 +232,25 @@ function buildColumnConfigs() {
       noise_types: noiseTypes,
       min_value: minValue,
       max_value: maxValue,
+      date_format: dateFormat,
+      outlier_method: outlierMethod,
+      outlier_threshold: outlierThreshold,
+      valid_categories: validCategories,
+      category_similarity_threshold: categoryThreshold,
+      disallowed_chars_pattern: disallowedChars,
     });
   });
 
   return configs;
+}
+
+// ====== DUPLICATE_ROW (noise cấp DÒNG, tách khỏi form theo cột ở trên) ======
+function buildDuplicateHandlingBase() {
+  const enabled = document.getElementById("dup-check").checked;
+  if (!enabled) return null;
+  const raw = document.getElementById("dup-subset-columns").value.trim();
+  const subsetColumns = raw ? raw.split(",").map((s) => s.trim()).filter(Boolean) : null;
+  return { subset_columns: subsetColumns };
 }
 
 // ====== RULE LIÊN CỘT (4 loại: compare / conditional / functional_dependency / formula) ======
@@ -378,11 +463,19 @@ function buildCrossFieldRules() {
 }
 
 // ====== BƯỚC 3: GỌI BACKEND DETECT + HIỂN THỊ KẾT QUẢ ======
+// Nhớ lại đúng config/kết quả lần detect gần nhất -- Bước 4 (xử lý) cần dùng
+// lại NGUYÊN VẸN các config này (backend sẽ tự chạy lại detect_noise() với
+// đúng config đó để đảm bảo xử lý khớp với những gì người dùng đã thấy).
+let lastColumnConfigs = [];
+let lastDuplicateConfig = null; // { subset_columns } hoặc null nếu không bật
+let lastFindings = [];
+
 detectBtn.addEventListener("click", async () => {
   const columnConfigs = buildColumnConfigs();
   const crossFieldRules = buildCrossFieldRules();
-  if (columnConfigs.length === 0 && crossFieldRules.length === 0) {
-    alert("Hãy chọn ít nhất 1 loại noise cho 1 cột, hoặc thêm ít nhất 1 rule liên cột");
+  const duplicateConfig = buildDuplicateHandlingBase();
+  if (columnConfigs.length === 0 && crossFieldRules.length === 0 && !duplicateConfig) {
+    alert("Hãy chọn ít nhất 1 loại noise cho 1 cột, thêm 1 rule liên cột, hoặc bật kiểm tra trùng dòng");
     return;
   }
 
@@ -397,6 +490,8 @@ detectBtn.addEventListener("click", async () => {
         file_id: currentFileId,
         column_configs: columnConfigs,
         cross_field_rules: crossFieldRules,
+        check_duplicate_row: duplicateConfig !== null,
+        duplicate_subset_columns: duplicateConfig ? duplicateConfig.subset_columns : null,
       }),
     });
   } catch (err) {
@@ -422,8 +517,22 @@ detectBtn.addEventListener("click", async () => {
   }
 
   const data = await response.json();
+  lastColumnConfigs = columnConfigs;
+  lastDuplicateConfig = duplicateConfig;
+  lastFindings = data.findings;
+
   renderResults(data);
   setStepActive(3);
+
+  const gotoHandlingBtn = document.getElementById("goto-handling-btn");
+  gotoHandlingBtn.hidden = data.findings.length === 0; // không có gì để xử lý thì ẩn nút đi
+});
+
+document.getElementById("goto-handling-btn").addEventListener("click", () => {
+  renderHandlingSection();
+  document.getElementById("handling-section").hidden = false;
+  document.getElementById("handling-section").scrollIntoView({ behavior: "smooth" });
+  setStepActive(4);
 });
 
 // Map noise_type -> tên class badge CSS tương ứng (định nghĩa màu trong
@@ -501,3 +610,211 @@ function renderResults(data) {
     body.appendChild(tr);
   });
 }
+
+// ====== BƯỚC 4: XỬ LÝ NOISE + TẢI FILE ĐÃ LÀM SẠCH ======
+// Bảng quyết định (dtype, noise_type) -> hành động khả dụng -- PHẢI khớp
+// đúng _ACTION_TABLE trong attribute_noise/attribute_handling.py (xem
+// CLAUDE.md mục 6). Trùng lặp logic này ở FE là chấp nhận được vì đây chỉ là
+// bảng tra cứu TĨNH dùng để dựng dropdown cho người dùng chọn -- backend vẫn
+// là nơi THỰC SỰ áp dụng xử lý, FE sai bảng nhiều lắm chỉ khiến dropdown
+// thiếu/thừa lựa chọn, không gây sai dữ liệu.
+const ACTION_TABLE = {
+  "integer|missing_value": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "integer|format_noise": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "integer|out_of_range": ["remove_row", "cap_to_range", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "integer|outlier": ["remove_row", "cap_to_range", "impute_mean", "impute_median", "impute_knn", "keep"],
+  "float|missing_value": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "float|format_noise": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "float|out_of_range": ["remove_row", "cap_to_range", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "float|outlier": ["remove_row", "cap_to_range", "impute_mean", "impute_median", "impute_knn", "keep"],
+  "category|missing_value": ["remove_row", "impute_mode", "fixed_value"],
+  "category|inconsistent_category": ["auto_normalize_category"],
+  "text|whitespace_noise": ["auto_clean_whitespace"],
+  "email|missing_value": ["remove_row", "fixed_value"],
+  "email|format_noise": ["remove_row", "fixed_value"],
+  "phone|missing_value": ["remove_row", "fixed_value"],
+  "phone|format_noise": ["remove_row", "fixed_value"],
+  "date|missing_value": ["remove_row", "fixed_value"],
+  "date|format_noise": ["remove_row", "fixed_value"],
+};
+
+const ACTION_LABELS = {
+  remove_row: "Xoá cả dòng",
+  impute_mean: "Điền = trung bình (mean)",
+  impute_median: "Điền = trung vị (median)",
+  impute_knn: "Điền = KNN (dựa vào dòng gần giống nhất)",
+  impute_mode: "Điền = giá trị phổ biến nhất (mode)",
+  fixed_value: "Điền giá trị cố định",
+  cap_to_range: "Cắt về biên hợp lệ (cap)",
+  auto_normalize_category: "Tự động chuẩn hoá về giá trị chuẩn",
+  auto_clean_whitespace: "Tự động dọn khoảng trắng/ký tự lạ",
+  keep: "Giữ nguyên (không sửa)",
+};
+
+// Dựng danh sách các cặp (cột, loại noise) THỰC SỰ có trong lastFindings, kèm
+// số lượng ô bị lỗi -- chỉ hiện đúng những gì người dùng đã thấy ở Bước 3,
+// không hiện sẵn mọi khả năng để tránh rối. Bỏ qua noise_type dạng "rule:..."
+// (rule liên cột) và "duplicate_row" (xử lý riêng, xem bên dưới).
+function summarizeFindingsForHandling() {
+  const counts = new Map(); // key "column|noise_type" -> số lượng
+  let duplicateCount = 0;
+
+  lastFindings.forEach((f) => {
+    if (f.noise_type === "duplicate_row") {
+      duplicateCount += 1;
+      return;
+    }
+    if (f.noise_type.startsWith("rule:")) return;
+    const key = `${f.column}|${f.noise_type}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+
+  return { counts, duplicateCount };
+}
+
+function renderHandlingSection() {
+  const container = document.getElementById("handling-list");
+  container.innerHTML = "";
+
+  const configByColumn = {};
+  lastColumnConfigs.forEach((cfg) => (configByColumn[cfg.column] = cfg));
+
+  const { counts, duplicateCount } = summarizeFindingsForHandling();
+
+  counts.forEach((count, key) => {
+    const [column, noiseType] = key.split("|");
+    const dtype = configByColumn[column] ? configByColumn[column].dtype : null;
+    const availableActions = ACTION_TABLE[`${dtype}|${noiseType}`] || [];
+    if (availableActions.length === 0) return; // chưa có hành động nào định nghĩa cho cặp này
+
+    const row = document.createElement("div");
+    row.className = "handling-row";
+    row.dataset.column = column;
+    row.dataset.noiseType = noiseType;
+    row.innerHTML = `
+      <div class="handling-row-header">
+        <strong>${column}</strong> ${noiseBadge(noiseType)}
+        <span class="hint">(${count} ô)</span>
+      </div>
+      <select class="handling-action">
+        ${availableActions.map((a) => `<option value="${a}">${ACTION_LABELS[a]}</option>`).join("")}
+      </select>
+      <input type="text" class="handling-fixed-value" placeholder="giá trị cố định" hidden />
+    `;
+    const actionSelect = row.querySelector(".handling-action");
+    const fixedValueInput = row.querySelector(".handling-fixed-value");
+    function toggleFixedValue() {
+      fixedValueInput.hidden = actionSelect.value !== "fixed_value";
+    }
+    actionSelect.addEventListener("change", toggleFixedValue);
+    toggleFixedValue();
+
+    container.appendChild(row);
+  });
+
+  if (duplicateCount > 0) {
+    const row = document.createElement("div");
+    row.className = "handling-row";
+    row.dataset.duplicateRow = "true";
+    row.innerHTML = `
+      <div class="handling-row-header">
+        <strong>Duplicate row</strong> ${noiseBadge("duplicate_row")}
+        <span class="hint">(${duplicateCount} dòng)</span>
+      </div>
+      <label>Giữ lại bản:
+        <select class="duplicate-keep">
+          <option value="first">Đầu tiên</option>
+          <option value="last">Cuối cùng</option>
+        </select>
+      </label>
+    `;
+    container.appendChild(row);
+  }
+
+  if (container.children.length === 0) {
+    container.innerHTML =
+      '<p class="hint">Không có loại noise nào (ngoài rule liên cột) có hành động xử lý khả dụng.</p>';
+  }
+}
+
+document.getElementById("apply-handling-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("apply-handling-btn");
+  const statusEl = document.getElementById("handling-status");
+  const handlingChoices = [];
+  let duplicateHandling = null;
+
+  document.querySelectorAll(".handling-row").forEach((row) => {
+    if (row.dataset.duplicateRow === "true") {
+      duplicateHandling = {
+        enabled: true,
+        keep: row.querySelector(".duplicate-keep").value,
+        subset_columns: lastDuplicateConfig ? lastDuplicateConfig.subset_columns : null,
+      };
+      return;
+    }
+    const action = row.querySelector(".handling-action").value;
+    const choice = {
+      column: row.dataset.column,
+      noise_type: row.dataset.noiseType,
+      action,
+    };
+    if (action === "fixed_value") {
+      choice.fixed_value = row.querySelector(".handling-fixed-value").value;
+    }
+    handlingChoices.push(choice);
+  });
+
+  setButtonLoading(btn, true, "Đang xử lý...", "✅ Áp dụng xử lý & tải file CSV");
+  statusEl.textContent = "";
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/apply-handling`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        file_id: currentFileId,
+        column_configs: lastColumnConfigs,
+        handling_choices: handlingChoices,
+        duplicate_handling: duplicateHandling,
+      }),
+    });
+  } catch (err) {
+    alert("Không gọi được backend.");
+    setButtonLoading(btn, false, "Đang xử lý...", "✅ Áp dụng xử lý & tải file CSV");
+    return;
+  }
+
+  setButtonLoading(btn, false, "Đang xử lý...", "✅ Áp dụng xử lý & tải file CSV");
+
+  if (!response.ok) {
+    let message = "Xử lý thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      // giữ message mặc định
+    }
+    alert(message);
+    return;
+  }
+
+  const data = await response.json();
+  statusEl.textContent =
+    `✅ Đã xử lý xong: ${data.original_row_count} dòng gốc -> ` +
+    `${data.final_row_count} dòng còn lại (đã xoá ${data.removed_row_count} dòng). Đang tải file...`;
+
+  // Tải file CSV về: gọi /api/download/<id>, đọc thành blob, rồi tạo 1 thẻ
+  // <a> ẩn để "click hộ" người dùng -- cách chuẩn để tải file bằng JS mà
+  // không cần điều hướng cả trang sang URL khác.
+  const downloadResponse = await fetch(`${API_BASE}/api/download/${data.download_id}`);
+  const blob = await downloadResponse.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "spark_cleaned.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+});

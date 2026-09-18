@@ -35,6 +35,18 @@
   box-sizing: border-box;
 }
 
+/* Sửa TẬN GỐC bug từng gặp thực tế ở phần rule liên cột: rule CSS do CHÍNH
+   TRANG định nghĩa (vd "display: flex") luôn thắng rule mặc định của trình
+   duyệt "[hidden] { display: none }" (user-agent stylesheet luôn thua author
+   stylesheet, bất kể specificity). Trước đây phải tự thêm riêng
+   ".rule-fields[hidden] { display: none }" -- giờ thêm 1 rule CHUNG có
+   !important ở đây để MỌI phần tử có "hidden" trong toàn trang chắc chắn bị
+   ẩn, khỏi phải nhớ lặp lại mỗi khi thêm 1 class layout mới (display: flex/
+   grid/...). */
+[hidden] {
+  display: none !important;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
@@ -205,6 +217,48 @@ body {
   width: 64px;
 }
 
+.column-config input[type="text"] {
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+/* Mỗi "field-group" gom 1 checkbox loại noise + tham số đi kèm của nó thành
+   1 cụm -- các cụm chỉ hợp lý với 1 số dtype (nt-numeric-only/nt-category-only/
+   nt-text-only) được ẩn/hiện động theo <select class="dtype"> (xem
+   toggleColumnFieldsByDtype() trong script.js). */
+.field-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Cấu hình duplicate_row -- noise CẤP DÒNG, tách khỏi danh sách theo cột */
+.duplicate-row-config {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9em;
+}
+
+.dup-subset-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#dup-subset-columns {
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
 /* Danh sách rule liên cột (Bước 2, phần "Rule liên cột (tuỳ chọn)") */
 .cross-field-rule-list {
   display: flex;
@@ -249,27 +303,15 @@ body {
 
 /* Từng khối field riêng cho compare/conditional/functional_dependency/formula
    -- chỉ 1 khối hiện ra tuỳ theo <select class="rule-type-select"> (xử lý ở
-   script.js, xem toggleRuleFields()).
-
-   QUAN TRỌNG: phải có rule [hidden] riêng bên dưới, KHÔNG được để thiếu.
-   Lý do: thuộc tính HTML "hidden" vốn được trình duyệt ẩn đi nhờ 1 rule CSS
-   mặc định "[hidden] { display: none }", nhưng đó là CSS "hạng thấp nhất"
-   (user-agent stylesheet) -- CSS do CHÍNH TRANG WEB định nghĩa (như dòng
-   "display: flex" ngay dưới đây) LUÔN LUÔN thắng CSS mặc định của trình
-   duyệt, bất kể độ ưu tiên (specificity). Nếu không có rule ".rule-fields
-   [hidden] { display: none }" thì "display: flex" sẽ đè mất "display: none"
-   của [hidden] -- khiến CẢ 4 khối field cùng hiện ra 1 lúc dù JS đã set
-   đúng "hidden" (đây chính là bug làm form rối, đã xảy ra thực tế). */
+   script.js, xem toggleRuleFields()). Không cần thêm rule "[hidden]" riêng ở
+   đây nữa -- đã có rule CHUNG "[hidden] { display: none !important }" ở đầu
+   file lo việc này cho MỌI phần tử (xem comment ở đó để biết lý do). */
 .rule-fields {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 0.9em;
-}
-
-.rule-fields[hidden] {
-  display: none;
 }
 
 .rule-fields select,
@@ -309,6 +351,43 @@ body {
 
 .detect-btn-wrapper {
   margin-top: 16px;
+}
+
+/* Danh sách lựa chọn xử lý ở Bước 4 -- mỗi .handling-row ứng với 1 cặp
+   (cột, loại noise) THỰC SỰ có trong kết quả detect (xem
+   renderHandlingSection() trong script.js), hoặc riêng 1 hàng cho
+   duplicate_row (không gắn với cột cụ thể). */
+.handling-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.handling-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #fafbfc;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.handling-row-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.handling-action,
+.handling-fixed-value,
+.duplicate-keep {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
 }
 
 /* Thẻ thống kê nhanh ở bước 3 */

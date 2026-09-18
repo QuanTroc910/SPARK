@@ -15,11 +15,12 @@
     </p>
   </header>
 
-  <!-- Thanh tiến trình 3 bước -->
+  <!-- Thanh tiến trình 4 bước -->
   <ol class="steps">
     <li id="step-indicator-1" class="step active">1. Upload file</li>
     <li id="step-indicator-2" class="step">2. Chọn noise</li>
     <li id="step-indicator-3" class="step">3. Kết quả</li>
+    <li id="step-indicator-4" class="step">4. Xử lý & tải về</li>
   </ol>
 
   <!-- Bước 1: Upload file -->
@@ -36,7 +37,24 @@
   <!-- Bước 2: Chọn noise cho từng cột -->
   <section id="config-section" class="card" hidden>
     <h2>Bước 2: Chọn loại noise cho từng cột</h2>
+    <p class="hint">
+      Với mỗi cột, chọn đúng kiểu dữ liệu rồi tick các loại noise muốn kiểm
+      tra. Các ô tham số (min/max, ngưỡng outlier, danh sách category chuẩn...)
+      chỉ hiện ra khi kiểu dữ liệu phù hợp.
+    </p>
     <div id="column-config-list" class="column-config-list"></div>
+
+    <!-- Duplicate_row là noise CẤP DÒNG (so cả dòng, không thuộc 1 cột riêng
+         lẻ) nên tách khỏi danh sách theo cột ở trên -- xem CLAUDE.md mục 3. -->
+    <div class="duplicate-row-config">
+      <label>
+        <input type="checkbox" id="dup-check" /> Kiểm tra trùng dòng (duplicate_row)
+      </label>
+      <label class="dup-subset-label">
+        Chỉ so theo các cột này (để trống = so toàn bộ), cách nhau dấu phẩy:
+        <input type="text" id="dup-subset-columns" placeholder="vd id" />
+      </label>
+    </div>
 
     <!-- Rule liên cột: khác noise theo từng cột ở trên -- đây là kiểm tra
          MÂU THUẪN LOGIC giữa 2 cột khác nhau (vd "ngày bắt đầu <= ngày nghỉ
@@ -84,6 +102,24 @@
       </table>
     </div>
     <p id="result-empty" class="status-text" hidden>Không phát hiện noise nào 🎉</p>
+
+    <div class="detect-btn-wrapper">
+      <button id="goto-handling-btn" class="btn btn-primary" hidden>➡️ Sang Bước 4: Xử lý noise</button>
+    </div>
+  </section>
+
+  <!-- Bước 4: Xử lý noise đã phát hiện + tải file CSV đã làm sạch -->
+  <section id="handling-section" class="card" hidden>
+    <h2>Bước 4: Xử lý & tải file đã làm sạch</h2>
+    <p class="hint">
+      Với MỖI loại lỗi thực sự tìm thấy ở Bước 3 (theo đúng cặp cột + loại
+      noise), chọn 1 cách xử lý bên dưới. Rule liên cột (vd
+      <code>rule:compare</code>) hiện CHƯA hỗ trợ xử lý tự động ở bước này —
+      chỉ 7 loại attribute noise theo cột + duplicate_row.
+    </p>
+    <div id="handling-list" class="handling-list"></div>
+    <button id="apply-handling-btn" class="btn btn-primary">✅ Áp dụng xử lý & tải file CSV</button>
+    <p id="handling-status" class="status-text"></p>
   </section>
 
   <script src="script.js"></script>

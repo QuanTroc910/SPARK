@@ -21,19 +21,54 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
     `eval()`/`exec()` (đã test kỹ, xem `FormulaError`).
   - `pipeline.py` — `load_data()`, `detect_noise()` (nhận thêm
     `cross_field_rules` tuỳ chọn), `get_flagged_rows()`.
+  - `attribute_handling.py` — **ĐÃ CODE XONG** bảng quyết định dtype×noise_type
+    (mục 6 dưới đây): `get_available_actions(dtype, noise_type)` +
+    `HandlingAction` (enum: remove_row/impute_mean/impute_median/impute_knn/
+    impute_mode/fixed_value/cap_to_range/auto_normalize_category/
+    auto_clean_whitespace/keep) + `apply_handling(df, column_configs, findings,
+    handling_choices, duplicate_handling=None)` thực thi xử lý thật, trả về
+    (df đã làm sạch, stats). `impute_knn` tự viết tay (KHÔNG phụ thuộc
+    scikit-learn) -- KNN thủ công dựa trên khoảng cách Euclid trên các cột số
+    khác đã chuẩn hoá z-score. Mọi giá trị số tính ra đều được ép về CHUỖI
+    trước khi gán lại (DataFrame gốc đọc bằng `dtype=str`, xem
+    `_format_numeric_for_column()`).
 - `app.py` — Flask backend, CHỈ đóng vai trò "phiên dịch" JSON ⟷ Python object,
-  KHÔNG chứa logic detect (logic nằm hết ở `attribute_noise/`).
-  Endpoints: `POST /api/upload`, `POST /api/detect-noise` (payload có thêm
-  field `cross_field_rules`, xem mẫu JSON trong `_cross_field_rule_from_json()`).
+  KHÔNG chứa logic detect/handle (logic nằm hết ở `attribute_noise/`).
+  Endpoints:
+  - `POST /api/upload`
+  - `POST /api/detect-noise` (payload có thêm field `cross_field_rules`,
+    `check_duplicate_row`, `duplicate_subset_columns`; xem mẫu JSON trong
+    `_cross_field_rule_from_json()`).
+  - `POST /api/apply-handling` — **MỚI**: nhận `file_id` + LẠI đúng
+    `column_configs` đã dùng ở bước detect (để backend tự chạy lại
+    `detect_noise()`, không tin tưởng findings do FE tự gửi) + danh sách
+    `handling_choices` + `duplicate_handling` tuỳ chọn. Trả về stats
+    (`original_row_count`/`removed_row_count`/`final_row_count`) +
+    `download_id`.
+  - `GET /api/download/<download_id>` — **MỚI**: trả file CSV đã làm sạch
+    (lưu tạm trong `CLEANED_FILES`, tách riêng khỏi `UPLOADED_FILES` để không
+    ghi đè bản gốc).
   Rule/config sai (formula lỗi cú pháp, cột không tồn tại...) trả HTTP 400
   kèm message rõ ràng, không crash 500.
-- `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), demo UI có 3 bước
-  (upload → chọn noise theo cột + rule liên cột → xem kết quả). Form chọn
-  noise theo cột mới hỗ trợ 3/7 loại (missing/format/out_of_range) để demo
-  gọn; backend đã hỗ trợ đủ 7. Phần "Rule liên cột (tuỳ chọn)" ở Bước 2 đã
-  hỗ trợ ĐỦ cả 4 loại rule (compare/conditional/functional_dependency/formula),
-  UI cho phép thêm nhiều rule cùng lúc, mỗi rule tự đổi form field theo loại
-  đã chọn (xem `createRuleRow()`/`buildCrossFieldRules()` trong `script.js`).
+- `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI có **4 bước**
+  (upload → chọn noise theo cột + duplicate_row + rule liên cột → xem kết quả
+  → xử lý & tải file). Bước 2 đã hỗ trợ **ĐỦ 7 loại noise** theo cột (mỗi loại
+  1 checkbox + tham số riêng, tự ẩn/hiện theo dtype qua
+  `toggleColumnFieldsByDtype()`) + 1 khối riêng bật/tắt kiểm tra
+  `duplicate_row` (noise cấp dòng, không thuộc `ColumnNoiseConfig`). Phần
+  "Rule liên cột (tuỳ chọn)" ở Bước 2 hỗ trợ ĐỦ cả 4 loại rule (compare/
+  conditional/functional_dependency/formula), UI cho phép thêm nhiều rule
+  cùng lúc, mỗi rule tự đổi form field theo loại đã chọn (xem
+  `createRuleRow()`/`buildCrossFieldRules()` trong `script.js`). Bước 4 (MỚI)
+  chỉ hiện đúng các cặp (cột, loại noise) THỰC SỰ có trong kết quả detect
+  (`renderHandlingSection()`), dropdown hành động dựng từ bảng `ACTION_TABLE`
+  ở FE (PHẢI khớp `_ACTION_TABLE` trong `attribute_handling.py` -- xem comment
+  tại đó), bấm áp dụng sẽ gọi `/api/apply-handling` rồi tự tải file CSV kết
+  quả về máy qua `/api/download/<id>`. CSS có 1 rule CHUNG
+  `[hidden] { display: none !important }` ở đầu `style.css` để tránh lặp lại
+  bug "mọi khối field cùng hiện" đã từng gặp thực tế ở phần rule liên cột
+  (author stylesheet luôn thắng user-agent stylesheet mặc định của trình
+  duyệt).
 - `demo.py` — script test CLI cho logic detect, KHÔNG phải sản phẩm cuối.
 - `data/` — sample data test:
   - `noisy_employee_dataset.csv` + `noise_ground_truth.csv` — bộ gốc, 114 dòng.
@@ -57,11 +92,12 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
 5. `row_number` trả cho FE là 1-based (`index + 1`) để khớp cách đếm dòng của
    Excel/CSV viewer thông thường — pandas dùng 0-based nội bộ, đã từng gây
    nhầm lẫn "lệch 1 dòng" cho user, đã fix ở commit `d49728e`.
-6. Quy tắc quan trọng cho phần HANDLE (đang thiết kế, chưa code):
+6. Quy tắc quan trọng cho phần HANDLE (**ĐÃ CODE XONG** — `attribute_handling.py`
+   + `POST /api/apply-handling` + `GET /api/download/<id>` + Bước 4 trên FE):
    hành động xử lý khả dụng (remove/replace/auto-clean) phải được quyết định
    dựa trên **cặp (ColumnDType, NoiseType)** — tổng quát, áp dụng cho MỌI cột,
    KHÔNG hardcode theo tên cột cụ thể (vd không được viết cứng "nếu cột tên là
-   age thì..."). Bảng quyết định đã thống nhất:
+   age thì..."). Bảng quyết định đã thống nhất (khớp `get_available_actions()`):
 
    | dtype | noise_type | Hành động khả dụng |
    |---|---|---|
@@ -118,18 +154,27 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
       (phần "Rule liên cột" ở Bước 2) đã xong cho đủ 4 loại, đã test qua
       HTTP thật (upload + detect-noise) và test riêng khả năng chống code
       injection của formula (whitelist theo AST node type).
-- [ ] `attribute_handling.py` — implement bảng quyết định dtype×noise_type ở
-      trên qua hàm `get_available_actions(dtype, noise_type) -> list[str]`,
-      cộng các hàm thực thi (remove_rows, impute_mean/median/knn, cap_to_range,
-      normalize_category, clean_whitespace, dedupe_rows...).
-- [ ] API endpoint áp dụng xử lý + xuất file CSV mới cho user tải về.
-- [ ] Mở rộng frontend form để chọn được đủ cả 7 loại noise (hiện tại FE mới
-      làm 3 loại cho gọn: missing/format/out_of_range).
+- [x] `attribute_handling.py` — bảng quyết định dtype×noise_type qua
+      `get_available_actions(dtype, noise_type) -> list[HandlingAction]`,
+      cộng hàm thực thi `apply_handling()` (remove_row, impute_mean/median/
+      knn/mode, fixed_value, cap_to_range, auto_normalize_category,
+      auto_clean_whitespace, duplicate_row keep first/last). Đã test qua
+      script riêng + qua HTTP thật (Flask test client) + qua UI thật
+      (Playwright, luồng đủ 4 bước, tải file CSV về thành công).
+- [x] API endpoint áp dụng xử lý + xuất file CSV mới cho user tải về
+      (`POST /api/apply-handling` + `GET /api/download/<id>`).
+- [x] Mở rộng frontend form để chọn được đủ cả 7 loại noise (Bước 2) + khối
+      bật/tắt `duplicate_row` riêng + Bước 4 chọn cách xử lý & tải file.
 - [ ] Class noise: CHỈ bắt đầu sau khi xong HẾT các mục trên (rule + handling
-      + FE đủ 7 loại). Detect (distance-based / ensemble-based /
-      single-learner) + handle (robust / filtering / polishing) — theo đúng
-      phân loại trong bài báo "Dealing with Noise Problem in ML Data-sets:
-      A Systematic Review" (Gupta & Gupta, 2019) mà project này dựa theo.
+      + FE đủ 7 loại — nay đã xong cả 3). Detect (distance-based / ensemble-
+      based / single-learner) + handle (robust / filtering / polishing) —
+      theo đúng phân loại trong bài báo "Dealing with Noise Problem in ML
+      Data-sets: A Systematic Review" (Gupta & Gupta, 2019) mà project này
+      dựa theo.
+- [ ] (Khuyến nghị, chưa có yêu cầu code cụ thể) Đánh giá định lượng: tính
+      precision/recall/F1 của 7 detector + rule liên cột so với
+      `noise_ground_truth.csv`/`noise_ground_truth_large.csv` — rủi ro lớn
+      nhất hiện tại cho điểm khoá luận là CHƯA có bước đánh giá định lượng nào.
 
 ## Môi trường chạy của user
 

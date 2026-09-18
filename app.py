@@ -9,11 +9,19 @@ Chạy thử: python3 app.py -> server chạy ở http://localhost:5000
 """
 
 import uuid
+from io import StringIO
 from pathlib import Path
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 
+from attribute_noise.attribute_handling import (
+    DuplicateHandlingChoice,
+    DuplicateKeep,
+    HandlingAction,
+    HandlingChoice,
+    apply_handling,
+)
 from attribute_noise.config import (
     ColumnDType,
     ColumnNoiseConfig,
@@ -42,6 +50,12 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # database/redis/cloud storage vì lưu trong biến Python thế này sẽ mất hết
 # khi server restart, và không chạy được nếu có nhiều server cùng lúc.
 UPLOADED_FILES: dict[str, "pd.DataFrame"] = {}
+
+# Lưu tạm DataFrame ĐÃ LÀM SẠCH (sau /api/apply-handling), key = download_id --
+# tách riêng dict này với UPLOADED_FILES để không bao giờ ghi đè lên file gốc
+# (người dùng có thể muốn thử nhiều phương án xử lý khác nhau trên cùng 1 file
+# upload, không nên làm mất bản gốc).
+CLEANED_FILES: dict[str, "pd.DataFrame"] = {}
 
 
 @app.route("/api/upload", methods=["POST"])
@@ -194,6 +208,96 @@ def detect_noise_api():
             ],
             "flagged_rows": flagged_rows_json,
         }
+    )
+
+
+def _handling_choice_from_json(item: dict) -> HandlingChoice:
+    """Convert 1 object JSON (frontend gửi lên ở Bước 4 -- xử lý noise) thành
+    HandlingChoice, vai trò giống _config_from_json()/_cross_field_rule_from_json()
+    ở trên nhưng cho lựa chọn XỬ LÝ thay vì lựa chọn DETECT."""
+    return HandlingChoice(
+        column=item["column"],
+        noise_type=NoiseType(item["noise_type"]),
+        action=HandlingAction(item["action"]),
+        fixed_value=item.get("fixed_value"),
+    )
+
+
+def _duplicate_handling_from_json(item: dict) -> DuplicateHandlingChoice:
+    return DuplicateHandlingChoice(
+        keep=DuplicateKeep(item.get("keep", "first")),
+        subset_columns=item.get("subset_columns"),
+    )
+
+
+@app.route("/api/apply-handling", methods=["POST"])
+def apply_handling_api():
+    """Bước 4: Frontend gửi lên file_id + LẠI đúng column_configs đã dùng ở
+    Bước 2 (để backend tự chạy detect_noise() lại, đảm bảo xử lý ĐÚNG những ô
+    người dùng đã thấy ở Bước 3, không tin tưởng 1 danh sách findings do FE tự
+    gửi lên) + danh sách handling_choices (mỗi lựa chọn ứng với 1 cặp cột +
+    loại noise) + tuỳ chọn duplicate_handling.
+
+    Trả về thống kê (số dòng bị xoá, số dòng còn lại) + download_id để gọi
+    /api/download/<download_id> tải file CSV đã làm sạch.
+    """
+    payload = request.get_json()
+    file_id = payload.get("file_id")
+    df = UPLOADED_FILES.get(file_id)
+    if df is None:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+
+    try:
+        column_configs = [_config_from_json(item) for item in payload.get("column_configs", [])]
+        handling_choices = [
+            _handling_choice_from_json(item) for item in payload.get("handling_choices", [])
+        ]
+
+        duplicate_row_config = None
+        duplicate_handling_choice = None
+        duplicate_payload = payload.get("duplicate_handling")
+        if duplicate_payload:
+            duplicate_row_config = DuplicateRowConfig(
+                subset_columns=duplicate_payload.get("subset_columns")
+            )
+            duplicate_handling_choice = _duplicate_handling_from_json(duplicate_payload)
+
+        # Chạy lại detect_noise() với ĐÚNG config đã dùng ở Bước 2 -- không
+        # cần cross_field_rules vì bảng quyết định handling (CLAUDE.md mục 6)
+        # hiện chưa có hành động xử lý cho rule liên cột, chỉ cho 7 loại
+        # attribute noise + duplicate_row.
+        findings = detect_noise(df, column_configs, duplicate_row_config=duplicate_row_config)
+
+        cleaned_df, stats = apply_handling(
+            df,
+            column_configs,
+            findings,
+            handling_choices,
+            duplicate_handling=duplicate_handling_choice,
+        )
+    except (FormulaError, ValueError, KeyError, TypeError) as exc:
+        return jsonify({"error": f"Cấu hình xử lý không hợp lệ: {exc}"}), 400
+
+    download_id = str(uuid.uuid4())
+    CLEANED_FILES[download_id] = cleaned_df
+
+    return jsonify({**stats, "download_id": download_id})
+
+
+@app.route("/api/download/<download_id>", methods=["GET"])
+def download_cleaned_file(download_id: str):
+    """Bước 4 (tiếp): trả file CSV đã làm sạch cho trình duyệt tải về, dựa
+    trên download_id nhận được từ /api/apply-handling."""
+    cleaned_df = CLEANED_FILES.get(download_id)
+    if cleaned_df is None:
+        return jsonify({"error": "download_id không tồn tại hoặc đã hết hạn"}), 404
+
+    buffer = StringIO()
+    cleaned_df.to_csv(buffer, index=False)
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=spark_cleaned.csv"},
     )
 
 
