@@ -111,6 +111,14 @@ const state = {
   resultsPage: 1,
   resultsPerPage: 20,
   resultsFilter: { text: "", types: new Set() },
+  // Bước 5 (xử lý từng phần): true khi đã có ít nhất 1 lần Apply thành công
+  // (tức backend đã tạo "bản đang làm việc" riêng, khác file gốc).
+  hasWorkingCopy: false,
+  // Các nhóm (key "cột|loại noise", hoặc "duplicate_row") ĐÃ được Apply ít
+  // nhất 1 lần -- dùng để biết nút "Xem sau xử lý" của nhóm nào nên hiện sẵn
+  // ngay khi renderHandlingSection() DỰNG LẠI TOÀN BỘ DOM (mỗi lần dựng lại
+  // các nút đều bắt đầu từ mặc định "ẩn", nên phải tự nhớ lại qua state này).
+  appliedGroups: new Set(),
 };
 
 // ====== Stepper (5 bước) ======
@@ -845,6 +853,7 @@ function renderHandlingSection() {
     if (availableActions.length === 0) return;
 
     const meta = noiseMeta(noiseType);
+    const alreadyApplied = state.appliedGroups.has(key);
     const row = document.createElement("div");
     row.className = "handling-row";
     row.dataset.column = column;
@@ -855,13 +864,16 @@ function renderHandlingSection() {
           <span class="handling-toggle-icon">▸</span>
           <strong>${escapeHtml(column)}</strong>
           <span class="tag tag-${meta.family}">${meta.label}</span>
-          <span class="status-text">(${count} ô — bấm để xem các dòng)</span>
+          <span class="status-text">(${count} ô — bấm để xem/tick từng dòng)</span>
         </button>
         <select class="select handling-action">
           ${availableActions.map((a) => `<option value="${a}">${ACTION_LABELS[a]}</option>`).join("")}
         </select>
         <input type="text" class="input handling-fixed-value" placeholder="giá trị cố định" hidden />
+        <button type="button" class="btn btn-ghost handling-apply-btn">Áp dụng</button>
+        <button type="button" class="btn btn-ghost handling-preview-btn" ${alreadyApplied ? "" : "hidden"}>👁 Xem sau xử lý</button>
       </div>
+      <p class="status-text handling-row-status"></p>
       <div class="handling-detail" hidden></div>
     `;
     const actionSelect = row.querySelector(".handling-action");
@@ -876,6 +888,7 @@ function renderHandlingSection() {
 
   if (duplicateCount > 0) {
     const meta = noiseMeta("duplicate_row");
+    const dupAlreadyApplied = state.appliedGroups.has("duplicate_row");
     const row = document.createElement("div");
     row.className = "handling-row";
     row.dataset.duplicateRow = "true";
@@ -885,28 +898,33 @@ function renderHandlingSection() {
           <span class="handling-toggle-icon">▸</span>
           <strong>Duplicate row</strong>
           <span class="tag tag-${meta.family}">${meta.label}</span>
-          <span class="status-text">(${duplicateCount} dòng — bấm để xem các dòng)</span>
+          <span class="status-text">(${duplicateCount} dòng — mặc định tick sẵn các bản TRÙNG SAU, bỏ tick bản bạn muốn giữ)</span>
         </button>
-        <label>Giữ lại bản:
-          <select class="select duplicate-keep">
-            <option value="first">Đầu tiên</option>
-            <option value="last">Cuối cùng</option>
-          </select>
-        </label>
+        <button type="button" class="btn btn-ghost handling-apply-btn">Xoá các dòng đã tick</button>
+        <button type="button" class="btn btn-ghost handling-preview-btn" ${dupAlreadyApplied ? "" : "hidden"}>👁 Xem sau xử lý</button>
       </div>
+      <p class="status-text handling-row-status"></p>
       <div class="handling-detail" hidden></div>
     `;
     container.appendChild(row);
   }
 
   if (!container.children.length) {
-    container.innerHTML = '<p class="empty-state">Không có loại noise nào (ngoài rule liên cột) có hành động xử lý khả dụng.</p>';
+    const message = state.hasWorkingCopy
+      ? 'Đã xử lý hết mọi loại noise có thể xử lý được ở đây! Bấm "Xuất file CSV" bên dưới để tải kết quả, hoặc xem lại trước.'
+      : "Không có loại noise nào (ngoài rule liên cột) có hành động xử lý khả dụng.";
+    container.innerHTML = `<p class="empty-state">${message}</p>`;
+    if (state.hasWorkingCopy) {
+      // Dùng CHUNG class .handling-preview-btn -- listener delegate trên
+      // #handling-list đã bắt sẵn class này, không cần wire thêm gì.
+      container.innerHTML += '<button type="button" class="btn btn-ghost handling-preview-btn">👁 Xem dữ liệu sau xử lý</button>';
+    }
   }
 }
 
 // Lấy đúng các dòng (từ state.lastFlaggedRows) đang bị 1 cặp (cột, loại
 // noise) cụ thể -- dùng để xổ ra bảng chi tiết khi người dùng bấm vào 1 dòng
-// xử lý ở Bước 5, để họ tự xem lại dữ liệu thật trước khi chọn cách xử lý.
+// xử lý ở Bước 5, để họ tự xem lại dữ liệu thật rồi TỰ TICK CHỌN dòng muốn xử lý.
 function rowsForHandlingKey(column, noiseType) {
   const rowNumbers = new Set(
     state.lastFindings.filter((f) => f.column === column && f.noise_type === noiseType).map((f) => f.row_number)
@@ -919,80 +937,157 @@ function rowsForDuplicateHandling() {
   );
   return state.lastFlaggedRows.filter((r) => rowNumbers.has(r.row_number));
 }
-function handlingDetailTableHTML(rows) {
+
+// Với riêng duplicate_row: mặc định TICK các bản trùng đến SAU (sẽ bị xoá),
+// bỏ tick bản ĐẦU TIÊN của mỗi nhóm trùng (giữ lại) -- người dùng vẫn tự
+// tick/bỏ tick lại từng dòng để tuỳ chỉnh, đây chỉ là gợi ý mặc định hợp lý.
+function computeDuplicateDefaultChecks(rows) {
+  const subsetCols =
+    state.lastDuplicateConfig && state.lastDuplicateConfig.subset_columns
+      ? state.lastDuplicateConfig.subset_columns
+      : getDataColumns().filter((c) => c !== "row_number");
+  const seen = new Set();
+  const checkByRowNumber = new Map();
+  rows.forEach((r) => {
+    const key = subsetCols.map((c) => r[c]).join("␟");
+    if (seen.has(key)) checkByRowNumber.set(r.row_number, true); // bản trùng sau -> tick để xoá
+    else {
+      seen.add(key);
+      checkByRowNumber.set(r.row_number, false); // bản đầu tiên -> giữ lại
+    }
+  });
+  return checkByRowNumber;
+}
+
+// Bảng chi tiết ở Bước 5 khác bảng Kết quả (Bước 4) ở chỗ có thêm 1 cột
+// CHECKBOX bên trái mỗi dòng, để người dùng tự chọn CHÍNH XÁC dòng nào muốn
+// áp dụng hành động đang chọn -- không bắt buộc xử lý cả nhóm 1 lượt.
+function handlingDetailTableHTML(rows, defaultChecks) {
   if (!rows.length) return '<p class="empty-state">Không có dòng nào.</p>';
   const dataColumns = getDataColumns();
-  const head = "<tr>" + dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") + "<th>noise_reasons</th></tr>";
-  const body = rows.map((r) => rowToTableRowHTML(r, dataColumns)).join("");
+  const head =
+    '<tr><th><input type="checkbox" class="handling-check-all" checked /></th>' +
+    dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") +
+    "<th>noise_reasons</th></tr>";
+  const body = rows
+    .map((r) => {
+      const checked = defaultChecks ? defaultChecks.get(r.row_number) : true;
+      const checkboxCell = `<td><input type="checkbox" class="handling-row-check" data-row-number="${r.row_number}" ${checked ? "checked" : ""} /></td>`;
+      return rowToTableRowHTML(r, dataColumns).replace("<tr>", `<tr>${checkboxCell}`);
+    })
+    .join("");
   return `<div class="table-wrap handling-detail-table"><table class="results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+function renderHandlingDetail(row) {
+  const detail = row.querySelector(".handling-detail");
+  const isDuplicate = row.dataset.duplicateRow === "true";
+  if (isDuplicate) {
+    const rows = rowsForDuplicateHandling();
+    detail.innerHTML = handlingDetailTableHTML(rows, computeDuplicateDefaultChecks(rows));
+  } else {
+    detail.innerHTML = handlingDetailTableHTML(rowsForHandlingKey(row.dataset.column, row.dataset.noiseType));
+  }
+  detail.dataset.rendered = "true";
+}
+function openHandlingDetail(row) {
+  const detail = row.querySelector(".handling-detail");
+  if (!detail.dataset.rendered) renderHandlingDetail(row);
+  detail.hidden = false;
+  const btn = row.querySelector(".handling-row-summary");
+  btn.setAttribute("aria-expanded", "true");
+  btn.querySelector(".handling-toggle-icon").textContent = "▾";
 }
 
 // Bấm vào tên cột/loại noise (nút .handling-row-summary) -> xổ/thu gọn bảng
 // chi tiết ngay bên dưới. Chỉ render nội dung bảng LẦN ĐẦU mở ra (lazy), lần
-// sau chỉ ẩn/hiện lại cho nhanh.
-$("handling-list").addEventListener("click", (e) => {
-  const btn = e.target.closest(".handling-row-summary");
-  if (!btn) return;
-  const row = btn.closest(".handling-row");
-  const detail = row.querySelector(".handling-detail");
-  const expanded = btn.getAttribute("aria-expanded") === "true";
-
-  if (!expanded && !detail.dataset.rendered) {
-    const rows = row.dataset.duplicateRow === "true"
-      ? rowsForDuplicateHandling()
-      : rowsForHandlingKey(row.dataset.column, row.dataset.noiseType);
-    detail.innerHTML = handlingDetailTableHTML(rows);
-    detail.dataset.rendered = "true";
+// sau chỉ ẩn/hiện lại cho nhanh. "Chọn tất cả" ở đầu bảng bật/tắt hết checkbox.
+$("handling-list").addEventListener("click", async (e) => {
+  const summaryBtn = e.target.closest(".handling-row-summary");
+  if (summaryBtn) {
+    const row = summaryBtn.closest(".handling-row");
+    const detail = row.querySelector(".handling-detail");
+    const expanded = summaryBtn.getAttribute("aria-expanded") === "true";
+    if (expanded) {
+      detail.hidden = true;
+      summaryBtn.setAttribute("aria-expanded", "false");
+      summaryBtn.querySelector(".handling-toggle-icon").textContent = "▸";
+    } else {
+      openHandlingDetail(row);
+    }
+    return;
   }
-  detail.hidden = expanded;
-  btn.setAttribute("aria-expanded", String(!expanded));
-  btn.querySelector(".handling-toggle-icon").textContent = expanded ? "▸" : "▾";
+
+  const applyBtn = e.target.closest(".handling-apply-btn");
+  if (applyBtn) {
+    await handleGroupApply(applyBtn.closest(".handling-row"));
+    return;
+  }
+
+  const previewBtn = e.target.closest(".handling-preview-btn");
+  if (previewBtn) {
+    openPreviewPanel();
+    return;
+  }
+});
+$("handling-list").addEventListener("change", (e) => {
+  if (e.target.classList.contains("handling-check-all")) {
+    const table = e.target.closest("table");
+    table.querySelectorAll(".handling-row-check").forEach((cb) => (cb.checked = e.target.checked));
+  }
 });
 
-$("apply-handling-btn").addEventListener("click", async () => {
-  const btn = $("apply-handling-btn");
-  const statusEl = $("handling-status");
-  const handlingChoices = [];
-  let duplicateHandling = null;
+// Bấm "Áp dụng" trên 1 nhóm cụ thể -- CHỈ xử lý các dòng đang được tick
+// trong bảng chi tiết của CHÍNH nhóm đó (mở ra hộ nếu đang đóng), gọi
+// /api/apply-handling-partial rồi cập nhật lại toàn bộ trạng thái (Bước 4 +
+// Bước 5) theo dữ liệu MỚI trả về -- nhóm nào hết lỗi sẽ tự biến mất.
+async function handleGroupApply(row) {
+  const isDuplicate = row.dataset.duplicateRow === "true";
+  if (row.querySelector(".handling-detail").hidden) openHandlingDetail(row);
 
-  document.querySelectorAll(".handling-row").forEach((row) => {
-    if (row.dataset.duplicateRow === "true") {
-      duplicateHandling = {
-        enabled: true,
-        keep: row.querySelector(".duplicate-keep").value,
-        subset_columns: state.lastDuplicateConfig ? state.lastDuplicateConfig.subset_columns : null,
-      };
-      return;
-    }
-    const action = row.querySelector(".handling-action").value;
-    const choice = { column: row.dataset.column, noise_type: row.dataset.noiseType, action };
-    if (action === "fixed_value") {
-      choice.fixed_value = row.querySelector(".handling-fixed-value").value;
-    }
-    handlingChoices.push(choice);
-  });
+  const detail = row.querySelector(".handling-detail");
+  const rowNumbers = Array.from(detail.querySelectorAll(".handling-row-check:checked")).map((cb) =>
+    parseInt(cb.dataset.rowNumber, 10)
+  );
+  if (rowNumbers.length === 0) {
+    alert("Hãy tick ít nhất 1 dòng để xử lý.");
+    return;
+  }
 
-  setButtonLoading(btn, true, "Đang xử lý...", "✅ Áp dụng xử lý & tải file CSV");
+  const applyBtn = row.querySelector(".handling-apply-btn");
+  const statusEl = row.querySelector(".handling-row-status");
+  const normalLabel = applyBtn.textContent;
+  setButtonLoading(applyBtn, true, "Đang xử lý...", normalLabel);
   statusEl.textContent = "";
+
+  const body = {
+    file_id: state.fileId,
+    column_configs: state.lastColumnConfigs,
+    cross_field_rules: [],
+    duplicate_row: state.lastDuplicateConfig,
+    column: isDuplicate ? null : row.dataset.column,
+    noise_type: isDuplicate ? "duplicate_row" : row.dataset.noiseType,
+    row_numbers: rowNumbers,
+  };
+  if (!isDuplicate) {
+    const action = row.querySelector(".handling-action").value;
+    body.action = action;
+    if (action === "fixed_value") body.fixed_value = row.querySelector(".handling-fixed-value").value;
+  }
 
   let response;
   try {
-    response = await fetch(`${API_BASE}/api/apply-handling`, {
+    response = await fetch(`${API_BASE}/api/apply-handling-partial`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        file_id: state.fileId,
-        column_configs: state.lastColumnConfigs,
-        handling_choices: handlingChoices,
-        duplicate_handling: duplicateHandling,
-      }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     alert("Không gọi được backend.");
-    setButtonLoading(btn, false, "Đang xử lý...", "✅ Áp dụng xử lý & tải file CSV");
+    setButtonLoading(applyBtn, false, "Đang xử lý...", normalLabel);
     return;
   }
-  setButtonLoading(btn, false, "Đang xử lý...", "✅ Áp dụng xử lý & tải file CSV");
+  setButtonLoading(applyBtn, false, "Đang xử lý...", normalLabel);
 
   if (!response.ok) {
     let message = "Xử lý thất bại, kiểm tra console/backend log.";
@@ -1007,9 +1102,132 @@ $("apply-handling-btn").addEventListener("click", async () => {
   }
 
   const data = await response.json();
-  statusEl.textContent =
-    `✅ Đã xử lý xong: ${data.original_row_count} dòng gốc -> ${data.final_row_count} dòng còn lại ` +
-    `(đã xoá ${data.removed_row_count} dòng). Đang tải file...`;
+  state.lastFindings = data.findings;
+  state.lastFlaggedRows = data.flagged_rows;
+  state.rowFindingsMap = buildRowFindingsMap(data.findings);
+  state.hasWorkingCopy = true;
+  // Nhớ lại nhóm này ĐÃ apply -- renderHandlingSection() sắp dựng lại TOÀN BỘ
+  // DOM nên không thể chỉ set thuộc tính "hidden" trên nút hiện tại (sẽ bị mất
+  // ngay khi rebuild), phải lưu vào state để nút mới dựng lại biết mà hiện sẵn.
+  state.appliedGroups.add(isDuplicate ? "duplicate_row" : `${row.dataset.column}|${row.dataset.noiseType}`);
+
+  statusEl.textContent = `✅ Đã xử lý ${rowNumbers.length} dòng.`;
+
+  // Cập nhật lại cả Bước 4 (để xem lại vẫn đúng số liệu mới nhất) và dựng
+  // lại toàn bộ Bước 5 -- nhóm vừa xử lý hết sẽ tự biến mất khỏi danh sách.
+  renderStep4({ total_rows: data.total_rows, total_flagged_rows: data.total_flagged_rows, findings: data.findings });
+  renderHandlingSection();
+}
+
+// ====== Xem dữ liệu sau xử lý (panel riêng, không nằm trong 5 bước) ======
+state.previewRows = [];
+state.previewPage = 1;
+state.previewPerPage = 30;
+
+async function openPreviewPanel() {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/working-data/${state.fileId}`);
+  } catch (err) {
+    alert("Không gọi được backend.");
+    return;
+  }
+  if (!response.ok) {
+    alert("Không lấy được dữ liệu xem trước.");
+    return;
+  }
+  const data = await response.json();
+  state.previewRows = data.rows;
+  state.previewPage = 1;
+  renderPreviewTable();
+
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
+  $("panel-preview").classList.add("is-active");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function closePreviewPanel() {
+  goStep(5);
+}
+function renderPreviewTable() {
+  const dataColumns = state.previewRows.length ? Object.keys(state.previewRows[0]) : [];
+  $("preview-table-head").innerHTML = "<tr>" + dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") + "</tr>";
+
+  const perPage = state.previewPerPage;
+  const totalPages = Math.max(1, Math.ceil(state.previewRows.length / perPage));
+  if (state.previewPage > totalPages) state.previewPage = totalPages;
+  const start = (state.previewPage - 1) * perPage;
+  const pageRows = state.previewRows.slice(start, start + perPage);
+
+  $("preview-table-body").innerHTML = pageRows
+    .map((row) => {
+      const rowFindings = state.rowFindingsMap.get(row.row_number) || [];
+      const flagByColumn = {};
+      rowFindings.forEach((f) => {
+        if (!flagByColumn[f.column]) flagByColumn[f.column] = f.noise_type;
+      });
+      const cells = dataColumns
+        .map((c) => {
+          const type = flagByColumn[c];
+          const cls = type ? ` class="cell-flag-${noiseMeta(type).family}"` : "";
+          const value = row[c] === undefined || row[c] === null ? "" : row[c];
+          return `<td${cls}>${escapeHtml(String(value))}</td>`;
+        })
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+
+  $("preview-page-indicator").textContent = `Trang ${state.previewPage}/${totalPages} · ${state.previewRows.length} dòng`;
+  $("preview-page-prev").disabled = state.previewPage <= 1;
+  $("preview-page-next").disabled = state.previewPage >= totalPages;
+}
+$("preview-page-prev").addEventListener("click", () => {
+  if (state.previewPage > 1) {
+    state.previewPage--;
+    renderPreviewTable();
+  }
+});
+$("preview-page-next").addEventListener("click", () => {
+  state.previewPage++;
+  renderPreviewTable();
+});
+$("preview-back-btn").addEventListener("click", closePreviewPanel);
+
+// ====== Xuất file CSV cuối cùng (dùng bản đang làm việc hiện tại) ======
+$("apply-handling-btn").addEventListener("click", async () => {
+  const btn = $("apply-handling-btn");
+  const statusEl = $("handling-status");
+  setButtonLoading(btn, true, "Đang xuất file...", "✅ Xuất file CSV");
+  statusEl.textContent = "";
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/export-working`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_id: state.fileId }),
+    });
+  } catch (err) {
+    alert("Không gọi được backend.");
+    setButtonLoading(btn, false, "Đang xuất file...", "✅ Xuất file CSV");
+    return;
+  }
+  setButtonLoading(btn, false, "Đang xuất file...", "✅ Xuất file CSV");
+
+  if (!response.ok) {
+    let message = "Xuất file thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      /* giữ message mặc định */
+    }
+    alert(message);
+    return;
+  }
+
+  const data = await response.json();
+  statusEl.textContent = `✅ File hiện có ${data.final_row_count} dòng. Đang tải...`;
 
   const downloadResponse = await fetch(`${API_BASE}/api/download/${data.download_id}`);
   const blob = await downloadResponse.blob();

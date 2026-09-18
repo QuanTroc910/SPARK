@@ -242,6 +242,15 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 .handling-toggle-icon { color: var(--ink-faint); font-size: 11px; transition: transform 0.15s ease; }
 .handling-row-summary[aria-expanded="true"] .handling-toggle-icon { color: var(--signal); }
 
+/* Nút "Áp dụng"/"Xem sau xử lý" riêng cho TỪNG NHÓM -- khác nút "Xuất file
+   CSV" chung ở cuối trang (chỉ đóng gói tải về, không tự xử lý gì thêm). */
+.handling-apply-btn, .handling-preview-btn { padding: 6px 12px; font-size: 12.5px; flex: 0 0 auto; }
+.handling-row-status { min-height: 1em; margin: 0; }
+
+/* Cột checkbox đầu tiên trong bảng chi tiết Bước 5 -- để hẹp, không chiếm
+   chỗ của các cột dữ liệu thật. */
+.handling-detail-table th:first-child, .handling-detail-table td:first-child { width: 1%; text-align: center; }
+
 .handling-detail { margin-top: 2px; }
 .handling-detail-table { max-height: 320px; }
 

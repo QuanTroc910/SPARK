@@ -188,16 +188,43 @@
     <section class="panel" id="panel-5">
       <h2 class="panel-title">Bước 5: Xử lý &amp; xuất file</h2>
       <p class="panel-desc">
-        Với MỖI cặp (cột, loại noise) THỰC SỰ có trong kết quả Bước 4, chọn 1 cách xử lý bên dưới —
-        hành động khả dụng được quyết định theo bảng (dtype, noise_type) trong
-        <code>attribute_noise/attribute_handling.py</code>. Rule liên cột hiện CHƯA hỗ trợ xử lý tự động
-        ở bước này, chỉ 7 loại attribute noise theo cột + duplicate_row.
+        Mỗi nhóm dưới đây ứng với 1 cặp (cột, loại noise) THỰC SỰ có trong kết quả Bước 4 — bấm vào tên
+        nhóm để xổ ra bảng chi tiết, TỰ TICK CHỌN đúng những dòng bạn muốn xử lý (mặc định tick sẵn hết),
+        chọn cách xử lý rồi bấm "Áp dụng" NGAY TRÊN NHÓM ĐÓ — không bắt buộc xử lý hết mọi nhóm cùng lúc.
+        Xử lý xong 1 phần, bấm "👁 Xem sau xử lý" để xem ngay dữ liệu hiện tại. Hành động khả dụng theo
+        bảng (dtype, noise_type) trong <code>attribute_noise/attribute_handling.py</code>. Rule liên cột
+        hiện CHƯA hỗ trợ xử lý tự động ở bước này, chỉ 7 loại attribute noise theo cột + duplicate_row.
+        Khi xong hết, bấm "Xuất file CSV" ở cuối trang để tải file đã xử lý về.
       </p>
 
       <div id="handling-list" class="handling-list"></div>
       <div class="panel-actions">
-        <button class="btn btn-primary" id="apply-handling-btn" type="button">✅ Áp dụng xử lý &amp; tải file CSV</button>
+        <button class="btn btn-primary" id="apply-handling-btn" type="button">✅ Xuất file CSV</button>
         <span class="status-text" id="handling-status"></span>
+      </div>
+    </section>
+
+    <!-- Panel "Xem sau xử lý" -- KHÔNG nằm trong 5 bước chính, chỉ là màn
+         hình phụ mở ra từ Bước 5 để xem nhanh dữ liệu hiện tại rồi quay lại. -->
+    <section class="panel" id="panel-preview">
+      <h2 class="panel-title">Xem dữ liệu sau xử lý</h2>
+      <p class="panel-desc">
+        Đây là TOÀN BỘ dữ liệu ở trạng thái HIỆN TẠI (đã áp dụng các lần xử lý bạn vừa bấm) — ô còn tô
+        màu là còn lỗi CHƯA xử lý.
+      </p>
+      <div class="table-wrap">
+        <table class="results-table" id="preview-table">
+          <thead id="preview-table-head"></thead>
+          <tbody id="preview-table-body"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <button class="btn btn-ghost" id="preview-page-prev" type="button">Trước</button>
+        <span id="preview-page-indicator" class="mono"></span>
+        <button class="btn btn-ghost" id="preview-page-next" type="button">Sau</button>
+      </div>
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="preview-back-btn" type="button">← Quay lại xử lý</button>
       </div>
     </section>
 

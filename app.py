@@ -33,7 +33,7 @@ from attribute_noise.config import (
     RuleValueType,
 )
 from attribute_noise.cross_field_rules import FormulaError
-from attribute_noise.pipeline import detect_noise, get_flagged_rows, load_data
+from attribute_noise.pipeline import NoiseFinding, detect_noise, get_flagged_rows, load_data
 
 app = Flask(__name__)
 
@@ -56,6 +56,22 @@ UPLOADED_FILES: dict[str, "pd.DataFrame"] = {}
 # (người dùng có thể muốn thử nhiều phương án xử lý khác nhau trên cùng 1 file
 # upload, không nên làm mất bản gốc).
 CLEANED_FILES: dict[str, "pd.DataFrame"] = {}
+
+# Bản "đang làm việc" của từng file -- khác UPLOADED_FILES (bản GỐC, không bao
+# giờ đổi) ở chỗ WORKING_FILES bị SỬA DẦN qua nhiều lần gọi
+# /api/apply-handling-partial (Bước 5 giờ xử lý TỪNG NHÓM lỗi một, không phải
+# 1 lần bấm áp dụng hết như trước). Chỉ tạo (copy từ UPLOADED_FILES) khi lần
+# đầu người dùng bấm "Áp dụng" cho 1 nhóm nào đó -- xem _get_working_df().
+WORKING_FILES: dict[str, "pd.DataFrame"] = {}
+
+
+def _get_working_df(file_id: str):
+    if file_id not in WORKING_FILES:
+        original = UPLOADED_FILES.get(file_id)
+        if original is None:
+            return None
+        WORKING_FILES[file_id] = original.copy()
+    return WORKING_FILES[file_id]
 
 
 @app.route("/api/upload", methods=["POST"])
@@ -282,6 +298,135 @@ def apply_handling_api():
     CLEANED_FILES[download_id] = cleaned_df
 
     return jsonify({**stats, "download_id": download_id})
+
+
+@app.route("/api/apply-handling-partial", methods=["POST"])
+def apply_handling_partial_api():
+    """Bước 5 (kiểu mới -- xử lý TỪNG NHÓM, TỪNG DÒNG được tick chọn, không
+    bắt buộc xử lý hết 1 lượt như /api/apply-handling cũ):
+
+    Payload:
+      - file_id, column_configs, cross_field_rules, duplicate_row (subset_columns) --
+        dùng để chạy lại detect_noise() SAU khi sửa, để FE biết còn lỗi gì.
+      - column: tên cột (None nếu noise_type = "duplicate_row").
+      - noise_type: 1 trong 7 loại, hoặc "duplicate_row".
+      - action: 1 HandlingAction (bỏ qua nếu noise_type = "duplicate_row",
+        vì trùng dòng chỉ có đúng 1 hành động hợp lý là xoá các dòng được tick).
+      - fixed_value: chỉ dùng khi action = "fixed_value".
+      - row_numbers: danh sách row_number (1-based) mà người dùng đã TICK CHỌN
+        trong bảng chi tiết trên FE -- CHỈ xử lý đúng các dòng này, không phải
+        toàn bộ dòng đang dính loại lỗi đó (khác hẳn /api/apply-handling cũ).
+
+    Sửa trực tiếp lên bản "đang làm việc" (WORKING_FILES[file_id]) rồi trả về
+    NGUYÊN VẸN response giống /api/detect-noise (để FE tái dùng renderStep4()
+    hiển thị luôn số lỗi CÒN LẠI sau khi xử lý xong nhóm này).
+    """
+    payload = request.get_json()
+    file_id = payload.get("file_id")
+    df = _get_working_df(file_id)
+    if df is None:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+
+    try:
+        column_configs = [_config_from_json(item) for item in payload.get("column_configs", [])]
+        cross_field_rules = [
+            _cross_field_rule_from_json(item) for item in payload.get("cross_field_rules", [])
+        ]
+        duplicate_payload = payload.get("duplicate_row")
+        duplicate_row_config = (
+            DuplicateRowConfig(subset_columns=duplicate_payload.get("subset_columns"))
+            if duplicate_payload
+            else None
+        )
+
+        noise_type = payload["noise_type"]
+        row_indices = [int(rn) - 1 for rn in payload.get("row_numbers", [])]
+
+        if noise_type == "duplicate_row":
+            # Trùng dòng: chỉ có 1 hành động hợp lý là XOÁ các dòng được tick
+            # -- không đi qua apply_handling() vì đó là hàm xử lý theo CỘT,
+            # còn đây là xoá thẳng theo row_index, không gắn với cột nào.
+            existing = [i for i in row_indices if i in df.index]
+            df = df.drop(index=existing)
+        else:
+            column = payload["column"]
+            action = HandlingAction(payload["action"])
+            # Tự dựng "findings" giả lập CHỈ gồm đúng các dòng người dùng đã
+            # tick -- KHÔNG detect lại từ đầu, để apply_handling() chỉ đụng
+            # tới đúng những ô này, không phải mọi ô đang dính loại lỗi đó.
+            fake_findings = [
+                NoiseFinding(row_index=i, column=column, noise_type=noise_type, value=None)
+                for i in row_indices
+                if i in df.index
+            ]
+            choice = HandlingChoice(
+                column=column,
+                noise_type=NoiseType(noise_type),
+                action=action,
+                fixed_value=payload.get("fixed_value"),
+            )
+            df, _stats = apply_handling(df, column_configs, fake_findings, [choice])
+
+        WORKING_FILES[file_id] = df
+
+        # Detect lại trên bản MỚI để FE biết chính xác còn lỗi gì -- phần vừa
+        # xử lý xong sẽ tự biến mất khỏi kết quả.
+        findings = detect_noise(
+            df, column_configs, duplicate_row_config=duplicate_row_config, cross_field_rules=cross_field_rules
+        )
+    except (FormulaError, ValueError, KeyError, TypeError) as exc:
+        return jsonify({"error": f"Cấu hình xử lý không hợp lệ: {exc}"}), 400
+
+    flagged_rows_df = get_flagged_rows(df, findings)
+    flagged_rows_out = flagged_rows_df.copy()
+    flagged_rows_out.insert(0, "row_number", flagged_rows_out.index + 1)
+
+    return jsonify(
+        {
+            "total_rows": len(df),
+            "total_flagged_rows": len(flagged_rows_df),
+            "findings": [
+                {
+                    "row_number": int(f.row_index) + 1,
+                    "column": f.column,
+                    "noise_type": f.noise_type,
+                    "value": f.value,
+                }
+                for f in findings
+            ],
+            "flagged_rows": flagged_rows_out.to_dict(orient="records"),
+        }
+    )
+
+
+@app.route("/api/working-data/<file_id>", methods=["GET"])
+def working_data_api(file_id: str):
+    """Bước 5 (nút "Xem dữ liệu sau xử lý"): trả về TOÀN BỘ dữ liệu ở trạng
+    thái hiện tại (đã áp dụng các lần xử lý từng phần trước đó, nếu có) --
+    không chỉ các dòng còn lỗi như /api/detect-noise, để người dùng xem lại
+    được cả các dòng đã sạch."""
+    df = WORKING_FILES.get(file_id, UPLOADED_FILES.get(file_id))
+    if df is None:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+    out = df.copy()
+    out.insert(0, "row_number", out.index + 1)
+    return jsonify({"rows": out.to_dict(orient="records"), "total_rows": len(df)})
+
+
+@app.route("/api/export-working", methods=["POST"])
+def export_working_api():
+    """Bước 5 (nút xuất file cuối cùng): đóng gói bản "đang làm việc" hiện tại
+    (hoặc bản gốc nếu người dùng chưa xử lý gì) thành 1 download_id, dùng
+    chung cơ chế tải file với /api/download/<id> đã có."""
+    payload = request.get_json()
+    file_id = payload.get("file_id")
+    df = WORKING_FILES.get(file_id, UPLOADED_FILES.get(file_id))
+    if df is None:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+
+    download_id = str(uuid.uuid4())
+    CLEANED_FILES[download_id] = df
+    return jsonify({"final_row_count": len(df), "download_id": download_id})
 
 
 @app.route("/api/download/<download_id>", methods=["GET"])

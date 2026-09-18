@@ -39,15 +39,24 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
   - `POST /api/detect-noise` (payload có thêm field `cross_field_rules`,
     `check_duplicate_row`, `duplicate_subset_columns`; xem mẫu JSON trong
     `_cross_field_rule_from_json()`).
-  - `POST /api/apply-handling` — **MỚI**: nhận `file_id` + LẠI đúng
-    `column_configs` đã dùng ở bước detect (để backend tự chạy lại
-    `detect_noise()`, không tin tưởng findings do FE tự gửi) + danh sách
-    `handling_choices` + `duplicate_handling` tuỳ chọn. Trả về stats
-    (`original_row_count`/`removed_row_count`/`final_row_count`) +
-    `download_id`.
-  - `GET /api/download/<download_id>` — **MỚI**: trả file CSV đã làm sạch
-    (lưu tạm trong `CLEANED_FILES`, tách riêng khỏi `UPLOADED_FILES` để không
-    ghi đè bản gốc).
+  - `POST /api/apply-handling-partial` — **MỚI, cách xử lý CHÍNH ở Bước 5**:
+    xử lý TỪNG PHẦN, chỉ đúng các dòng người dùng tick (`row_numbers`, 1-based)
+    cho ĐÚNG 1 cặp (`column`, `noise_type`) + 1 `action` mỗi lần gọi (xem mục
+    8 dưới đây). Sửa trực tiếp lên `WORKING_FILES[file_id]` (bản "đang làm
+    việc", tách khỏi `UPLOADED_FILES` gốc — tạo lười qua `_get_working_df()`),
+    rồi detect lại trên bản mới, trả về NGUYÊN DẠNG response giống
+    `/api/detect-noise` (FE tái dùng thẳng `renderStep4()`).
+  - `GET /api/working-data/<file_id>` — **MỚI**: trả TOÀN BỘ dữ liệu ở trạng
+    thái HIỆN TẠI (không chỉ các dòng còn lỗi) — dùng cho nút "Xem sau xử lý".
+  - `POST /api/export-working` — **MỚI**: đóng gói `WORKING_FILES[file_id]`
+    hiện tại (hoặc bản gốc nếu chưa xử lý gì) thành `download_id`, dùng chung
+    `/api/download/<id>` để tải — đây là nút "Xuất file CSV" cuối Bước 5.
+  - `POST /api/apply-handling` — bản CŨ (xử lý HẾT 1 lượt theo danh sách
+    `handling_choices`), KHÔNG còn được FE gọi nữa (đã thay bằng
+    `/api/apply-handling-partial` theo từng nhóm), nhưng vẫn giữ lại trong
+    code vì không sai gì, không có gì phải xoá.
+  - `GET /api/download/<download_id>` — trả file CSV (lưu tạm trong
+    `CLEANED_FILES`, tách riêng khỏi `UPLOADED_FILES`/`WORKING_FILES`).
   Rule/config sai (formula lỗi cú pháp, cột không tồn tại...) trả HTTP 400
   kèm message rõ ràng, không crash 500.
 - `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI dạng "panel theo
@@ -69,12 +78,23 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
      trang (20 dòng/trang) và TÔ MÀU TỪNG Ô theo đúng loại noise của ô đó
      (dựng trực tiếp từ `findings` qua `state.rowFindingsMap`, KHÔNG parse
      chuỗi `noise_reasons` bằng string-split nữa như bản cũ — mạnh hơn hẳn).
-  5. Xử lý & xuất file — y hệt logic `renderHandlingSection()`/
-     `apply-handling-btn` bản trước, chỉ đổi giao diện: chỉ hiện đúng cặp
-     (cột, loại noise) THỰC SỰ có trong kết quả, dropdown hành động dựng từ
-     `ACTION_TABLE` ở FE (PHẢI khớp `_ACTION_TABLE` trong
-     `attribute_handling.py`), bấm áp dụng gọi `/api/apply-handling` rồi tự
-     tải file CSV về qua `/api/download/<id>`.
+  5. Xử lý & xuất file — **XỬ LÝ TỪNG PHẦN** (xem mục 8 dưới), KHÔNG bắt buộc
+     xử lý hết mọi nhóm 1 lượt: mỗi nhóm (cột, loại noise) là 1 `.handling-row`
+     có nút "▸ tên cột" bấm để xổ bảng chi tiết + CHECKBOX riêng từng dòng
+     (`renderHandlingDetail()`), chọn hành động rồi bấm "Áp dụng" NGAY TRÊN
+     NHÓM ĐÓ (`handleGroupApply()`) — chỉ gửi đúng các dòng đang tick lên
+     `/api/apply-handling-partial`. Sau khi 1 nhóm được Apply lần đầu, nút
+     "👁 Xem sau xử lý" hiện ra cạnh nút Áp dụng (trạng thái nhớ qua
+     `state.appliedGroups`, vì `renderHandlingSection()` dựng lại TOÀN BỘ DOM
+     sau mỗi lần Apply nên không thể chỉ sửa `hidden` tại chỗ) — bấm vào mở
+     1 panel riêng (`#panel-preview`, không nằm trong 5 bước chính) xem lại
+     TOÀN BỘ dữ liệu hiện tại (`/api/working-data/<id>`, có phân trang), có
+     nút "← Quay lại xử lý". Nhóm `duplicate_row` dùng CHUNG cơ chế này nhưng
+     không có dropdown hành động (chỉ có đúng 1 việc hợp lý: xoá dòng được
+     tick) — mặc định TICK SẴN các bản trùng ĐẾN SAU trong mỗi nhóm trùng,
+     bỏ tick bản ĐẦU TIÊN (giữ lại), tính qua `computeDuplicateDefaultChecks()`.
+     Nút "✅ Xuất file CSV" ở cuối trang KHÔNG tự xử lý gì thêm — chỉ đóng gói
+     bản đang làm việc hiện tại qua `/api/export-working` rồi tải về.
 
   11 "family" màu (`NOISE_TYPE_META` trong `script.js`, khớp biến CSS
   `--<family>-text/soft/border` trong `style.css`) dùng chung cho chip/badge/
@@ -166,6 +186,36 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
    - Về mặt workflow: nên khuyến khích user xử lý (handle) xong lỗi cấp-cột
      của các cột liên quan TRƯỚC, rồi mới chạy rule liên cột — kết quả sẽ đáng
      tin hơn (ít N/A, ít nhiễu giả do dữ liệu bẩn).
+
+8. **Xử lý từng phần ở Bước 5 (đã đổi từ "1 lần bấm áp dụng hết" sang xử lý
+   theo TỪNG NHÓM, TỪNG DÒNG được tick) + quy tắc khi 1 dòng dính nhiều lỗi:**
+   - Lý do đổi: nếu bắt người dùng cấu hình xong HẾT mọi nhóm rồi mới bấm 1
+     nút áp dụng chung, họ không kiểm soát được xử lý dòng nào bằng cách nào
+     một cách linh hoạt (vd 2 dòng cùng thiếu `age` nhưng muốn xử lý khác
+     nhau: 1 dòng điền trung bình, 1 dòng điền tay). Giải pháp: mỗi nhóm
+     (cột, loại noise) tự có nút "Áp dụng" RIÊNG + bảng chi tiết có checkbox
+     từng dòng — người dùng tick 1 phần hoặc tick hết rồi Áp dụng, xong quay
+     lại tick phần còn lại với hành động khác, KHÔNG giới hạn số lần.
+   - Backend giữ 1 bản **"đang làm việc"** riêng cho mỗi `file_id`
+     (`WORKING_FILES`, tách khỏi `UPLOADED_FILES` gốc — không bao giờ đổi),
+     mỗi lần gọi `/api/apply-handling-partial` sửa TRỰC TIẾP lên bản này rồi
+     detect lại để biết còn lỗi gì. `row_number` (1-based, = `index + 1`)
+     ỔN ĐỊNH qua nhiều lần sửa vì `DataFrame.drop()` KHÔNG tự đánh số lại index
+     còn lại — đây là lý do cả hệ thống dựa vào `row_number` để tham chiếu
+     dòng xuyên suốt nhiều lần gọi API mà không bị lệch.
+   - **1 dòng dính lỗi ở ≥2 cột khác nhau, được xử lý bằng 2 lượt Apply khác
+     nhau (vd `join_date` chọn xoá dòng, `performance_score` chọn cap về biên)
+     thì dòng đó VẪN BỊ XOÁ** — nguyên tắc **HỢP NHẤT (UNION)**: hành động
+     `remove_row` luôn "thắng", vì ý nghĩa của việc chọn xoá dòng cho 1 loại
+     lỗi là "không tin bất kỳ dòng nào dính lỗi này", không phụ thuộc các cột
+     khác đã được sửa hay chưa. Đã giải thích rõ cho user, KHÔNG cần sửa gì
+     thêm cho case này (hành vi hiện tại đã đúng ý, chỉ cần biết để giải
+     thích trong khoá luận).
+   - Nút "👁 Xem dữ liệu sau xử lý" mở 1 panel riêng NGOÀI 5 bước chính
+     (`#panel-preview`) xem TOÀN BỘ dữ liệu hiện tại (không chỉ dòng còn lỗi)
+     qua `GET /api/working-data/<file_id>`, có nút quay lại Bước 5.
+   - Nút "Xuất file CSV" cuối Bước 5 CHỈ đóng gói bản đang làm việc hiện tại
+     (`POST /api/export-working`) để tải về — không tự chạy thêm xử lý nào.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
