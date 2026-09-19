@@ -40,12 +40,15 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
     `check_duplicate_row`, `duplicate_subset_columns`; xem mẫu JSON trong
     `_cross_field_rule_from_json()`).
   - `POST /api/apply-handling-partial` — **MỚI, cách xử lý CHÍNH ở Bước 5**:
-    xử lý TỪNG PHẦN, chỉ đúng các dòng người dùng tick (`row_numbers`, 1-based)
-    cho ĐÚNG 1 cặp (`column`, `noise_type`) + 1 `action` mỗi lần gọi (xem mục
-    8 dưới đây). Sửa trực tiếp lên `WORKING_FILES[file_id]` (bản "đang làm
-    việc", tách khỏi `UPLOADED_FILES` gốc — tạo lười qua `_get_working_df()`),
-    rồi detect lại trên bản mới, trả về NGUYÊN DẠNG response giống
-    `/api/detect-noise` (FE tái dùng thẳng `renderStep4()`).
+    xử lý TỪNG PHẦN cho ĐÚNG 1 cặp (`column`, `noise_type`) mỗi lần gọi (xem
+    mục 8 dưới đây). Payload có field `rows`: danh sách
+    `{row_number, action, fixed_value?}` (1-based) — MỖI DÒNG tự chọn 1
+    `action` RIÊNG (không dùng chung 1 action cho cả lượt gọi nữa), server
+    gom các dòng theo TỪNG action rồi chạy `apply_handling()` tuần tự từng
+    nhóm trên CÙNG 1 df. Sửa trực tiếp lên `WORKING_FILES[file_id]` (bản
+    "đang làm việc", tách khỏi `UPLOADED_FILES` gốc — tạo lười qua
+    `_get_working_df()`), rồi detect lại trên bản mới, trả về NGUYÊN DẠNG
+    response giống `/api/detect-noise` (FE tái dùng thẳng `renderStep4()`).
   - `GET /api/working-data/<file_id>` — **MỚI**: trả TOÀN BỘ dữ liệu ở trạng
     thái HIỆN TẠI (không chỉ các dòng còn lỗi) — dùng cho nút "Xem sau xử lý".
   - `POST /api/export-working` — **MỚI**: đóng gói `WORKING_FILES[file_id]`
@@ -78,21 +81,37 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
      trang (20 dòng/trang) và TÔ MÀU TỪNG Ô theo đúng loại noise của ô đó
      (dựng trực tiếp từ `findings` qua `state.rowFindingsMap`, KHÔNG parse
      chuỗi `noise_reasons` bằng string-split nữa như bản cũ — mạnh hơn hẳn).
-  5. Xử lý & xuất file — **XỬ LÝ TỪNG PHẦN** (xem mục 8 dưới), KHÔNG bắt buộc
-     xử lý hết mọi nhóm 1 lượt: mỗi nhóm (cột, loại noise) là 1 `.handling-row`
-     có nút "▸ tên cột" bấm để xổ bảng chi tiết + CHECKBOX riêng từng dòng
-     (`renderHandlingDetail()`), chọn hành động rồi bấm "Áp dụng" NGAY TRÊN
-     NHÓM ĐÓ (`handleGroupApply()`) — chỉ gửi đúng các dòng đang tick lên
-     `/api/apply-handling-partial`. Sau khi 1 nhóm được Apply lần đầu, nút
-     "👁 Xem sau xử lý" hiện ra cạnh nút Áp dụng (trạng thái nhớ qua
-     `state.appliedGroups`, vì `renderHandlingSection()` dựng lại TOÀN BỘ DOM
-     sau mỗi lần Apply nên không thể chỉ sửa `hidden` tại chỗ) — bấm vào mở
-     1 panel riêng (`#panel-preview`, không nằm trong 5 bước chính) xem lại
-     TOÀN BỘ dữ liệu hiện tại (`/api/working-data/<id>`, có phân trang), có
-     nút "← Quay lại xử lý". Nhóm `duplicate_row` dùng CHUNG cơ chế này nhưng
-     không có dropdown hành động (chỉ có đúng 1 việc hợp lý: xoá dòng được
-     tick) — mặc định TICK SẴN các bản trùng ĐẾN SAU trong mỗi nhóm trùng,
-     bỏ tick bản ĐẦU TIÊN (giữ lại), tính qua `computeDuplicateDefaultChecks()`.
+  5. Xử lý & xuất file — **XỬ LÝ TỪNG PHẦN, TỪNG DÒNG** (xem mục 8 dưới),
+     KHÔNG bắt buộc xử lý hết mọi nhóm 1 lượt: mỗi nhóm (cột, loại noise) là
+     1 `.handling-row` có nút "▸ tên cột" bấm để xổ bảng chi tiết
+     (`renderHandlingDetail()`). Bảng chi tiết có CHECKBOX riêng từng dòng +
+     1 CỘT "Xử lý" RIÊNG cho từng dòng (`pendingRowHTML()`, nằm ngay bên phải
+     `noise_reasons`) — MỖI DÒNG tự chọn 1 hành động khác nhau nếu muốn, dropdown
+     "Đặt hàng loạt" ở đầu nhóm chỉ để TIỆN gán nhanh cùng 1 hành động cho mọi
+     dòng đang hiển thị (không phải nơi lưu lựa chọn thật). Bấm "Áp dụng"
+     (`handleGroupApply()`) gửi ĐÚNG các dòng đang tick + hành động của riêng
+     từng dòng lên `/api/apply-handling-partial`.
+     **Sau khi Apply, bảng chi tiết KHÔNG bị đóng lại/rebuild** —
+     `refreshHandledRowsInPlace()` gọi `/api/working-data/<id>` lấy giá trị
+     MỚI của đúng các dòng vừa xử lý rồi thay `<tr>` tại chỗ: dòng bị XOÁ hẳn
+     (remove_row/duplicate) thì gỡ khỏi bảng, dòng chỉ sửa giá trị thì hiện
+     giá trị mới + nhãn "Đã xử lý" (`.handling-row-done`), dòng chưa tick vẫn
+     giữ nguyên checkbox + dropdown để xử lý tiếp — người dùng thấy kết quả
+     NGAY TRONG bảng đang mở, không có cảm giác "cả nhóm biến mất".
+     `updateGroupSummaryAfterApply()` cập nhật lại chữ đếm ở đầu nhóm dựa
+     trên số checkbox CÒN LẠI trong bảng (không cần hỏi lại server); hết
+     checkbox thì khoá nốt nút Áp dụng/dropdown hàng loạt, đổi chữ thành
+     "Đã xử lý xong toàn bộ ✓" (group KHÔNG bị xoá khỏi danh sách như trước).
+     Sau khi 1 nhóm được Apply lần đầu, nút "👁 Xem sau xử lý" hiện ra cạnh
+     nút Áp dụng (trạng thái nhớ qua `state.appliedGroups`, vì
+     `renderHandlingSection()` CHỈ chạy lại khi vào Bước 5 lần đầu/sau detect
+     mới, không chạy lại sau mỗi lần Apply nữa) — bấm vào mở 1 panel riêng
+     (`#panel-preview`, không nằm trong 5 bước chính) xem lại TOÀN BỘ dữ liệu
+     hiện tại (`/api/working-data/<id>`, có phân trang), có nút
+     "← Quay lại xử lý". Nhóm `duplicate_row` dùng CHUNG cơ chế này nhưng
+     KHÔNG có cột "Xử lý" (chỉ có đúng 1 việc hợp lý: xoá dòng được tick) —
+     mặc định TICK SẴN các bản trùng ĐẾN SAU trong mỗi nhóm trùng, bỏ tick
+     bản ĐẦU TIÊN (giữ lại), tính qua `computeDuplicateDefaultChecks()`.
      Nút "✅ Xuất file CSV" ở cuối trang KHÔNG tự xử lý gì thêm — chỉ đóng gói
      bản đang làm việc hiện tại qua `/api/export-working` rồi tải về.
 

@@ -310,12 +310,13 @@ def apply_handling_partial_api():
         dùng để chạy lại detect_noise() SAU khi sửa, để FE biết còn lỗi gì.
       - column: tên cột (None nếu noise_type = "duplicate_row").
       - noise_type: 1 trong 7 loại, hoặc "duplicate_row".
-      - action: 1 HandlingAction (bỏ qua nếu noise_type = "duplicate_row",
-        vì trùng dòng chỉ có đúng 1 hành động hợp lý là xoá các dòng được tick).
-      - fixed_value: chỉ dùng khi action = "fixed_value".
-      - row_numbers: danh sách row_number (1-based) mà người dùng đã TICK CHỌN
-        trong bảng chi tiết trên FE -- CHỈ xử lý đúng các dòng này, không phải
-        toàn bộ dòng đang dính loại lỗi đó (khác hẳn /api/apply-handling cũ).
+      - rows: danh sách [{"row_number": 101, "action": "impute_mean"},
+        {"row_number": 140, "action": "fixed_value", "fixed_value": "30"}, ...]
+        -- MỖI DÒNG có thể chọn 1 hành động RIÊNG (khác hẳn bản trước chỉ cho
+        1 action dùng chung cho cả lượt gọi), vì trên FE giờ mỗi dòng trong
+        bảng chi tiết có 1 dropdown xử lý của chính nó. Với noise_type =
+        "duplicate_row" thì field "action" của mỗi dòng bị bỏ qua (luôn hiểu
+        là xoá dòng đó, không có hành động nào khác hợp lý).
 
     Sửa trực tiếp lên bản "đang làm việc" (WORKING_FILES[file_id]) rồi trả về
     NGUYÊN VẸN response giống /api/detect-noise (để FE tái dùng renderStep4()
@@ -340,32 +341,42 @@ def apply_handling_partial_api():
         )
 
         noise_type = payload["noise_type"]
-        row_indices = [int(rn) - 1 for rn in payload.get("row_numbers", [])]
+        rows_payload = payload.get("rows", [])
 
         if noise_type == "duplicate_row":
             # Trùng dòng: chỉ có 1 hành động hợp lý là XOÁ các dòng được tick
             # -- không đi qua apply_handling() vì đó là hàm xử lý theo CỘT,
             # còn đây là xoá thẳng theo row_index, không gắn với cột nào.
+            row_indices = [int(item["row_number"]) - 1 for item in rows_payload]
             existing = [i for i in row_indices if i in df.index]
             df = df.drop(index=existing)
         else:
             column = payload["column"]
-            action = HandlingAction(payload["action"])
-            # Tự dựng "findings" giả lập CHỈ gồm đúng các dòng người dùng đã
-            # tick -- KHÔNG detect lại từ đầu, để apply_handling() chỉ đụng
-            # tới đúng những ô này, không phải mọi ô đang dính loại lỗi đó.
-            fake_findings = [
-                NoiseFinding(row_index=i, column=column, noise_type=noise_type, value=None)
-                for i in row_indices
-                if i in df.index
-            ]
-            choice = HandlingChoice(
-                column=column,
-                noise_type=NoiseType(noise_type),
-                action=action,
-                fixed_value=payload.get("fixed_value"),
-            )
-            df, _stats = apply_handling(df, column_configs, fake_findings, [choice])
+            # Gom các dòng theo TỪNG hành động khác nhau -- mỗi dòng có thể tự
+            # chọn cách xử lý riêng (vd dòng A điền trung bình, dòng B điền
+            # tay), nên không thể gộp chung 1 HandlingChoice cho cả lượt gọi
+            # như trước; xử lý tuần tự từng nhóm hành động trên CÙNG 1 df,
+            # kết quả của nhóm trước làm đầu vào cho nhóm sau.
+            rows_by_action: dict[tuple[str, str | None], list[int]] = {}
+            for item in rows_payload:
+                action_key = (item["action"], item.get("fixed_value"))
+                rows_by_action.setdefault(action_key, []).append(int(item["row_number"]) - 1)
+
+            for (action_value, fixed_value), row_indices in rows_by_action.items():
+                fake_findings = [
+                    NoiseFinding(row_index=i, column=column, noise_type=noise_type, value=None)
+                    for i in row_indices
+                    if i in df.index
+                ]
+                if not fake_findings:
+                    continue
+                choice = HandlingChoice(
+                    column=column,
+                    noise_type=NoiseType(noise_type),
+                    action=HandlingAction(action_value),
+                    fixed_value=fixed_value,
+                )
+                df, _stats = apply_handling(df, column_configs, fake_findings, [choice])
 
         WORKING_FILES[file_id] = df
 

@@ -866,23 +866,17 @@ function renderHandlingSection() {
           <span class="tag tag-${meta.family}">${meta.label}</span>
           <span class="status-text">(${count} ô — bấm để xem/tick từng dòng)</span>
         </button>
-        <select class="select handling-action">
-          ${availableActions.map((a) => `<option value="${a}">${ACTION_LABELS[a]}</option>`).join("")}
-        </select>
-        <input type="text" class="input handling-fixed-value" placeholder="giá trị cố định" hidden />
+        <label class="handling-bulk-label">Đặt hàng loạt:
+          <select class="select handling-action">
+            ${availableActions.map((a) => `<option value="${a}">${ACTION_LABELS[a]}</option>`).join("")}
+          </select>
+        </label>
         <button type="button" class="btn btn-ghost handling-apply-btn">Áp dụng</button>
         <button type="button" class="btn btn-ghost handling-preview-btn" ${alreadyApplied ? "" : "hidden"}>👁 Xem sau xử lý</button>
       </div>
       <p class="status-text handling-row-status"></p>
       <div class="handling-detail" hidden></div>
     `;
-    const actionSelect = row.querySelector(".handling-action");
-    const fixedValueInput = row.querySelector(".handling-fixed-value");
-    function toggleFixedValue() {
-      fixedValueInput.hidden = actionSelect.value !== "fixed_value";
-    }
-    actionSelect.addEventListener("change", toggleFixedValue);
-    toggleFixedValue();
     container.appendChild(row);
   });
 
@@ -959,22 +953,45 @@ function computeDuplicateDefaultChecks(rows) {
   return checkByRowNumber;
 }
 
-// Bảng chi tiết ở Bước 5 khác bảng Kết quả (Bước 4) ở chỗ có thêm 1 cột
-// CHECKBOX bên trái mỗi dòng, để người dùng tự chọn CHÍNH XÁC dòng nào muốn
-// áp dụng hành động đang chọn -- không bắt buộc xử lý cả nhóm 1 lượt.
-function handlingDetailTableHTML(rows, defaultChecks) {
+// Bảng chi tiết ở Bước 5 khác bảng Kết quả (Bước 4) ở 2 chỗ:
+//   1. Có thêm 1 cột CHECKBOX bên trái mỗi dòng -- chọn CHÍNH XÁC dòng nào
+//      muốn xử lý, không bắt buộc cả nhóm 1 lượt.
+//   2. Có thêm 1 cột "Xử lý" bên PHẢI noise_reasons -- mỗi dòng có 1 dropdown
+//      hành động RIÊNG (không dùng chung 1 hành động cho cả nhóm như trước),
+//      để 2 dòng cùng loại lỗi vẫn có thể xử lý khác nhau trong CÙNG 1 lần
+//      bấm Áp dụng. availableActions = null (dùng cho duplicate_row) thì bỏ
+//      hẳn cột này -- trùng dòng chỉ có đúng 1 việc hợp lý là xoá.
+function pendingRowHTML(r, dataColumns, availableActions, defaultChecked, defaultAction) {
+  const checkboxCell = `<td><input type="checkbox" class="handling-row-check" data-row-number="${r.row_number}" ${defaultChecked ? "checked" : ""} /></td>`;
+  let html = rowToTableRowHTML(r, dataColumns).replace(
+    "<tr>",
+    `<tr data-row-number="${r.row_number}">${checkboxCell}`
+  );
+  if (availableActions) {
+    const options = availableActions
+      .map((a) => `<option value="${a}" ${a === defaultAction ? "selected" : ""}>${ACTION_LABELS[a]}</option>`)
+      .join("");
+    const actionCell = `<td>
+      <select class="select handling-row-action">${options}</select>
+      <input type="text" class="input handling-row-fixed-value" placeholder="giá trị" ${defaultAction === "fixed_value" ? "" : "hidden"} />
+    </td>`;
+    html = html.replace("</tr>", `${actionCell}</tr>`);
+  }
+  return html;
+}
+function handlingDetailTableHTML(rows, availableActions, defaultChecks, defaultAction) {
   if (!rows.length) return '<p class="empty-state">Không có dòng nào.</p>';
   const dataColumns = getDataColumns();
   const head =
     '<tr><th><input type="checkbox" class="handling-check-all" checked /></th>' +
     dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") +
-    "<th>noise_reasons</th></tr>";
+    "<th>noise_reasons</th>" +
+    (availableActions ? "<th>Xử lý</th>" : "") +
+    "</tr>";
   const body = rows
-    .map((r) => {
-      const checked = defaultChecks ? defaultChecks.get(r.row_number) : true;
-      const checkboxCell = `<td><input type="checkbox" class="handling-row-check" data-row-number="${r.row_number}" ${checked ? "checked" : ""} /></td>`;
-      return rowToTableRowHTML(r, dataColumns).replace("<tr>", `<tr>${checkboxCell}`);
-    })
+    .map((r) =>
+      pendingRowHTML(r, dataColumns, availableActions, defaultChecks ? defaultChecks.get(r.row_number) : true, defaultAction)
+    )
     .join("");
   return `<div class="table-wrap handling-detail-table"><table class="results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
@@ -984,9 +1001,13 @@ function renderHandlingDetail(row) {
   const isDuplicate = row.dataset.duplicateRow === "true";
   if (isDuplicate) {
     const rows = rowsForDuplicateHandling();
-    detail.innerHTML = handlingDetailTableHTML(rows, computeDuplicateDefaultChecks(rows));
+    detail.innerHTML = handlingDetailTableHTML(rows, null, computeDuplicateDefaultChecks(rows));
   } else {
-    detail.innerHTML = handlingDetailTableHTML(rowsForHandlingKey(row.dataset.column, row.dataset.noiseType));
+    const column = row.dataset.column;
+    const noiseType = row.dataset.noiseType;
+    const availableActions = Array.from(row.querySelectorAll(".handling-action option")).map((o) => o.value);
+    const defaultAction = row.querySelector(".handling-action").value;
+    detail.innerHTML = handlingDetailTableHTML(rowsForHandlingKey(column, noiseType), availableActions, null, defaultAction);
   }
   detail.dataset.rendered = "true";
 }
@@ -1034,25 +1055,116 @@ $("handling-list").addEventListener("change", (e) => {
   if (e.target.classList.contains("handling-check-all")) {
     const table = e.target.closest("table");
     table.querySelectorAll(".handling-row-check").forEach((cb) => (cb.checked = e.target.checked));
+    return;
+  }
+
+  if (e.target.classList.contains("handling-action")) {
+    // Dropdown "Đặt hàng loạt" ở đầu nhóm đổi -- áp hành động này cho MỌI
+    // dòng đang có trong bảng chi tiết (tiện cho case "xử lý cả đống giống
+    // nhau"), từng dòng sau đó vẫn tự đổi lại dropdown RIÊNG của nó được.
+    const groupRow = e.target.closest(".handling-row");
+    const detail = groupRow.querySelector(".handling-detail");
+    detail.querySelectorAll(".handling-row-action").forEach((sel) => {
+      sel.value = e.target.value;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    return;
+  }
+
+  if (e.target.classList.contains("handling-row-action")) {
+    // Dropdown RIÊNG của 1 dòng trong bảng chi tiết -- chỉ hiện ô "giá trị"
+    // khi chính dòng đó chọn hành động "Điền giá trị cố định".
+    const tr = e.target.closest("tr");
+    tr.querySelector(".handling-row-fixed-value").hidden = e.target.value !== "fixed_value";
   }
 });
 
-// Bấm "Áp dụng" trên 1 nhóm cụ thể -- CHỈ xử lý các dòng đang được tick
-// trong bảng chi tiết của CHÍNH nhóm đó (mở ra hộ nếu đang đóng), gọi
-// /api/apply-handling-partial rồi cập nhật lại toàn bộ trạng thái (Bước 4 +
-// Bước 5) theo dữ liệu MỚI trả về -- nhóm nào hết lỗi sẽ tự biến mất.
+// Sau khi Apply thành công, lấy lại dữ liệu MỚI của đúng các dòng vừa xử lý
+// (qua /api/working-data, đã có sẵn) rồi cập nhật NGAY TẠI CHỖ trong bảng chi
+// tiết đang mở -- dòng nào bị XOÁ (remove_row/duplicate) thì gỡ khỏi bảng,
+// dòng nào chỉ sửa GIÁ TRỊ thì hiện giá trị mới + đánh dấu "Đã xử lý", thay vì
+// rebuild lại cả nhóm khiến người dùng có cảm giác "cả nhóm biến mất".
+async function refreshHandledRowsInPlace(row, rowNumbers) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/working-data/${state.fileId}`);
+  } catch (err) {
+    return;
+  }
+  if (!response.ok) return;
+  const data = await response.json();
+  const byRowNumber = new Map(data.rows.map((r) => [r.row_number, r]));
+  const detail = row.querySelector(".handling-detail");
+  const dataColumns = getDataColumns();
+  const isDuplicate = row.dataset.duplicateRow === "true";
+
+  rowNumbers.forEach((rn) => {
+    const tr = detail.querySelector(`tr[data-row-number="${rn}"]`);
+    if (!tr) return;
+    const freshRow = byRowNumber.get(rn);
+    if (!freshRow) {
+      tr.remove(); // dòng đã bị XOÁ hẳn (remove_row hoặc duplicate) -- gỡ khỏi bảng
+      return;
+    }
+    const stillFlagged =
+      !isDuplicate &&
+      (state.rowFindingsMap.get(rn) || []).some(
+        (f) => f.column === row.dataset.column && f.noise_type === row.dataset.noiseType
+      );
+    if (stillFlagged) return; // hiếm khi xảy ra -- giữ nguyên dòng để user thử xử lý lại
+    const cells = dataColumns
+      .map((c) => `<td>${escapeHtml(String(freshRow[c] === undefined || freshRow[c] === null ? "" : freshRow[c]))}</td>`)
+      .join("");
+    const trailingCell = isDuplicate ? "" : "<td></td>"; // giữ đúng số cột với cột "Xử lý" (nếu có)
+    tr.className = "handling-row-done";
+    tr.innerHTML = `<td>✓</td>${cells}<td class="reasons-cell"><span class="tag tag-teal">Đã xử lý</span></td>${trailingCell}`;
+  });
+}
+
+// Sau khi Apply, cập nhật lại chữ đếm ở đầu nhóm dựa trên SỐ CHECKBOX CÒN LẠI
+// trong bảng chi tiết (không cần hỏi lại server) -- hết checkbox nghĩa là
+// nhóm đã xử lý xong toàn bộ, khoá nốt nút Áp dụng/dropdown hàng loạt lại.
+function updateGroupSummaryAfterApply(row) {
+  const detail = row.querySelector(".handling-detail");
+  const remaining = detail.querySelectorAll(".handling-row-check").length;
+  const summaryText = row.querySelector(".handling-row-summary .status-text");
+  const isDuplicate = row.dataset.duplicateRow === "true";
+  if (remaining === 0) {
+    summaryText.textContent = "(Đã xử lý xong toàn bộ ✓)";
+    row.querySelector(".handling-apply-btn").disabled = true;
+    const bulkSelect = row.querySelector(".handling-action");
+    if (bulkSelect) bulkSelect.disabled = true;
+  } else {
+    summaryText.textContent = isDuplicate
+      ? `(còn ${remaining} dòng — mặc định tick sẵn các bản TRÙNG SAU, bỏ tick bản bạn muốn giữ)`
+      : `(còn ${remaining} ô — bấm để xem/tick từng dòng)`;
+  }
+}
+
+// Bấm "Áp dụng" trên 1 nhóm cụ thể -- CHỈ xử lý các dòng đang được tick trong
+// bảng chi tiết của CHÍNH nhóm đó (mở ra hộ nếu đang đóng), MỖI DÒNG dùng
+// đúng hành động dropdown RIÊNG của chính nó (không còn dùng chung 1 hành
+// động cho cả nhóm). Sau khi xong, cập nhật NGAY TẠI CHỖ (không rebuild lại
+// toàn bộ Bước 5) để người dùng thấy kết quả ngay trong bảng đang mở.
 async function handleGroupApply(row) {
   const isDuplicate = row.dataset.duplicateRow === "true";
   if (row.querySelector(".handling-detail").hidden) openHandlingDetail(row);
 
   const detail = row.querySelector(".handling-detail");
-  const rowNumbers = Array.from(detail.querySelectorAll(".handling-row-check:checked")).map((cb) =>
-    parseInt(cb.dataset.rowNumber, 10)
-  );
-  if (rowNumbers.length === 0) {
+  const checkedTrs = Array.from(detail.querySelectorAll(".handling-row-check:checked")).map((cb) => cb.closest("tr"));
+  if (checkedTrs.length === 0) {
     alert("Hãy tick ít nhất 1 dòng để xử lý.");
     return;
   }
+
+  const rowsPayload = checkedTrs.map((tr) => {
+    const rowNumber = parseInt(tr.dataset.rowNumber, 10);
+    if (isDuplicate) return { row_number: rowNumber, action: "remove_row" };
+    const action = tr.querySelector(".handling-row-action").value;
+    const item = { row_number: rowNumber, action };
+    if (action === "fixed_value") item.fixed_value = tr.querySelector(".handling-row-fixed-value").value;
+    return item;
+  });
 
   const applyBtn = row.querySelector(".handling-apply-btn");
   const statusEl = row.querySelector(".handling-row-status");
@@ -1060,27 +1172,20 @@ async function handleGroupApply(row) {
   setButtonLoading(applyBtn, true, "Đang xử lý...", normalLabel);
   statusEl.textContent = "";
 
-  const body = {
-    file_id: state.fileId,
-    column_configs: state.lastColumnConfigs,
-    cross_field_rules: [],
-    duplicate_row: state.lastDuplicateConfig,
-    column: isDuplicate ? null : row.dataset.column,
-    noise_type: isDuplicate ? "duplicate_row" : row.dataset.noiseType,
-    row_numbers: rowNumbers,
-  };
-  if (!isDuplicate) {
-    const action = row.querySelector(".handling-action").value;
-    body.action = action;
-    if (action === "fixed_value") body.fixed_value = row.querySelector(".handling-fixed-value").value;
-  }
-
   let response;
   try {
     response = await fetch(`${API_BASE}/api/apply-handling-partial`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        file_id: state.fileId,
+        column_configs: state.lastColumnConfigs,
+        cross_field_rules: [],
+        duplicate_row: state.lastDuplicateConfig,
+        column: isDuplicate ? null : row.dataset.column,
+        noise_type: isDuplicate ? "duplicate_row" : row.dataset.noiseType,
+        rows: rowsPayload,
+      }),
     });
   } catch (err) {
     alert("Không gọi được backend.");
@@ -1106,17 +1211,17 @@ async function handleGroupApply(row) {
   state.lastFlaggedRows = data.flagged_rows;
   state.rowFindingsMap = buildRowFindingsMap(data.findings);
   state.hasWorkingCopy = true;
-  // Nhớ lại nhóm này ĐÃ apply -- renderHandlingSection() sắp dựng lại TOÀN BỘ
-  // DOM nên không thể chỉ set thuộc tính "hidden" trên nút hiện tại (sẽ bị mất
-  // ngay khi rebuild), phải lưu vào state để nút mới dựng lại biết mà hiện sẵn.
   state.appliedGroups.add(isDuplicate ? "duplicate_row" : `${row.dataset.column}|${row.dataset.noiseType}`);
 
-  statusEl.textContent = `✅ Đã xử lý ${rowNumbers.length} dòng.`;
+  await refreshHandledRowsInPlace(row, rowsPayload.map((r) => r.row_number));
+  updateGroupSummaryAfterApply(row);
 
-  // Cập nhật lại cả Bước 4 (để xem lại vẫn đúng số liệu mới nhất) và dựng
-  // lại toàn bộ Bước 5 -- nhóm vừa xử lý hết sẽ tự biến mất khỏi danh sách.
+  statusEl.textContent = `✅ Đã xử lý ${rowsPayload.length} dòng.`;
+  row.querySelector(".handling-preview-btn").hidden = false;
+
+  // Chỉ cập nhật số liệu Bước 4 (để xem lại vẫn đúng), KHÔNG rebuild lại
+  // Bước 5 -- bảng chi tiết vừa cập nhật ở trên vẫn giữ nguyên, không "biến mất".
   renderStep4({ total_rows: data.total_rows, total_flagged_rows: data.total_flagged_rows, findings: data.findings });
-  renderHandlingSection();
 }
 
 // ====== Xem dữ liệu sau xử lý (panel riêng, không nằm trong 5 bước) ======
