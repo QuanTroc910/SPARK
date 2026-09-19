@@ -820,7 +820,7 @@ const ACTION_LABELS = {
   impute_median: "Điền = trung vị (median)",
   impute_knn: "Điền = KNN (dựa vào dòng gần giống nhất)",
   impute_mode: "Điền = giá trị phổ biến nhất (mode)",
-  fixed_value: "Điền giá trị cố định",
+  fixed_value: "✏️ Tự nhập tay (giá trị cố định)",
   cap_to_range: "Cắt về biên hợp lệ (cap)",
   auto_normalize_category: "Tự động chuẩn hoá về giá trị chuẩn",
   auto_clean_whitespace: "Tự động dọn khoảng trắng/ký tự lạ",
@@ -956,11 +956,16 @@ function computeDuplicateDefaultChecks(rows) {
 // Bảng chi tiết ở Bước 5 khác bảng Kết quả (Bước 4) ở 2 chỗ:
 //   1. Có thêm 1 cột CHECKBOX bên trái mỗi dòng -- chọn CHÍNH XÁC dòng nào
 //      muốn xử lý, không bắt buộc cả nhóm 1 lượt.
-//   2. Có thêm 1 cột "Xử lý" bên PHẢI noise_reasons -- mỗi dòng có 1 dropdown
-//      hành động RIÊNG (không dùng chung 1 hành động cho cả nhóm như trước),
-//      để 2 dòng cùng loại lỗi vẫn có thể xử lý khác nhau trong CÙNG 1 lần
-//      bấm Áp dụng. availableActions = null (dùng cho duplicate_row) thì bỏ
-//      hẳn cột này -- trùng dòng chỉ có đúng 1 việc hợp lý là xoá.
+//   2. Có thêm 1 cột "Tự điều chỉnh" bên PHẢI noise_reasons -- mỗi dòng có 1
+//      dropdown hành động RIÊNG (không dùng chung 1 hành động cho cả nhóm
+//      như trước), để 2 dòng cùng loại lỗi vẫn có thể xử lý khác nhau trong
+//      CÙNG 1 lần bấm Áp dụng -- kể cả sửa TAY (chọn "Tự nhập tay" rồi gõ
+//      thẳng giá trị cho riêng dòng đó). Cột này CỐ ĐỊNH bên phải
+//      (position: sticky, xem .handling-action-col trong style.css) để luôn
+//      nhìn thấy được mà không cần cuộn ngang qua hết chục cột dữ liệu --
+//      trước đó bị khuất bên phải khiến người dùng tưởng chưa có tính năng
+//      này. availableActions = null (dùng cho duplicate_row) thì bỏ hẳn cột
+//      này -- trùng dòng chỉ có đúng 1 việc hợp lý là xoá.
 function pendingRowHTML(r, dataColumns, availableActions, defaultChecked, defaultAction) {
   const checkboxCell = `<td><input type="checkbox" class="handling-row-check" data-row-number="${r.row_number}" ${defaultChecked ? "checked" : ""} /></td>`;
   let html = rowToTableRowHTML(r, dataColumns).replace(
@@ -971,7 +976,7 @@ function pendingRowHTML(r, dataColumns, availableActions, defaultChecked, defaul
     const options = availableActions
       .map((a) => `<option value="${a}" ${a === defaultAction ? "selected" : ""}>${ACTION_LABELS[a]}</option>`)
       .join("");
-    const actionCell = `<td>
+    const actionCell = `<td class="handling-action-col">
       <select class="select handling-row-action">${options}</select>
       <input type="text" class="input handling-row-fixed-value" placeholder="giá trị" ${defaultAction === "fixed_value" ? "" : "hidden"} />
     </td>`;
@@ -986,7 +991,7 @@ function handlingDetailTableHTML(rows, availableActions, defaultChecks, defaultA
     '<tr><th><input type="checkbox" class="handling-check-all" checked /></th>' +
     dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") +
     "<th>noise_reasons</th>" +
-    (availableActions ? "<th>Xử lý</th>" : "") +
+    (availableActions ? '<th class="handling-action-col">Tự điều chỉnh</th>' : "") +
     "</tr>";
   const body = rows
     .map((r) =>
@@ -1115,7 +1120,7 @@ async function refreshHandledRowsInPlace(row, rowNumbers) {
     const cells = dataColumns
       .map((c) => `<td>${escapeHtml(String(freshRow[c] === undefined || freshRow[c] === null ? "" : freshRow[c]))}</td>`)
       .join("");
-    const trailingCell = isDuplicate ? "" : "<td></td>"; // giữ đúng số cột với cột "Xử lý" (nếu có)
+    const trailingCell = isDuplicate ? "" : '<td class="handling-action-col"></td>'; // giữ đúng số cột + đúng vị trí dính bên phải với cột "Tự điều chỉnh" (nếu có)
     tr.className = "handling-row-done";
     tr.innerHTML = `<td>✓</td>${cells}<td class="reasons-cell"><span class="tag tag-teal">Đã xử lý</span></td>${trailingCell}`;
   });

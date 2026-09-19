@@ -252,12 +252,28 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
    (mỗi dòng mới là nơi lưu thật, xem .handling-row-action). */
 .handling-bulk-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-dim); }
 
-/* Cột checkbox đầu tiên + cột "Xử lý" cuối cùng trong bảng chi tiết Bước 5 --
-   cột checkbox để hẹp (không chiếm chỗ cột dữ liệu thật), cột "Xử lý" đủ
-   rộng cho 1 dropdown + 1 ô nhập giá trị cố định của riêng từng dòng. */
+/* Cột checkbox đầu tiên trong bảng chi tiết Bước 5 -- để hẹp, không chiếm
+   chỗ của các cột dữ liệu thật. */
 .handling-detail-table th:first-child, .handling-detail-table td:first-child { width: 1%; text-align: center; }
-.handling-detail-table td:last-child { white-space: normal; min-width: 160px; }
 .handling-row-fixed-value { margin-top: 4px; width: 100%; }
+
+/* Cột "Tự điều chỉnh" -- CỐ ĐỊNH luôn dính bên phải khi cuộn ngang bảng
+   (position: sticky), vì bảng có tới chục cột dữ liệu, nếu không "dính" thì
+   cột này bị khuất mất bên phải, người dùng cuộn ngang mới thấy -- đã có
+   người dùng phản hồi thực tế là tưởng tính năng này chưa tồn tại chỉ vì bị
+   khuất tầm nhìn. Cần khai riêng `background` (không kế thừa) vì phần nội
+   dung các cột khác sẽ "chạy xuyên qua" bên dưới cột dính nếu để trong suốt. */
+.handling-action-col {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  white-space: normal;
+  min-width: 180px;
+  background: var(--surface-2);
+  box-shadow: -6px 0 6px -6px rgba(0, 0, 0, 0.18);
+}
+.handling-detail-table thead .handling-action-col { z-index: 3; }
+.handling-row-done .handling-action-col { background: var(--teal-soft); }
 
 /* Dòng đã xử lý xong trong bảng chi tiết -- tô nhẹ màu teal để phân biệt với
    các dòng còn đang chờ xử lý (vẫn còn checkbox + dropdown). */

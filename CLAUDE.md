@@ -85,12 +85,20 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
      KHÔNG bắt buộc xử lý hết mọi nhóm 1 lượt: mỗi nhóm (cột, loại noise) là
      1 `.handling-row` có nút "▸ tên cột" bấm để xổ bảng chi tiết
      (`renderHandlingDetail()`). Bảng chi tiết có CHECKBOX riêng từng dòng +
-     1 CỘT "Xử lý" RIÊNG cho từng dòng (`pendingRowHTML()`, nằm ngay bên phải
-     `noise_reasons`) — MỖI DÒNG tự chọn 1 hành động khác nhau nếu muốn, dropdown
-     "Đặt hàng loạt" ở đầu nhóm chỉ để TIỆN gán nhanh cùng 1 hành động cho mọi
-     dòng đang hiển thị (không phải nơi lưu lựa chọn thật). Bấm "Áp dụng"
-     (`handleGroupApply()`) gửi ĐÚNG các dòng đang tick + hành động của riêng
-     từng dòng lên `/api/apply-handling-partial`.
+     1 CỘT **"Tự điều chỉnh"** RIÊNG cho từng dòng (`pendingRowHTML()`, nằm
+     ngay bên phải `noise_reasons`, gồm cả lựa chọn "✏️ Tự nhập tay" =
+     `fixed_value` để gõ tay giá trị áp dụng cho ĐÚNG dòng đó) — MỖI DÒNG tự
+     chọn 1 hành động khác nhau nếu muốn, dropdown "Đặt hàng loạt" ở đầu nhóm
+     chỉ để TIỆN gán nhanh cùng 1 hành động cho mọi dòng đang hiển thị (không
+     phải nơi lưu lựa chọn thật). Cột "Tự điều chỉnh" dùng
+     `position: sticky; right: 0` (class `.handling-action-col`) để LUÔN hiện
+     trong tầm nhìn, không cần cuộn ngang qua chục cột dữ liệu mới thấy —
+     user đã phản hồi thực tế là tưởng chưa có tính năng này chỉ vì nó bị
+     khuất bên phải trước khi thêm sticky (đánh đổi: ở vị trí cuộn mặc định,
+     cột này có thể đè lên phần cuối `salary`/`noise_reasons`, cuộn ngang là
+     thấy lại đủ — không mất dữ liệu, chỉ là trade-off hiển thị). Bấm
+     "Áp dụng" (`handleGroupApply()`) gửi ĐÚNG các dòng đang tick + hành động
+     của riêng từng dòng lên `/api/apply-handling-partial`.
      **Sau khi Apply, bảng chi tiết KHÔNG bị đóng lại/rebuild** —
      `refreshHandledRowsInPlace()` gọi `/api/working-data/<id>` lấy giá trị
      MỚI của đúng các dòng vừa xử lý rồi thay `<tr>` tại chỗ: dòng bị XOÁ hẳn
@@ -109,7 +117,7 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
      (`#panel-preview`, không nằm trong 5 bước chính) xem lại TOÀN BỘ dữ liệu
      hiện tại (`/api/working-data/<id>`, có phân trang), có nút
      "← Quay lại xử lý". Nhóm `duplicate_row` dùng CHUNG cơ chế này nhưng
-     KHÔNG có cột "Xử lý" (chỉ có đúng 1 việc hợp lý: xoá dòng được tick) —
+     KHÔNG có cột "Tự điều chỉnh" (chỉ có đúng 1 việc hợp lý: xoá dòng được tick) —
      mặc định TICK SẴN các bản trùng ĐẾN SAU trong mỗi nhóm trùng, bỏ tick
      bản ĐẦU TIÊN (giữ lại), tính qua `computeDuplicateDefaultChecks()`.
      Nút "✅ Xuất file CSV" ở cuối trang KHÔNG tự xử lý gì thêm — chỉ đóng gói
