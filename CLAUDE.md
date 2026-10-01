@@ -1,9 +1,15 @@
-# SPARK — Noise Detection & Handling Tool
+# Web app Dò & Xử Lý Nhiễu Dữ Liệu
 
 Web app phát hiện và xử lý noise trong dataset do người dùng upload (CSV/Excel).
-Luồng: upload file → chọn "Attribute noise" hoặc "Class noise" (đang làm Attribute
-trước, Class làm sau) → chọn từng cột + loại noise áp dụng cho cột đó → hệ thống
-detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi → xuất file CSV mới.
+Luồng: upload file → chọn "Attribute noise" hoặc "Class noise" → (Attribute) chọn
+từng cột + loại noise áp dụng cho cột đó / (Class) chọn cột nhãn + đặc trưng →
+hệ thống detect → người dùng xem kết quả (Attribute: xử lý replace/remove từng
+ô/dòng lỗi rồi xuất file; Class: xem danh sách dòng nghi ngờ sai nhãn — phần xử
+lý/handling cho Class noise CHƯA làm, xem roadmap cuối file).
+
+Tên hiển thị trên UI đã đổi từ "SPARK" (tên đặt tạm lúc đầu, không có ý nghĩa gì)
+thành "Dò & Xử Lý Nhiễu Dữ Liệu" — code/thư mục vẫn giữ nguyên tên `SPARK` cho
+tới khi có nhu cầu đổi tên repo thật sự.
 
 ## Kiến trúc hiện tại
 
@@ -31,6 +37,46 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
     scikit-learn) -- KNN thủ công dựa trên khoảng cách Euclid trên các cột số
     khác đã chuẩn hoá z-score. Mọi giá trị số tính ra đều được ép về CHUỖI
     trước khi gán lại (DataFrame gốc đọc bằng `dtype=str`, xem
+    `_format_numeric_for_column()`).
+- `class_noise/` — core logic phát hiện CLASS NOISE, cũng thuần Python,
+  không phụ thuộc Flask (giống triết lý `attribute_noise/`). Dùng thuật
+  toán **Confident Learning** (Northcutt et al., JAIR 2021) với **Random
+  Forest** (scikit-learn) làm model nền:
+  - `config.py` — `ClassNoiseConfig` (dataclass: `label_column`,
+    `feature_columns`, `n_estimators=300`, `cv_folds=5`, `random_state=42`).
+    Khác attribute noise, class noise là bài toán supervised học CÓ GIÁM
+    SÁT — người dùng PHẢI tự khai cột nào là nhãn, cột nào là đặc trưng
+    (hệ thống không tự suy ra được, giống tinh thần rule liên cột ở mục 7).
+  - `confident_learning.py` — 4 bước: (1) `get_out_of_fold_probs()` train
+    Random Forest (`class_weight="balanced"`) qua `StratifiedKFold` +
+    `cross_val_predict` lấy xác suất "trung thực" (out-of-fold) cho MỌI
+    dòng; (2) `_compute_class_thresholds()` tính ngưỡng tự tin riêng từng
+    lớp = trung bình `P(lớp đó)` trên các dòng THẬT thuộc lớp đó; (3)
+    `_find_confident_classes()` với mỗi dòng, lọc lớp vượt ngưỡng riêng
+    của chính nó, chọn lớp xác suất cao nhất; (4) trong
+    `detect_class_noise()` so với nhãn ghi — lệch thì gắn cờ
+    (`ClassNoiseFinding`: `row_number` 1-based, `recorded_label`,
+    `confident_label`, `margin`). Trả về `ClassNoiseResult` gồm `findings`
+    (đã sắp theo `margin` giảm dần) + `diagnostics`
+    (`ClassNoiseDiagnostics`: `cv_accuracy`, `majority_baseline_accuracy`,
+    `class_thresholds`, `per_class_report` từ
+    `sklearn.metrics.classification_report`, `confusion_count_matrix`) —
+    **PHẢI xem diagnostics trước khi tin findings**: nếu `cv_accuracy` chỉ
+    nhỉnh hơn/thấp hơn `majority_baseline_accuracy` thì model gần như
+    không học được gì từ `feature_columns`, findings không đáng tin (bài
+    học rút ra từ thử nghiệm thật trên dữ liệu thầy cung cấp — xem lịch sử
+    chat, dữ liệu đó chỉ có 3 đặc trưng, recall lớp hiếm ~30%, thấp hơn hẳn
+    khi thử trên 2 bộ Kaggle khác có nhiều đặc trưng hơn — KHÔNG phải lỗi
+    thuật toán, đã kiểm chứng bằng thí nghiệm có đối chứng).
+  Dùng lại `attribute_noise/pipeline.py::load_data()` để đọc file (không
+  viết lại hàm đọc CSV/Excel riêng). Có `demo_class_noise.py` ở gốc repo để
+  chạy thử CLI, và 1 loạt file `demo_*.py` KHÁC (`demo_model_don_gian.py`,
+  `demo_decision_tree_tu_viet.py`, `demo_random_forest_tu_viet.py`,
+  `demo_random_forest_ra_gi.py`, `demo_test_accuracy.py`,
+  `demo_ablation_3features.py`, `demo_kaggle_comparison.py`) — các file này
+  THUẦN PHỤC VỤ GIẢI THÍCH/HỌC (viết tay lại Decision Tree/Random Forest
+  không dùng sklearn, so sánh với dữ liệu Kaggle...), KHÔNG phải code sản
+  phẩm, không bị import bởi `app.py`/`class_noise/`.
     `_format_numeric_for_column()`).
 - `app.py` — Flask backend, CHỈ đóng vai trò "phiên dịch" JSON ⟷ Python object,
   KHÔNG chứa logic detect/handle (logic nằm hết ở `attribute_noise/`).
@@ -60,13 +106,24 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
     code vì không sai gì, không có gì phải xoá.
   - `GET /api/download/<download_id>` — trả file CSV (lưu tạm trong
     `CLEANED_FILES`, tách riêng khỏi `UPLOADED_FILES`/`WORKING_FILES`).
+  - `POST /api/class-noise/detect` — **MỚI, hướng Class noise**: nhận
+    `file_id` (DÙNG CHUNG `/api/upload` với hướng attribute, không có upload
+    riêng) + `label_column` + `feature_columns` (+ tuỳ chọn `n_estimators`,
+    `cv_folds`), gọi thẳng `class_noise/confident_learning.py::detect_class_noise()`,
+    trả về `diagnostics` (cv_accuracy, baseline, ngưỡng từng lớp, precision/
+    recall/F1, ma trận đếm — JSON-hoá bằng `.values.tolist()` vì
+    `confusion_count_matrix` là `pd.DataFrame`) + `findings` (đã sắp theo
+    margin giảm dần). CHẠY ĐỒNG BỘ (block request), có thể mất VÀI PHÚT với
+    file lớn — không có thanh tiến trình, chấp nhận được cho quy mô demo
+    khoá luận. `app.run(..., threaded=True)` để request này không chặn các
+    request khác trong lúc chờ.
   Rule/config sai (formula lỗi cú pháp, cột không tồn tại...) trả HTTP 400
   kèm message rõ ràng, không crash 500.
 - `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI dạng "panel theo
   bước" (chỉ 1 `.panel.is-active` hiện tại 1 thời điểm) với **5 bước**:
   1. Tải file lên → `POST /api/upload`.
-  2. Hướng xử lý — chọn Attribute noise hay Class noise (thẻ Class noise bị
-     khoá "Sắp làm", chỉ Attribute bấm được — khớp đúng roadmap ở trên).
+  2. Hướng xử lý — chọn Attribute noise hay Class noise (cả 2 thẻ đều bấm
+     được từ khi có backend `/api/class-noise/detect`).
   3. Cấu hình noise — mỗi cột hiện dạng "chip" (nút bo tròn bật/tắt) cho ĐỦ 7
      loại noise, chỉ hiện chip hợp lý với dtype đang chọn (`COLUMN_TYPES` map
      dtype → danh sách noise khả dụng trong `script.js`); tick chip nào thì
@@ -122,6 +179,23 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
      bản ĐẦU TIÊN (giữ lại), tính qua `computeDuplicateDefaultChecks()`.
      Nút "✅ Xuất file CSV" ở cuối trang KHÔNG tự xử lý gì thêm — chỉ đóng gói
      bản đang làm việc hiện tại qua `/api/export-working` rồi tải về.
+
+  **Nhánh CLASS NOISE ở Bước 3/4/5** — Bước 3/4/5 mỗi bước có 2 khung con
+  nằm CHUNG 1 panel, đổi `hidden` theo `state.direction`
+  (`#panel-N-attribute` / `#panel-N-class`, toggle qua `toggleStep3Direction()`/
+  `toggleStep4Direction()`/`toggleStep5Direction()`, được `goStep()` tự gọi
+  mỗi lần VÀO bước đó dù đi bằng nút "Tiếp tục" hay bấm thẳng stepper):
+  - Bước 3 (class): dropdown chọn `label_column` (mặc định CỘT CUỐI — quy
+    ước phổ biến của dữ liệu phân loại), danh sách checkbox chọn
+    `feature_columns` (loại trừ cột đang là nhãn), tham số nâng cao
+    `n_estimators`/`cv_folds` (mặc định 300/5, khớp `ClassNoiseConfig`).
+  - Bước 4 (class): 3 thẻ thống kê (dòng dùng được, CV accuracy so baseline,
+    số dòng nghi ngờ) + khung CẢNH BÁO màu đỏ nếu chênh lệch accuracy-baseline
+    ≤ 2 điểm % (`isWeak` trong `renderClassResults()`) + bảng precision/
+    recall/F1 từng lớp + ma trận đếm + bảng danh sách dòng nghi ngờ (tìm
+    kiếm + phân trang 20 dòng/trang, đã sắp theo margin giảm dần từ backend).
+  - Bước 5 (class): CHỈ có placeholder "đang phát triển" — xử lý/handling
+    cho class noise CHƯA code (xem roadmap cuối file), nút quay lại Bước 4.
 
   11 "family" màu (`NOISE_TYPE_META` trong `script.js`, khớp biến CSS
   `--<family>-text/soft/border` trong `style.css`) dùng chung cho chip/badge/
@@ -269,12 +343,21 @@ detect → người dùng chọn xử lý (replace/remove) từng ô/dòng lỗi
       cột, bảng kết quả có tìm kiếm + lọc theo loại + phân trang + tô màu ô,
       khung rộng hơn (1440px). KHÔNG mang theo bộ máy detect cục bộ bằng JS
       của mockup (xem lý do ở mục `frontend/` trên).
-- [ ] Class noise: CHỈ bắt đầu sau khi xong HẾT các mục trên (rule + handling
-      + FE đủ 7 loại — nay đã xong cả 3). Detect (distance-based / ensemble-
-      based / single-learner) + handle (robust / filtering / polishing) —
-      theo đúng phân loại trong bài báo "Dealing with Noise Problem in ML
-      Data-sets: A Systematic Review" (Gupta & Gupta, 2019) mà project này
-      dựa theo.
+- [x] Class noise — DETECT: `class_noise/confident_learning.py` (Confident
+      Learning + Random Forest, xem mục kiến trúc ở trên) + backend
+      `POST /api/class-noise/detect` + frontend Bước 2 (bật thẻ Class
+      Noise)/3 (chọn nhãn+đặc trưng)/4 (chẩn đoán + danh sách nghi ngờ). Đã
+      test qua Playwright (luồng thật, không lỗi JS) + đã thử nghiệm thật
+      trên dữ liệu thầy cung cấp VÀ 2 bộ Kaggle khác (Credit Card Fraud,
+      Adult Income) để xác nhận thuật toán hoạt động đúng, vấn đề accuracy
+      thấp trên dữ liệu thầy là do ĐẶC TRƯNG (chỉ 3 cột) chứ không phải lỗi
+      code (thí nghiệm có đối chứng: tách 3/29 cột trên CÙNG 1 bộ Kaggle).
+- [ ] Class noise — HANDLE: Bước 5 hiện CHỈ có placeholder "đang phát
+      triển". Cần thiết kế: hành động nào hợp lý cho 1 dòng bị gắn cờ sai
+      nhãn (xoá dòng? sửa lại nhãn theo `confident_label` model gợi ý? để
+      người dùng tự sửa tay?) — xem phân loại robust/filtering/polishing
+      trong bài báo "Dealing with Noise Problem in ML Data-sets: A
+      Systematic Review" (Gupta & Gupta, 2019) mà project này dựa theo.
 - [ ] (Khuyến nghị, chưa có yêu cầu code cụ thể) Đánh giá định lượng: tính
       precision/recall/F1 của 7 detector + rule liên cột so với
       `noise_ground_truth.csv`/`noise_ground_truth_large.csv` — rủi ro lớn
