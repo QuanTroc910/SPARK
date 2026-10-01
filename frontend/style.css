@@ -122,7 +122,7 @@ code {
 /* Các bước chỉ có form ngắn (1, 2) không cần chiếm hết bề rộng khung 1440px
    dùng cho các bước có bảng dữ liệu (3, 4, 5) -- thu hẹp + canh giữa riêng
    cho các panel này để bố cục cân đối, đỡ trống trải bên phải. */
-.panel--narrow { max-width: 760px; margin-left: auto; margin-right: auto; }
+.panel--narrow { max-width: 980px; margin-left: auto; margin-right: auto; }
 .panel-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 8px; }
 .panel-desc { font-size: 13.5px; color: var(--ink-dim); max-width: 90ch; margin-bottom: 20px; }
 .panel-actions { display: flex; align-items: center; gap: 14px; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); flex-wrap: wrap; }
