@@ -119,9 +119,12 @@ code {
 /* ===== Panels ===== */
 .panel { display: none; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); padding: 28px 30px 30px; }
 .panel.is-active { display: block; }
+/* Các bước chỉ có form ngắn (1, 2) không cần chiếm hết bề rộng khung 1440px
+   dùng cho các bước có bảng dữ liệu (3, 4, 5) -- thu hẹp + canh giữa riêng
+   cho các panel này để bố cục cân đối, đỡ trống trải bên phải. */
+.panel--narrow { max-width: 760px; margin-left: auto; margin-right: auto; }
 .panel-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 8px; }
 .panel-desc { font-size: 13.5px; color: var(--ink-dim); max-width: 90ch; margin-bottom: 20px; }
-.panel-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .panel-actions { display: flex; align-items: center; gap: 14px; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .hint-note { font-size: 12.5px; color: var(--ink-faint); margin-top: 12px; }
 .sub-section { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
@@ -209,7 +212,14 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 .stat-amber { border-left-color: var(--amber-border); }
 .stat-crimson { border-left-color: var(--crimson-border); }
 
-.source-badge { font-size: 11.5px; font-weight: 600; padding: 5px 10px; border-radius: 999px; white-space: nowrap; background: var(--signal-soft); color: var(--signal-dark); }
+/* ===== Biểu đồ phân bố loại noise (Bước 4) ===== */
+.chart-card { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 22px; background: var(--surface-2); }
+.noise-chart { display: flex; flex-direction: column; gap: 9px; margin-top: 10px; }
+.chart-row { display: grid; grid-template-columns: 160px 1fr 44px; align-items: center; gap: 10px; }
+.chart-label { font-size: 12.5px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-bar-track { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.chart-bar-fill { display: block; height: 100%; border-radius: 999px; }
+.chart-count { font-size: 12.5px; font-weight: 600; text-align: right; font-family: "IBM Plex Mono", monospace; }
 
 .toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
 .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -316,6 +326,8 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
   .direction-grid { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: 1fr; }
   .panel { padding: 22px 18px 24px; }
+  .chart-row { grid-template-columns: 1fr; gap: 4px; }
+  .chart-count { text-align: left; }
 }
 @media (max-width: 560px) {
   .step-label { display: none; }

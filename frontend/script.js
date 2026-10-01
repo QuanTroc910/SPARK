@@ -780,7 +780,40 @@ function renderStep4(data) {
   $("stat-flagged-rows").textContent = data.total_flagged_rows;
   $("stat-total-findings").textContent = data.findings.length;
   renderFilterChips();
+  renderNoiseTypeChart(data.findings);
   renderResultsTable();
+}
+
+// Biểu đồ cột ngang: đếm số finding theo từng loại noise, sắp xếp giảm dần.
+// CHỈ đọc lại data.findings đã có sẵn trong bộ nhớ (không gọi thêm API nào,
+// không thay đổi logic detect/xử lý) -- thuần hiển thị trực quan hơn.
+function renderNoiseTypeChart(findings) {
+  const card = $("noise-chart-card");
+  const wrap = $("noise-chart");
+  if (!findings.length) {
+    card.hidden = true;
+    wrap.innerHTML = "";
+    return;
+  }
+
+  const counts = new Map();
+  findings.forEach((f) => counts.set(f.noise_type, (counts.get(f.noise_type) || 0) + 1));
+  const rows = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  const maxCount = rows[0][1];
+
+  wrap.innerHTML = rows
+    .map(([type, count]) => {
+      const meta = noiseMeta(type);
+      const pct = Math.max(4, Math.round((count / maxCount) * 100));
+      return `
+        <div class="chart-row">
+          <span class="chart-label">${meta.label}</span>
+          <span class="chart-bar-track"><span class="chart-bar-fill" style="width:${pct}%; background: var(--${meta.family}-border);"></span></span>
+          <span class="chart-count">${count}</span>
+        </div>`;
+    })
+    .join("");
+  card.hidden = false;
 }
 
 $("goto-handling-btn").addEventListener("click", () => {

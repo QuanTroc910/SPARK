@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SPARK — Attribute Noise Detection</title>
+  <title>Dò &amp; Xử Lý Nhiễu Dữ Liệu</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;650;700&display=swap" rel="stylesheet" />
@@ -14,8 +14,7 @@
     <div class="container header-inner">
       <div class="brand">
         <div class="brand-text">
-          <span class="brand-title">🧹 SPARK — Attribute Noise Detection</span>
-          <span class="brand-sub">Backend Flask (attribute_noise/) là nơi DUY NHẤT thực sự chạy detect/xử lý — trang này chỉ gọi API thật, không tự tính toán</span>
+          <span class="brand-title">🧹 Dò &amp; Xử Lý Nhiễu Dữ Liệu</span>
         </div>
       </div>
       <div class="status-pill">
@@ -38,13 +37,9 @@
     </nav>
 
     <!-- Panel 1: Upload -->
-    <section class="panel is-active" id="panel-1">
+    <section class="panel panel--narrow is-active" id="panel-1">
       <h2 class="panel-title">Bước 1: Tải file dữ liệu lên</h2>
-      <p class="panel-desc">
-        Chọn file CSV/Excel cần kiểm tra. File được gửi thẳng lên backend Flask
-        (<code>POST /api/upload</code>) — backend đọc file bằng
-        <code>attribute_noise/pipeline.py::load_data()</code> rồi trả về danh sách cột để bạn cấu hình ở Bước 3.
-      </p>
+      <p class="panel-desc">Chọn file CSV/Excel cần kiểm tra. Hệ thống sẽ đọc danh sách cột để bạn cấu hình ở Bước 3.</p>
 
       <label for="file-input" class="dropzone" id="dropzone">
         <div class="dropzone-idle" id="dropzone-idle">
@@ -70,12 +65,9 @@
     </section>
 
     <!-- Panel 2: Hướng xử lý -->
-    <section class="panel" id="panel-2">
+    <section class="panel panel--narrow" id="panel-2">
       <h2 class="panel-title">Bước 2: Chọn hướng xử lý</h2>
-      <p class="panel-desc">
-        Noise trong dữ liệu được chia theo 2 hướng, mỗi hướng có bộ luật phát hiện + xử lý riêng
-        (xem <code>CLAUDE.md</code>). Attribute noise code trước, Class noise làm sau.
-      </p>
+      <p class="panel-desc">Noise trong dữ liệu được chia theo 2 hướng, mỗi hướng có cách phát hiện và xử lý riêng.</p>
 
       <div class="direction-grid">
         <div class="direction-card" data-direction="attribute" tabindex="0" role="button">
@@ -121,9 +113,8 @@
       <div class="sub-section">
         <h3 class="sub-title">Rule liên cột (tuỳ chọn)</h3>
         <p class="panel-desc">
-          Kiểm tra mâu thuẫn LOGIC giữa 2 cột — vd "tuổi phải ≤ điểm đánh giá" hay "mã nhân viên phải luôn
-          gắn với đúng 1 tên". Bạn tự chọn cột và quan hệ, hệ thống không tự đoán được vì mỗi file dữ liệu
-          có ý nghĩa khác nhau (xem <code>CLAUDE.md</code> mục 7).
+          Kiểm tra mâu thuẫn logic giữa 2 cột — ví dụ "tuổi phải ≤ điểm đánh giá" hay "mã nhân viên phải
+          luôn gắn với đúng 1 tên". Bạn tự chọn cột và quan hệ, vì mỗi file dữ liệu có ý nghĩa khác nhau.
         </p>
         <div class="rules-list" id="rules-list"></div>
         <button class="btn btn-ghost" id="add-rule-btn" type="button">+ Thêm rule</button>
@@ -137,13 +128,8 @@
 
     <!-- Panel 4: Kết quả -->
     <section class="panel" id="panel-4">
-      <div class="panel-head-row">
-        <div>
-          <h2 class="panel-title">Bước 4: Kết quả phát hiện</h2>
-          <p class="panel-desc">Rà soát các dòng và ô bị gắn cờ noise trước khi sang bước xử lý.</p>
-        </div>
-        <span class="source-badge">Nguồn: attribute_noise/ (Flask backend thật)</span>
-      </div>
+      <h2 class="panel-title">Bước 4: Kết quả phát hiện</h2>
+      <p class="panel-desc">Rà soát các dòng và ô bị gắn cờ noise trước khi sang bước xử lý.</p>
 
       <div class="stats-grid">
         <div class="stat-card">
@@ -158,6 +144,13 @@
           <span class="stat-value mono" id="stat-total-findings">0</span>
           <span class="stat-label">Ô lỗi phát hiện</span>
         </div>
+      </div>
+
+      <!-- Biểu đồ phân bố loại noise -- thuần hiển thị lại dữ liệu đã có
+           sẵn từ data.findings, không gọi thêm API nào. -->
+      <div class="chart-card" id="noise-chart-card" hidden>
+        <h3 class="sub-title">Phân bố theo loại noise</h3>
+        <div class="noise-chart" id="noise-chart"></div>
       </div>
 
       <div class="toolbar">
@@ -188,13 +181,9 @@
     <section class="panel" id="panel-5">
       <h2 class="panel-title">Bước 5: Xử lý &amp; xuất file</h2>
       <p class="panel-desc">
-        Mỗi nhóm dưới đây ứng với 1 cặp (cột, loại noise) THỰC SỰ có trong kết quả Bước 4 — bấm vào tên
-        nhóm để xổ ra bảng chi tiết, TỰ TICK CHỌN đúng những dòng bạn muốn xử lý (mặc định tick sẵn hết),
-        chọn cách xử lý rồi bấm "Áp dụng" NGAY TRÊN NHÓM ĐÓ — không bắt buộc xử lý hết mọi nhóm cùng lúc.
-        Xử lý xong 1 phần, bấm "👁 Xem sau xử lý" để xem ngay dữ liệu hiện tại. Hành động khả dụng theo
-        bảng (dtype, noise_type) trong <code>attribute_noise/attribute_handling.py</code>. Rule liên cột
-        hiện CHƯA hỗ trợ xử lý tự động ở bước này, chỉ 7 loại attribute noise theo cột + duplicate_row.
-        Khi xong hết, bấm "Xuất file CSV" ở cuối trang để tải file đã xử lý về.
+        Bấm vào tên mỗi nhóm để xem chi tiết từng dòng, tick chọn dòng muốn xử lý rồi bấm "Áp dụng" —
+        không cần xử lý hết các nhóm cùng lúc. Rule liên cột chưa hỗ trợ xử lý tự động ở bước này. Xử lý
+        xong, bấm "Xuất file CSV" ở cuối trang để tải file về.
       </p>
 
       <div id="handling-list" class="handling-list"></div>
@@ -208,10 +197,7 @@
          hình phụ mở ra từ Bước 5 để xem nhanh dữ liệu hiện tại rồi quay lại. -->
     <section class="panel" id="panel-preview">
       <h2 class="panel-title">Xem dữ liệu sau xử lý</h2>
-      <p class="panel-desc">
-        Đây là TOÀN BỘ dữ liệu ở trạng thái HIỆN TẠI (đã áp dụng các lần xử lý bạn vừa bấm) — ô còn tô
-        màu là còn lỗi CHƯA xử lý.
-      </p>
+      <p class="panel-desc">Toàn bộ dữ liệu ở trạng thái hiện tại — ô còn tô màu là còn lỗi chưa xử lý.</p>
       <div class="table-wrap">
         <table class="results-table" id="preview-table">
           <thead id="preview-table-head"></thead>
