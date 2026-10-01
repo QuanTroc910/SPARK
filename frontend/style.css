@@ -215,6 +215,10 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 .rule-fields .formula-input { flex: 1; min-width: 240px; }
 .rule-word { font-weight: 600; color: var(--signal-dark); font-size: 12.5px; }
 
+/* ===== Step 3 (hướng Class Noise): chọn nhãn + đặc trưng ===== */
+.feature-check-list { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2); }
+.feature-check-list .switch-row { margin-bottom: 0; }
+
 /* ===== Step 4: kết quả ===== */
 .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 22px; }
 .stat-card { background: var(--surface-2); border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: var(--radius-md); padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }

@@ -119,6 +119,16 @@ const state = {
   // ngay khi renderHandlingSection() DỰNG LẠI TOÀN BỘ DOM (mỗi lần dựng lại
   // các nút đều bắt đầu từ mặc định "ẩn", nên phải tự nhớ lại qua state này).
   appliedGroups: new Set(),
+
+  // ---- Riêng cho hướng Class Noise (song song, KHÔNG dùng chung state
+  // attribute ở trên vì cấu trúc dữ liệu hoàn toàn khác) ----
+  classLabelColumn: null,
+  classFeatureColumns: new Set(),
+  classDiagnostics: null,
+  classFindings: [],
+  classFindingsPage: 1,
+  classFindingsPerPage: 20,
+  classFindingsFilterText: "",
 };
 
 // ====== Stepper (5 bước) ======
@@ -139,6 +149,13 @@ function goStep(n) {
   state.currentStep = n;
   document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
   $("panel-" + n).classList.add("is-active");
+  // Bước 3/4/5 có 2 khung con (attribute/class) nằm chung trong cùng 1
+  // panel -- luôn gọi lại hàm chuyển nhánh mỗi lần VÀO bước đó, bất kể đi
+  // tới bằng cách nào (bấm "Tiếp tục" hay bấm thẳng vào stepper phía trên),
+  // để không bao giờ hiện sai nhánh.
+  if (n === 3) toggleStep3Direction();
+  if (n === 4) toggleStep4Direction();
+  if (n === 5) toggleStep5Direction();
   renderStepper();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -259,10 +276,10 @@ document.querySelectorAll(".direction-card").forEach((card) => {
   });
 });
 $("continue-step2-btn").addEventListener("click", () => {
-  if (state.direction !== "attribute") return;
+  if (!state.direction) return;
   unlockStep(3);
-  renderColumnList();
-  goStep(3);
+  if (state.direction === "attribute") renderColumnList();
+  goStep(3); // goStep() tự gọi toggleStep3Direction() -> dựng form class nếu cần
 });
 
 // ====== BƯỚC 3: cấu hình noise theo cột (chip UI, đủ 7 loại) ======
@@ -1383,6 +1400,258 @@ $("apply-handling-btn").addEventListener("click", async () => {
   a.remove();
   window.URL.revokeObjectURL(url);
 });
+
+// ================================================================
+// HƯỚNG CLASS NOISE (Bước 3-4-5) -- song song với nhánh attribute phía
+// trên, dùng CHUNG file_id/headers đã có từ Bước 1, nhưng cấu hình +
+// hiển thị kết quả hoàn toàn khác (không có cột/noise_type, chỉ có
+// label_column/feature_columns + diagnostics + findings xếp theo margin).
+// Gọi backend thật qua /api/class-noise/detect (class_noise/confident_learning.py),
+// không tính toán gì ở JS -- đúng nguyên tắc chung của toàn trang.
+// ================================================================
+
+// ---- Bước 3: chọn nhãn + đặc trưng ----
+function toggleStep3Direction() {
+  const isClass = state.direction === "class";
+  $("panel-3-attribute").hidden = isClass;
+  $("panel-3-class").hidden = !isClass;
+  $("panel-3-title").textContent = isClass
+    ? "Bước 3: Chọn nhãn & đặc trưng"
+    : "Bước 3: Cấu hình noise cho từng cột";
+  if (isClass) renderClassNoiseConfigForm();
+}
+
+function renderClassNoiseConfigForm() {
+  const labelSelect = $("class-label-select");
+  labelSelect.innerHTML = state.headers
+    .map((h) => `<option value="${escapeAttr(h)}">${escapeHtml(h)}</option>`)
+    .join("");
+  // Mặc định chọn CỘT CUỐI làm nhãn -- quy ước phổ biến của nhiều bộ dữ
+  // liệu phân loại (label thường là cột cuối cùng), người dùng đổi lại
+  // được ngay nếu file của họ không theo quy ước này.
+  if (!state.classLabelColumn || !state.headers.includes(state.classLabelColumn)) {
+    state.classLabelColumn = state.headers[state.headers.length - 1];
+  }
+  labelSelect.value = state.classLabelColumn;
+  renderClassFeatureList();
+}
+
+function renderClassFeatureList() {
+  const wrap = $("class-feature-list");
+  const label = state.classLabelColumn;
+  const candidates = state.headers.filter((h) => h !== label);
+  if (!candidates.length) {
+    wrap.innerHTML = `<p class="empty-state">File chỉ có 1 cột, không còn cột nào để làm đặc trưng.</p>`;
+    return;
+  }
+  wrap.innerHTML = candidates
+    .map((h) => {
+      const checked = state.classFeatureColumns.has(h);
+      return `<label class="switch-row"><input type="checkbox" data-feature="${escapeAttr(h)}" ${checked ? "checked" : ""}/> <span class="mono">${escapeHtml(h)}</span></label>`;
+    })
+    .join("");
+}
+
+$("class-label-select").addEventListener("change", (e) => {
+  state.classLabelColumn = e.target.value;
+  state.classFeatureColumns.delete(e.target.value); // nhãn không được trùng đặc trưng
+  renderClassFeatureList();
+});
+
+$("class-feature-list").addEventListener("change", (e) => {
+  const h = e.target.dataset.feature;
+  if (!h) return;
+  if (e.target.checked) state.classFeatureColumns.add(h);
+  else state.classFeatureColumns.delete(h);
+});
+
+$("class-detect-btn").addEventListener("click", async () => {
+  const btn = $("class-detect-btn");
+  const statusEl = $("class-detect-status");
+  const featureColumns = Array.from(state.classFeatureColumns);
+
+  if (!state.classLabelColumn) {
+    alert("Hãy chọn cột nhãn.");
+    return;
+  }
+  if (featureColumns.length === 0) {
+    alert("Hãy chọn ít nhất 1 cột đặc trưng.");
+    return;
+  }
+
+  setButtonLoading(btn, true, "Đang train Random Forest...", "🔍 Phát hiện Class Noise");
+  statusEl.textContent = "Có thể mất vài phút với file lớn, vui lòng chờ…";
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/class-noise/detect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        file_id: state.fileId,
+        label_column: state.classLabelColumn,
+        feature_columns: featureColumns,
+        n_estimators: parseInt($("class-n-estimators").value, 10) || 300,
+        cv_folds: parseInt($("class-cv-folds").value, 10) || 5,
+      }),
+    });
+  } catch (err) {
+    alert("Không gọi được backend.");
+    setButtonLoading(btn, false, "Đang train Random Forest...", "🔍 Phát hiện Class Noise");
+    statusEl.textContent = "";
+    return;
+  }
+  setButtonLoading(btn, false, "Đang train Random Forest...", "🔍 Phát hiện Class Noise");
+  statusEl.textContent = "";
+
+  if (!response.ok) {
+    let message = "Phát hiện thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      /* giữ message mặc định */
+    }
+    alert(message);
+    return;
+  }
+
+  const data = await response.json();
+  state.classDiagnostics = data.diagnostics;
+  state.classFindings = data.findings;
+  state.classFindingsPage = 1;
+  state.classFindingsFilterText = "";
+  $("class-findings-search").value = "";
+
+  unlockStep(4);
+  goStep(4); // goStep() tự gọi toggleStep4Direction() -> renderClassResults()
+});
+
+// ---- Bước 4: chẩn đoán độ tin cậy + danh sách dòng nghi ngờ ----
+function toggleStep4Direction() {
+  const isClass = state.direction === "class";
+  $("panel-4-attribute").hidden = isClass;
+  $("panel-4-class").hidden = !isClass;
+  if (isClass && state.classDiagnostics) renderClassResults();
+}
+
+function renderClassResults() {
+  const diag = state.classDiagnostics;
+  if (!diag) return;
+
+  const diffPct = diag.cv_accuracy - diag.majority_baseline_accuracy;
+  const isWeak = diffPct <= 0.02; // ngưỡng cảnh báo: chênh lệch quá nhỏ so với baseline
+
+  $("class-stats-grid").innerHTML = `
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng dùng được / ${diag.n_rows_total.toLocaleString("vi-VN")} tổng</span>
+    </div>
+    <div class="stat-card ${isWeak ? "stat-crimson" : ""}">
+      <span class="stat-value mono">${(diag.cv_accuracy * 100).toFixed(2)}%</span>
+      <span class="stat-label">CV accuracy (baseline ${(diag.majority_baseline_accuracy * 100).toFixed(2)}%)</span>
+    </div>
+    <div class="stat-card stat-amber">
+      <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
+    </div>
+  `;
+
+  const warnCard = $("class-warning-card");
+  if (isWeak) {
+    warnCard.hidden = false;
+    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
+      ⚠️ CV accuracy chỉ nhỉnh hơn (hoặc thấp hơn) baseline rất ít (chênh lệch ${(diffPct * 100).toFixed(2)} điểm %)
+      — model gần như không học được gì từ các cột đặc trưng đã chọn. Các dòng bị gắn cờ bên dưới RẤT KHÔNG
+      đáng tin, cân nhắc chọn lại cột đặc trưng khác trước khi kết luận.</p>`;
+  } else {
+    warnCard.hidden = true;
+  }
+
+  $("class-report-table").innerHTML = `
+    <thead><tr><th>Lớp</th><th>Precision</th><th>Recall</th><th>F1</th><th>n</th></tr></thead>
+    <tbody>${diag.class_names
+      .map((cls) => {
+        const r = diag.per_class_report[cls];
+        return `<tr><td>${escapeHtml(cls)}</td><td class="mono">${r.precision.toFixed(3)}</td><td class="mono">${r.recall.toFixed(3)}</td><td class="mono">${r["f1-score"].toFixed(3)}</td><td class="mono">${r.support}</td></tr>`;
+      })
+      .join("")}</tbody>`;
+
+  const cm = diag.confusion_count_matrix;
+  $("class-confusion-table").innerHTML = `
+    <thead><tr><th>Nhãn ghi \\ Model tự tin</th>${cm.class_names.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+    <tbody>${cm.class_names
+      .map((rowName, i) => `<tr><td>${escapeHtml(rowName)}</td>${cm.rows[i].map((v) => `<td class="mono">${v}</td>`).join("")}</tr>`)
+      .join("")}</tbody>`;
+
+  renderClassFindingsTable();
+}
+
+function getFilteredClassFindings() {
+  const text = state.classFindingsFilterText.trim().toLowerCase();
+  if (!text) return state.classFindings;
+  return state.classFindings.filter((f) =>
+    `${f.row_number} ${f.recorded_label} ${f.confident_label}`.toLowerCase().includes(text)
+  );
+}
+
+function renderClassFindingsTable() {
+  const all = getFilteredClassFindings();
+  const perPage = state.classFindingsPerPage;
+  const totalPages = Math.max(1, Math.ceil(all.length / perPage));
+  state.classFindingsPage = Math.min(state.classFindingsPage, totalPages);
+  const start = (state.classFindingsPage - 1) * perPage;
+  const pageRows = all.slice(start, start + perPage);
+
+  const table = $("class-findings-table");
+  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>Model tự tin</th><th>Margin</th></tr></thead>`;
+  if (!pageRows.length) {
+    table.innerHTML = `${headHtml}<tbody><tr><td colspan="4" class="empty-cell">Không có dòng nào khớp.</td></tr></tbody>`;
+  } else {
+    table.innerHTML = `${headHtml}<tbody>${pageRows
+      .map(
+        (f) =>
+          `<tr><td class="mono">${f.row_number}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.confident_label)}</td><td class="mono">${f.margin.toFixed(4)}</td></tr>`
+      )
+      .join("")}</tbody>`;
+  }
+
+  const pag = $("class-findings-pagination");
+  pag.hidden = totalPages <= 1;
+  $("class-page-indicator").textContent = `Trang ${state.classFindingsPage}/${totalPages}`;
+}
+
+$("class-findings-search").addEventListener(
+  "input",
+  debounce((e) => {
+    state.classFindingsFilterText = e.target.value;
+    state.classFindingsPage = 1;
+    renderClassFindingsTable();
+  }, 200)
+);
+$("class-page-prev").addEventListener("click", () => {
+  if (state.classFindingsPage > 1) {
+    state.classFindingsPage--;
+    renderClassFindingsTable();
+  }
+});
+$("class-page-next").addEventListener("click", () => {
+  state.classFindingsPage++;
+  renderClassFindingsTable();
+});
+
+$("class-goto-handling-btn").addEventListener("click", () => {
+  unlockStep(5);
+  goStep(5); // goStep() tự gọi toggleStep5Direction()
+});
+
+// ---- Bước 5: placeholder (xử lý Class Noise chưa làm, xem CLAUDE.md) ----
+function toggleStep5Direction() {
+  const isClass = state.direction === "class";
+  $("panel-5-attribute").hidden = isClass;
+  $("panel-5-class").hidden = !isClass;
+}
+$("class-back-to-results-btn").addEventListener("click", () => goStep(4));
 
 // ====== Khởi động ======
 renderStepper();

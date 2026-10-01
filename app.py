@@ -34,6 +34,8 @@ from attribute_noise.config import (
 )
 from attribute_noise.cross_field_rules import FormulaError
 from attribute_noise.pipeline import NoiseFinding, detect_noise, get_flagged_rows, load_data
+from class_noise.config import ClassNoiseConfig
+from class_noise.confident_learning import detect_class_noise
 
 app = Flask(__name__)
 
@@ -243,6 +245,89 @@ def _duplicate_handling_from_json(item: dict) -> DuplicateHandlingChoice:
     return DuplicateHandlingChoice(
         keep=DuplicateKeep(item.get("keep", "first")),
         subset_columns=item.get("subset_columns"),
+    )
+
+
+@app.route("/api/class-noise/detect", methods=["POST"])
+def class_noise_detect_api():
+    """Hướng Class Noise, Bước 3 -> 4: frontend gửi lên file_id (từ /api/upload,
+    DÙNG CHUNG với hướng attribute -- không có endpoint upload riêng) +
+    label_column + feature_columns (+ tuỳ chọn n_estimators, cv_folds).
+
+    Chạy ĐÚNG module class_noise/confident_learning.py (Random Forest + 5-fold
+    CV + Confident Learning) đã được kiểm chứng kỹ qua nhiều demo -- route này
+    CHỈ "phiên dịch" JSON <-> Python object + JSON-hoá kết quả, không có logic
+    detect nào viết thêm ở đây.
+
+    CẢNH BÁO quan trọng cho người chạy thử: với file lớn (hàng trăm nghìn
+    dòng) việc train Random Forest qua Cross-Validation có thể mất VÀI PHÚT.
+    Route này chạy ĐỒNG BỘ (block luôn request), không có thanh tiến trình --
+    chấp nhận được cho quy mô 1 công cụ demo khoá luận, KHÔNG phù hợp sản xuất
+    thật (nên app.run(..., threaded=True) để ít nhất không chặn các request
+    khác trong lúc chờ, xem cuối file).
+    """
+    payload = request.get_json()
+    file_id = payload.get("file_id")
+    df = UPLOADED_FILES.get(file_id)
+    if df is None:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+
+    label_column = payload.get("label_column")
+    feature_columns = payload.get("feature_columns") or []
+    if not label_column:
+        return jsonify({"error": "Thiếu label_column"}), 400
+    if not feature_columns:
+        return jsonify({"error": "Phải chọn ít nhất 1 cột đặc trưng"}), 400
+    if label_column in feature_columns:
+        return jsonify({"error": "Cột nhãn không được trùng với cột đặc trưng"}), 400
+    missing_cols = [c for c in [label_column, *feature_columns] if c not in df.columns]
+    if missing_cols:
+        return jsonify({"error": f"Cột không tồn tại trong file: {', '.join(missing_cols)}"}), 400
+
+    config = ClassNoiseConfig(
+        label_column=label_column,
+        feature_columns=feature_columns,
+        n_estimators=int(payload.get("n_estimators") or 300),
+        cv_folds=int(payload.get("cv_folds") or 5),
+    )
+
+    try:
+        result = detect_class_noise(df, config)
+    except (ValueError, KeyError) as exc:
+        # Hay gặp nhất: 1 lớp có quá ít dòng dùng được so với cv_folds (vd chọn
+        # cv_folds=5 nhưng lớp hiếm chỉ có 3 dòng sau khi loại bỏ dòng hỏng) --
+        # StratifiedKFold của sklearn tự raise ValueError trong trường hợp này.
+        return jsonify({"error": f"Không chạy được với cấu hình này: {exc}"}), 400
+
+    diag = result.diagnostics
+    return jsonify(
+        {
+            "diagnostics": {
+                "n_rows_total": diag.n_rows_total,
+                "n_rows_used": diag.n_rows_used,
+                "class_names": diag.class_names,
+                "class_counts": diag.class_counts,
+                "cv_accuracy": diag.cv_accuracy,
+                "majority_baseline_accuracy": diag.majority_baseline_accuracy,
+                "class_thresholds": diag.class_thresholds,
+                "per_class_report": diag.per_class_report,
+                "confusion_count_matrix": {
+                    "class_names": diag.class_names,
+                    # .tolist() tự ép numpy int64 (kiểu pandas hay dùng) thành
+                    # int thường -- jsonify() không serialize được numpy int64.
+                    "rows": diag.confusion_count_matrix.values.tolist(),
+                },
+            },
+            "findings": [
+                {
+                    "row_number": f.row_number,
+                    "recorded_label": f.recorded_label,
+                    "confident_label": f.confident_label,
+                    "margin": f.margin,
+                }
+                for f in result.findings
+            ],
+        }
     )
 
 
@@ -458,4 +543,8 @@ def download_cleaned_file(download_id: str):
 
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    # threaded=True: để request /api/class-noise/detect (có thể chạy TỚI VÀI
+    # PHÚT với file lớn) không chặn luôn các request khác (vd health check
+    # của frontend) trong lúc chờ -- Flask dev server mặc định xử lý tuần tự
+    # từng request 1 nếu không bật tuỳ chọn này.
+    app.run(port=5000, debug=True, threaded=True)

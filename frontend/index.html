@@ -73,10 +73,9 @@
           <h3>📊 Attribute Noise</h3>
           <p>Lỗi ở từng thuộc tính/cột: thiếu giá trị, sai định dạng, ngoài khoảng, giá trị bất thường, không nhất quán, khoảng trắng thừa, trùng dòng — cộng rule mâu thuẫn LOGIC giữa 2 cột.</p>
         </div>
-        <div class="direction-card is-disabled" data-direction="class">
-          <span class="badge-soon">Sắp làm</span>
+        <div class="direction-card" data-direction="class" tabindex="0" role="button">
           <h3>🏷️ Class Noise</h3>
-          <p>Lỗi ở nhãn/lớp phân loại: nhãn sai, nhãn mâu thuẫn với các thuộc tính khác trong cùng dòng.</p>
+          <p>Nhãn/lớp phân loại bị gán sai — chọn 1 cột làm nhãn, các cột số làm đặc trưng, hệ thống dùng Random Forest + Confident Learning để tìm dòng nghi ngờ sai nhãn.</p>
         </div>
       </div>
 
@@ -87,108 +86,214 @@
 
     <!-- Panel 3: Cấu hình noise -->
     <section class="panel" id="panel-3">
-      <h2 class="panel-title">Bước 3: Cấu hình noise cho từng cột</h2>
-      <p class="panel-desc">
-        Với mỗi cột, chọn đúng kiểu dữ liệu rồi bật các loại noise cần kiểm tra. Các trường tham số
-        (min/max, ngưỡng outlier, danh sách category chuẩn...) chỉ hiện khi phù hợp với kiểu dữ liệu đã chọn.
-      </p>
+      <h2 class="panel-title" id="panel-3-title">Bước 3: Cấu hình noise cho từng cột</h2>
 
-      <p class="empty-state" id="col-list-empty" hidden>Chưa có dữ liệu — quay lại Bước 1 để tải file.</p>
-      <div class="col-list" id="col-list"></div>
+      <!-- Nhánh ATTRIBUTE NOISE -->
+      <div id="panel-3-attribute">
+        <p class="panel-desc">
+          Với mỗi cột, chọn đúng kiểu dữ liệu rồi bật các loại noise cần kiểm tra. Các trường tham số
+          (min/max, ngưỡng outlier, danh sách category chuẩn...) chỉ hiện khi phù hợp với kiểu dữ liệu đã chọn.
+        </p>
 
-      <div class="sub-section duplicate-row-config">
-        <h3 class="sub-title">Trùng dòng (duplicate_row)</h3>
-        <p class="panel-desc">Noise cấp DÒNG — so cả dòng (hoặc 1 nhóm cột chỉ định) với các dòng khác, không thuộc riêng 1 cột nào.</p>
-        <label class="switch-row">
-          <input type="checkbox" id="dup-enable" />
-          <span>Kiểm tra trùng dòng</span>
-        </label>
-        <div class="field field-grow">
-          <label>Chỉ so theo các cột này (để trống = so toàn bộ), cách nhau bởi dấu phẩy</label>
-          <input type="text" class="input" id="dup-subset-columns" placeholder="vd id" />
+        <p class="empty-state" id="col-list-empty" hidden>Chưa có dữ liệu — quay lại Bước 1 để tải file.</p>
+        <div class="col-list" id="col-list"></div>
+
+        <div class="sub-section duplicate-row-config">
+          <h3 class="sub-title">Trùng dòng (duplicate_row)</h3>
+          <p class="panel-desc">Noise cấp DÒNG — so cả dòng (hoặc 1 nhóm cột chỉ định) với các dòng khác, không thuộc riêng 1 cột nào.</p>
+          <label class="switch-row">
+            <input type="checkbox" id="dup-enable" />
+            <span>Kiểm tra trùng dòng</span>
+          </label>
+          <div class="field field-grow">
+            <label>Chỉ so theo các cột này (để trống = so toàn bộ), cách nhau bởi dấu phẩy</label>
+            <input type="text" class="input" id="dup-subset-columns" placeholder="vd id" />
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h3 class="sub-title">Rule liên cột (tuỳ chọn)</h3>
+          <p class="panel-desc">
+            Kiểm tra mâu thuẫn logic giữa 2 cột — ví dụ "tuổi phải ≤ điểm đánh giá" hay "mã nhân viên phải
+            luôn gắn với đúng 1 tên". Bạn tự chọn cột và quan hệ, vì mỗi file dữ liệu có ý nghĩa khác nhau.
+          </p>
+          <div class="rules-list" id="rules-list"></div>
+          <button class="btn btn-ghost" id="add-rule-btn" type="button">+ Thêm rule</button>
+        </div>
+
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="detect-btn" type="button">🔍 Detect Noise</button>
+          <span class="status-text" id="detect-status"></span>
         </div>
       </div>
 
-      <div class="sub-section">
-        <h3 class="sub-title">Rule liên cột (tuỳ chọn)</h3>
+      <!-- Nhánh CLASS NOISE -->
+      <div id="panel-3-class" hidden>
         <p class="panel-desc">
-          Kiểm tra mâu thuẫn logic giữa 2 cột — ví dụ "tuổi phải ≤ điểm đánh giá" hay "mã nhân viên phải
-          luôn gắn với đúng 1 tên". Bạn tự chọn cột và quan hệ, vì mỗi file dữ liệu có ý nghĩa khác nhau.
+          Chọn 1 cột làm <strong>nhãn</strong> (label) và các cột <strong>số</strong> làm đặc trưng (feature)
+          để huấn luyện Random Forest + Confident Learning. Cột không ép được thành số sẽ tự động bị loại
+          khỏi lúc huấn luyện, không cần lọc tay trước.
         </p>
-        <div class="rules-list" id="rules-list"></div>
-        <button class="btn btn-ghost" id="add-rule-btn" type="button">+ Thêm rule</button>
-      </div>
 
-      <div class="panel-actions">
-        <button class="btn btn-primary" id="detect-btn" type="button">🔍 Detect Noise</button>
-        <span class="status-text" id="detect-status"></span>
+        <div class="field field-grow">
+          <label>Cột nhãn (label)</label>
+          <select class="select" id="class-label-select"></select>
+        </div>
+
+        <div class="sub-section">
+          <h3 class="sub-title">Cột đặc trưng (feature)</h3>
+          <div class="feature-check-list" id="class-feature-list"></div>
+        </div>
+
+        <div class="sub-section">
+          <h3 class="sub-title">Tham số nâng cao (tuỳ chọn)</h3>
+          <div class="field-row">
+            <div class="field">
+              <label>Số cây (n_estimators)</label>
+              <input type="number" class="input" id="class-n-estimators" value="300" min="10" step="10" />
+            </div>
+            <div class="field">
+              <label>Số fold (cv_folds)</label>
+              <input type="number" class="input" id="class-cv-folds" value="5" min="2" max="10" />
+            </div>
+          </div>
+        </div>
+
+        <p class="hint-note">
+          ⚠️ Huấn luyện qua Cross-Validation có thể mất từ vài giây đến vài phút tuỳ kích thước file — trang
+          sẽ không phản hồi gì trong lúc chờ, đừng tắt tab.
+        </p>
+
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="class-detect-btn" type="button">🔍 Phát hiện Class Noise</button>
+          <span class="status-text" id="class-detect-status"></span>
+        </div>
       </div>
     </section>
 
     <!-- Panel 4: Kết quả -->
     <section class="panel" id="panel-4">
-      <h2 class="panel-title">Bước 4: Kết quả phát hiện</h2>
-      <p class="panel-desc">Rà soát các dòng và ô bị gắn cờ noise trước khi sang bước xử lý.</p>
+      <h2 class="panel-title" id="panel-4-title">Bước 4: Kết quả phát hiện</h2>
 
-      <div class="stats-grid">
-        <div class="stat-card">
-          <span class="stat-value mono" id="stat-total-rows">0</span>
-          <span class="stat-label">Tổng số dòng</span>
+      <!-- Nhánh ATTRIBUTE NOISE -->
+      <div id="panel-4-attribute">
+        <p class="panel-desc">Rà soát các dòng và ô bị gắn cờ noise trước khi sang bước xử lý.</p>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-value mono" id="stat-total-rows">0</span>
+            <span class="stat-label">Tổng số dòng</span>
+          </div>
+          <div class="stat-card stat-amber">
+            <span class="stat-value mono" id="stat-flagged-rows">0</span>
+            <span class="stat-label">Dòng có noise</span>
+          </div>
+          <div class="stat-card stat-crimson">
+            <span class="stat-value mono" id="stat-total-findings">0</span>
+            <span class="stat-label">Ô lỗi phát hiện</span>
+          </div>
         </div>
-        <div class="stat-card stat-amber">
-          <span class="stat-value mono" id="stat-flagged-rows">0</span>
-          <span class="stat-label">Dòng có noise</span>
+
+        <!-- Biểu đồ phân bố loại noise -- thuần hiển thị lại dữ liệu đã có
+             sẵn từ data.findings, không gọi thêm API nào. -->
+        <div class="chart-card" id="noise-chart-card" hidden>
+          <h3 class="sub-title">Phân bố theo loại noise</h3>
+          <div class="noise-chart" id="noise-chart"></div>
         </div>
-        <div class="stat-card stat-crimson">
-          <span class="stat-value mono" id="stat-total-findings">0</span>
-          <span class="stat-label">Ô lỗi phát hiện</span>
+
+        <div class="toolbar">
+          <input type="search" class="input search-input" id="search-input" placeholder="Tìm theo giá trị hoặc loại lỗi…" />
+          <div class="filter-chips" id="filter-chips"></div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="results-table" id="result-table">
+            <thead id="result-table-head"></thead>
+            <tbody id="result-table-body"></tbody>
+          </table>
+        </div>
+        <p id="result-empty" class="empty-state" hidden>Không phát hiện noise nào 🎉</p>
+
+        <div class="pagination" id="pagination" hidden>
+          <button class="btn btn-ghost" id="page-prev" type="button">Trước</button>
+          <span id="page-indicator" class="mono"></span>
+          <button class="btn btn-ghost" id="page-next" type="button">Sau</button>
+        </div>
+
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="goto-handling-btn" type="button" disabled>Tiếp tục: xử lý &amp; xuất file</button>
         </div>
       </div>
 
-      <!-- Biểu đồ phân bố loại noise -- thuần hiển thị lại dữ liệu đã có
-           sẵn từ data.findings, không gọi thêm API nào. -->
-      <div class="chart-card" id="noise-chart-card" hidden>
-        <h3 class="sub-title">Phân bố theo loại noise</h3>
-        <div class="noise-chart" id="noise-chart"></div>
-      </div>
+      <!-- Nhánh CLASS NOISE -->
+      <div id="panel-4-class" hidden>
+        <p class="panel-desc">Độ tin cậy của model — xem trước khi tin bất kỳ dòng nghi ngờ nào bên dưới.</p>
 
-      <div class="toolbar">
-        <input type="search" class="input search-input" id="search-input" placeholder="Tìm theo giá trị hoặc loại lỗi…" />
-        <div class="filter-chips" id="filter-chips"></div>
-      </div>
+        <div class="stats-grid" id="class-stats-grid"></div>
 
-      <div class="table-wrap">
-        <table class="results-table" id="result-table">
-          <thead id="result-table-head"></thead>
-          <tbody id="result-table-body"></tbody>
-        </table>
-      </div>
-      <p id="result-empty" class="empty-state" hidden>Không phát hiện noise nào 🎉</p>
+        <div class="chart-card" id="class-warning-card" hidden></div>
 
-      <div class="pagination" id="pagination" hidden>
-        <button class="btn btn-ghost" id="page-prev" type="button">Trước</button>
-        <span id="page-indicator" class="mono"></span>
-        <button class="btn btn-ghost" id="page-next" type="button">Sau</button>
-      </div>
+        <div class="chart-card">
+          <h3 class="sub-title">Precision / Recall / F1 từng lớp</h3>
+          <div class="table-wrap">
+            <table class="results-table" id="class-report-table"></table>
+          </div>
+        </div>
 
-      <div class="panel-actions">
-        <button class="btn btn-primary" id="goto-handling-btn" type="button" disabled>Tiếp tục: xử lý &amp; xuất file</button>
+        <div class="chart-card">
+          <h3 class="sub-title">Ma trận đếm (hàng = nhãn ghi, cột = nhãn model tự tin)</h3>
+          <div class="table-wrap">
+            <table class="results-table" id="class-confusion-table"></table>
+          </div>
+        </div>
+
+        <h3 class="sub-title">Danh sách dòng nghi ngờ (sắp theo mức độ đáng ngờ giảm dần)</h3>
+        <div class="toolbar">
+          <input type="search" class="input search-input" id="class-findings-search" placeholder="Tìm theo số dòng hoặc nhãn…" />
+        </div>
+        <div class="table-wrap">
+          <table class="results-table" id="class-findings-table"></table>
+        </div>
+        <div class="pagination" id="class-findings-pagination" hidden>
+          <button class="btn btn-ghost" id="class-page-prev" type="button">Trước</button>
+          <span id="class-page-indicator" class="mono"></span>
+          <button class="btn btn-ghost" id="class-page-next" type="button">Sau</button>
+        </div>
+
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="class-goto-handling-btn" type="button">Tiếp tục: xử lý &amp; xuất file</button>
+        </div>
       </div>
     </section>
 
     <!-- Panel 5: Xử lý & xuất file -->
     <section class="panel" id="panel-5">
       <h2 class="panel-title">Bước 5: Xử lý &amp; xuất file</h2>
-      <p class="panel-desc">
-        Bấm vào tên mỗi nhóm để xem chi tiết từng dòng, tick chọn dòng muốn xử lý rồi bấm "Áp dụng" —
-        không cần xử lý hết các nhóm cùng lúc. Rule liên cột chưa hỗ trợ xử lý tự động ở bước này. Xử lý
-        xong, bấm "Xuất file CSV" ở cuối trang để tải file về.
-      </p>
 
-      <div id="handling-list" class="handling-list"></div>
-      <div class="panel-actions">
-        <button class="btn btn-primary" id="apply-handling-btn" type="button">✅ Xuất file CSV</button>
-        <span class="status-text" id="handling-status"></span>
+      <!-- Nhánh ATTRIBUTE NOISE -->
+      <div id="panel-5-attribute">
+        <p class="panel-desc">
+          Bấm vào tên mỗi nhóm để xem chi tiết từng dòng, tick chọn dòng muốn xử lý rồi bấm "Áp dụng" —
+          không cần xử lý hết các nhóm cùng lúc. Rule liên cột chưa hỗ trợ xử lý tự động ở bước này. Xử lý
+          xong, bấm "Xuất file CSV" ở cuối trang để tải file về.
+        </p>
+
+        <div id="handling-list" class="handling-list"></div>
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="apply-handling-btn" type="button">✅ Xuất file CSV</button>
+          <span class="status-text" id="handling-status"></span>
+        </div>
+      </div>
+
+      <!-- Nhánh CLASS NOISE -->
+      <div id="panel-5-class" hidden>
+        <p class="empty-state">
+          Xử lý (handling) cho Class Noise đang được phát triển — tính năng này sẽ sớm có. Bấm "Phân bố
+          theo loại noise" ở Bước 4 để xem lại danh sách dòng nghi ngờ.
+        </p>
+        <div class="panel-actions">
+          <button class="btn btn-ghost" id="class-back-to-results-btn" type="button">← Quay lại Bước 4</button>
+        </div>
       </div>
     </section>
 
