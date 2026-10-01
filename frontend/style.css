@@ -157,9 +157,20 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 .switch-row { display: flex; align-items: center; gap: 9px; font-size: 13.5px; margin-bottom: 14px; cursor: pointer; }
 
 /* ===== Dropzone ===== */
-.dropzone { border: 1.5px dashed var(--line-strong); border-radius: var(--radius-md); background: var(--surface-2); padding: 34px 20px; text-align: center; cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
+/* Giờ là phần tử CHÍNH của Bước 1 (không còn đoạn mô tả đi kèm) -- cần to,
+   rộng hết khung panel, dễ thấy ngay từ cái nhìn đầu tiên. `label` là phần
+   tử inline mặc định nên PHẢI khai display:block + width:100% mới chiếm
+   hết bề rộng panel thay vì chỉ co lại vừa đúng nội dung bên trong. */
+.dropzone {
+  display: block; width: 100%; box-sizing: border-box;
+  border: 2px dashed var(--line-strong); border-radius: var(--radius-md);
+  background: var(--surface-2); padding: 64px 20px; min-height: 220px;
+  text-align: center; cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
 .dropzone.is-dragover { border-color: var(--signal); background: var(--signal-soft); }
-.dropzone-idle { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--ink-dim); font-size: 13.5px; }
+.dropzone-idle { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; height: 100%; color: var(--ink-dim); font-size: 15px; }
+.dropzone-icon { font-size: 40px; }
 .dropzone-file { display: none; align-items: center; justify-content: center; gap: 14px; text-align: left; }
 .file-name { font-size: 14px; font-weight: 600; }
 .file-meta { font-size: 12.5px; color: var(--ink-dim); margin-top: 2px; }
