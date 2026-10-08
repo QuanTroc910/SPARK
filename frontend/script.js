@@ -1149,6 +1149,33 @@ async function refreshHandledRowsInPlace(row, rowNumbers) {
   if (!response.ok) return;
   const data = await response.json();
   const byRowNumber = new Map(data.rows.map((r) => [r.row_number, r]));
+  applyFreshRowsToGroupTable(row, rowNumbers, byRowNumber);
+
+  // 1 dòng có thể dính NHIỀU loại lỗi khác nhau -> xuất hiện ở NHIỀU khung
+  // riêng biệt cùng lúc (xem rowsForHandlingKey()). Khung vừa Áp dụng đã cập
+  // nhật ở trên rồi, nhưng các khung KHÁC đang mở sẵn (đã render từ trước)
+  // nếu cũng đang hiện CHÍNH các dòng vừa xử lý thì bảng của chúng sẽ bị "cũ"
+  // (vẫn hiện dòng đã xoá/giá trị cũ) -- quét qua, CHỈ cập nhật đúng những
+  // khung thật sự có liên quan (dò bằng querySelector `tr[data-row-number]`),
+  // KHÔNG rebuild/tính lại các khung không dính dáng gì, và dùng lại ĐÚNG 1
+  // lần gọi API ở trên (byRowNumber) thay vì gọi lại cho từng khung -- đỡ tốn
+  // tài nguyên cả phía trình duyệt lẫn server.
+  document.querySelectorAll("#handling-list > .handling-row").forEach((otherRow) => {
+    if (otherRow === row) return;
+    const otherDetail = otherRow.querySelector(".handling-detail");
+    if (!otherDetail || otherDetail.dataset.rendered !== "true") return; // chưa mở -> lần mở đầu tiên sẽ tự đọc state mới nhất, không cần đụng vào
+    const touchesSharedRow = rowNumbers.some((rn) => otherDetail.querySelector(`tr[data-row-number="${rn}"]`));
+    if (!touchesSharedRow) return;
+    applyFreshRowsToGroupTable(otherRow, rowNumbers, byRowNumber);
+    updateGroupSummaryAfterApply(otherRow);
+  });
+}
+
+// Phần "ghi dữ liệu mới vào đúng các <tr> trong 1 bảng chi tiết" -- tách
+// riêng khỏi refreshHandledRowsInPlace() để dùng lại được cho CẢ khung vừa
+// Áp dụng LẪN các khung khác đang mở sẵn có chung dòng, mà chỉ cần 1 lần gọi
+// API (xem comment ở refreshHandledRowsInPlace()).
+function applyFreshRowsToGroupTable(row, rowNumbers, byRowNumber) {
   const detail = row.querySelector(".handling-detail");
   const dataColumns = getDataColumns();
   const isDuplicate = row.dataset.duplicateRow === "true";
@@ -1166,7 +1193,11 @@ async function refreshHandledRowsInPlace(row, rowNumbers) {
       (state.rowFindingsMap.get(rn) || []).some(
         (f) => f.column === row.dataset.column && f.noise_type === row.dataset.noiseType
       );
-    if (stillFlagged) return; // hiếm khi xảy ra -- giữ nguyên dòng để user thử xử lý lại
+    // Vẫn còn bị gắn cờ ĐÚNG loại lỗi của CHÍNH khung này (vd dòng này dính
+    // cả age lẫn gender, vừa xử lý xong age thì khung age đánh dấu "đã xử
+    // lý", nhưng khung gender vẫn phải giữ checkbox/dropdown hoạt động bình
+    // thường vì gender CHƯA được xử lý) -- không đánh dấu "Đã xử lý" vội.
+    if (stillFlagged) return;
     const cells = dataColumns
       .map((c) => `<td>${escapeHtml(String(freshRow[c] === undefined || freshRow[c] === null ? "" : freshRow[c]))}</td>`)
       .join("");
