@@ -259,6 +259,22 @@ $("upload-btn").addEventListener("click", async () => {
   state.columnConfig = {};
   state.headers.forEach((h) => (state.columnConfig[h] = defaultColumnConfig()));
   $("rules-list").innerHTML = ""; // reset rule liên cột khi upload file mới
+  state.hasWorkingCopy = false;
+  state.appliedGroups = new Set();
+
+  // Reset TOÀN BỘ state riêng của Class Noise khi upload file MỚI -- nếu
+  // không, cột đã tích (classFeatureColumns) hoặc cột nhãn (classLabelColumn)
+  // của file CŨ sẽ sót lại nguyên vẹn (vd "V44" của bộ dữ liệu thầy) và bị
+  // gửi nhầm lên server khi detect trên file MỚI, dù UI không hề hiện nó
+  // trong danh sách (chỉ các cột của file mới mới được vẽ ra) -- nhẹ thì bị
+  // chặn báo lỗi "cột không tồn tại", nặng hơn là ÂM THẦM dùng nhầm lựa chọn
+  // cũ nếu 2 file tình cờ trùng tên cột, cho kết quả sai mà không ai biết.
+  state.classLabelColumn = null;
+  state.classFeatureColumns = new Set();
+  state.classDiagnostics = null;
+  state.classFindings = [];
+  state.classFindingsPage = 1;
+  state.classFindingsFilterText = "";
 
   $("upload-status").textContent = `✅ Đã upload: ${data.row_count} dòng, ${data.columns.length} cột.`;
   unlockStep(2);
