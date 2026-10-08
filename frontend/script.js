@@ -1505,6 +1505,17 @@ $("class-label-select").addEventListener("change", (e) => {
   renderClassFeatureList();
 });
 
+// Nút "Tích tất cả"/"Bỏ tích tất cả" -- tiện cho file nhiều cột (vd Credit
+// Card Fraud 29 cột), đỡ phải bấm từng ô 1 như trước.
+$("class-feature-select-all").addEventListener("click", () => {
+  state.headers.filter((h) => h !== state.classLabelColumn).forEach((h) => state.classFeatureColumns.add(h));
+  renderClassFeatureList();
+});
+$("class-feature-select-none").addEventListener("click", () => {
+  state.classFeatureColumns.clear();
+  renderClassFeatureList();
+});
+
 $("class-feature-list").addEventListener("change", (e) => {
   const h = e.target.dataset.feature;
   if (!h) return;

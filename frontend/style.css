@@ -129,6 +129,9 @@ code {
 .hint-note { font-size: 12.5px; color: var(--ink-faint); margin-top: 12px; }
 .sub-section { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
 .sub-title { font-size: 14.5px; font-weight: 600; margin-bottom: 6px; }
+.sub-title-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.sub-title-row .sub-title { margin-bottom: 0; }
+.feature-bulk-actions { display: flex; gap: 8px; }
 .empty-state { font-size: 13.5px; color: var(--ink-faint); padding: 22px; text-align: center; border: 1px dashed var(--line-strong); border-radius: var(--radius-md); }
 
 /* ===== Buttons ===== */
@@ -137,6 +140,7 @@ code {
 .btn-primary { background: var(--signal); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--signal-dark); }
 .btn-ghost { background: transparent; border-color: var(--line-strong); color: var(--ink-dim); }
+.btn-small { padding: 5px 12px; font-size: 12px; }
 .btn-ghost:hover:not(:disabled) { border-color: var(--signal); color: var(--signal-dark); }
 .btn-icon { appearance: none; background: transparent; border: none; color: var(--ink-faint); cursor: pointer; padding: 6px; border-radius: var(--radius-sm); font-weight: 700; }
 .btn-icon:hover { background: var(--danger-soft); color: var(--danger); }
