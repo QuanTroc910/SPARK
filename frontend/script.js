@@ -1587,7 +1587,6 @@ function renderClassResults() {
   if (!diag) return;
 
   const diffPct = diag.cv_accuracy - diag.majority_baseline_accuracy;
-  const isWeak = diffPct <= 0.02; // ngưỡng cảnh báo: chênh lệch quá nhỏ so với baseline
 
   // "Trần" tối đa CÓ THỂ đạt được = 100% - baseline (accuracy không thể vượt
   // quá 100%) -- % trần cho biết model đã khai thác được bao nhiêu phần của
@@ -1596,6 +1595,13 @@ function renderClassResults() {
   const maxPossibleGap = 1 - diag.majority_baseline_accuracy;
   const ceilingPct = maxPossibleGap > 0 ? (diffPct / maxPossibleGap) * 100 : 0;
   const diffSign = diffPct > 0 ? "+" : "";
+
+  // "Yếu" = CẢ 2 điều kiện cùng đúng: điểm % thô nhỏ (<=2) VÀ tỉ lệ so với
+  // trần cũng nhỏ (<30%). Chỉ xét điểm % thô (như trước đây) sẽ bị "bẫy
+  // trần hẹp": baseline càng gần 100% (vd Credit Card Fraud 99.83%) thì dù
+  // model học RẤT TỐT, điểm % thô tối đa có thể đạt cũng chỉ còn vài phần
+  // trăm, khiến bị báo "yếu" oan dù % trần thực tế rất cao.
+  const isWeak = diffPct <= 0.02 && ceilingPct < 30;
 
   $("class-stats-grid").innerHTML = `
     <div class="stat-card">
@@ -1625,9 +1631,10 @@ function renderClassResults() {
   if (isWeak) {
     warnCard.hidden = false;
     warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
-      ⚠️ CV accuracy chỉ nhỉnh hơn (hoặc thấp hơn) baseline rất ít (chênh lệch ${(diffPct * 100).toFixed(2)} điểm %)
-      — model gần như không học được gì từ các cột đặc trưng đã chọn. Các dòng bị gắn cờ bên dưới RẤT KHÔNG
-      đáng tin, cân nhắc chọn lại cột đặc trưng khác trước khi kết luận.</p>`;
+      ⚠️ CV accuracy chỉ nhỉnh hơn (hoặc thấp hơn) baseline rất ít (chênh lệch ${(diffPct * 100).toFixed(2)} điểm %,
+      chỉ đạt ${ceilingPct.toFixed(1)}% mức trần tối đa có thể) — model gần như không học được gì từ các cột đặc
+      trưng đã chọn. Các dòng bị gắn cờ bên dưới RẤT KHÔNG đáng tin, cân nhắc chọn lại cột đặc trưng khác trước
+      khi kết luận.</p>`;
   } else {
     warnCard.hidden = true;
   }
