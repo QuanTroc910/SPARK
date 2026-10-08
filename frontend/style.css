@@ -220,12 +220,14 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 .feature-check-list .switch-row { margin-bottom: 0; }
 
 /* ===== Step 4: kết quả ===== */
-.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 22px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .stat-card { background: var(--surface-2); border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: var(--radius-md); padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
 .stat-value { font-size: 28px; font-weight: 600; }
 .stat-label { font-size: 12.5px; color: var(--ink-dim); }
+.stat-sub { font-size: 11.5px; color: var(--ink-dim); }
 .stat-amber { border-left-color: var(--amber-border); }
 .stat-crimson { border-left-color: var(--crimson-border); }
+.stat-teal { border-left-color: var(--teal-border); }
 
 /* ===== Biểu đồ phân bố loại noise (Bước 4) ===== */
 .chart-card { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 22px; background: var(--surface-2); }

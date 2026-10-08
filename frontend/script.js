@@ -1573,6 +1573,14 @@ function renderClassResults() {
   const diffPct = diag.cv_accuracy - diag.majority_baseline_accuracy;
   const isWeak = diffPct <= 0.02; // ngưỡng cảnh báo: chênh lệch quá nhỏ so với baseline
 
+  // "Trần" tối đa CÓ THỂ đạt được = 100% - baseline (accuracy không thể vượt
+  // quá 100%) -- % trần cho biết model đã khai thác được bao nhiêu phần của
+  // mức cải thiện tối đa lý thuyết, tránh bị đánh lừa bởi chênh lệch thô khi
+  // baseline đã gần 100% (xem giải thích đầy đủ đã trao đổi với người dùng).
+  const maxPossibleGap = 1 - diag.majority_baseline_accuracy;
+  const ceilingPct = maxPossibleGap > 0 ? (diffPct / maxPossibleGap) * 100 : 0;
+  const diffSign = diffPct > 0 ? "+" : "";
+
   $("class-stats-grid").innerHTML = `
     <div class="stat-card">
       <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
@@ -1580,7 +1588,16 @@ function renderClassResults() {
     </div>
     <div class="stat-card ${isWeak ? "stat-crimson" : ""}">
       <span class="stat-value mono">${(diag.cv_accuracy * 100).toFixed(2)}%</span>
-      <span class="stat-label">CV accuracy (baseline ${(diag.majority_baseline_accuracy * 100).toFixed(2)}%)</span>
+      <span class="stat-label">CV accuracy</span>
+    </div>
+    <div class="stat-card ${isWeak ? "stat-crimson" : ""}">
+      <span class="stat-value mono">${(diag.majority_baseline_accuracy * 100).toFixed(2)}%</span>
+      <span class="stat-label">Baseline (đoán bừa lớp đa số)</span>
+    </div>
+    <div class="stat-card ${isWeak ? "stat-crimson" : "stat-teal"}">
+      <span class="stat-value mono">${diffSign}${(diffPct * 100).toFixed(2)}</span>
+      <span class="stat-label">Chênh lệch (điểm %)</span>
+      <span class="stat-sub mono">${diffSign}${ceilingPct.toFixed(1)}% mức trần tối đa</span>
     </div>
     <div class="stat-card stat-amber">
       <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
