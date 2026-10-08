@@ -197,8 +197,8 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 .chip input { position: absolute; opacity: 0; width: 0; height: 0; }
 .chip:has(input:focus-visible) { outline: 2px solid var(--signal); outline-offset: 2px; }
 
-.param-panel { margin-top: 0; }
-.param-panel.is-open { margin-top: 9px; }
+.param-panel { display: none; margin-top: 0; }
+.param-panel.is-open { display: block; margin-top: 9px; }
 .param-panel > * { min-height: 0; }
 
 /* ===== Duplicate row ===== */
