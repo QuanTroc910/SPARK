@@ -12,6 +12,7 @@ import uuid
 from io import StringIO
 from pathlib import Path
 
+import pandas as pd
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 
@@ -36,6 +37,11 @@ from attribute_noise.cross_field_rules import FormulaError
 from attribute_noise.pipeline import NoiseFinding, detect_noise, get_flagged_rows, load_data
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
+from class_noise.feature_selection import (
+    filter_correlated,
+    rank_by_importance,
+    select_by_elbow,
+)
 
 app = Flask(__name__)
 
@@ -327,6 +333,85 @@ def class_noise_detect_api():
                 }
                 for f in result.findings
             ],
+        }
+    )
+
+
+def _is_mostly_numeric(series, min_ratio: float = 0.9) -> bool:
+    """Coi 1 cột là "đủ số" để làm candidate cho Feature Importance nếu ít
+    nhất `min_ratio` (mặc định 90%) các ô KHÔNG RỖNG của nó ép được thành số.
+
+    Cần lọc TRƯỚC khi đưa vào rank_by_importance(), vì hàm đó yêu cầu MỌI
+    candidate đều phải là số TRÊN CÙNG 1 DÒNG mới tính dòng đó "dùng được" --
+    nếu lỡ đưa nguyên 1 cột CHỮ (vd "workclass") vào làm candidate, cột đó
+    luôn luôn NaN sau khi ép số, khiến TOÀN BỘ dòng bị loại (0 dòng dùng
+    được), lỗi ngay từ bước train Random Forest.
+    """
+    non_empty = series.astype(str).str.strip()
+    non_empty = non_empty[non_empty != ""]
+    if non_empty.empty:
+        return False
+    numeric = pd.to_numeric(non_empty, errors="coerce")
+    return numeric.notna().mean() >= min_ratio
+
+
+@app.route("/api/class-noise/reduce-features", methods=["POST"])
+def class_noise_reduce_features_api():
+    """Bước 3 (class), nút "🪄 Giảm cột tự động": chạy 2 bước giảm cột TRƯỚC
+    khi người dùng tick tay đặc trưng (xem class_noise/feature_selection.py):
+      Bước 1 -- rank_by_importance() + select_by_elbow(): xếp hạng TẤT CẢ cột
+        (trừ cột đang là nhãn) theo mức liên quan tới nhãn, tự tìm điểm "gãy
+        khúc" để giữ lại nhóm cột quan trọng nhất -- KHÔNG cần chọn tay % hay
+        số cột nào (Elbow Method, xem docstring select_by_elbow()).
+      Bước 2 -- filter_correlated(): trong nhóm đó, loại bớt cột THỪA THÔNG
+        TIN LẪN NHAU (tương quan >= 0.8 giữa 2 cột với nhau).
+
+    Route này CHỈ TÍNH TOÁN và trả kết quả, KHÔNG tự áp dụng xuống cấu hình
+    detect thật -- frontend nhận về rồi TỰ TICK lại danh sách checkbox sẵn có
+    (người dùng vẫn sửa tay thêm được, không bị khoá cứng theo kết quả này).
+    """
+    payload = request.get_json()
+    file_id = payload.get("file_id")
+    df = UPLOADED_FILES.get(file_id)
+    if df is None:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+
+    label_column = payload.get("label_column")
+    if not label_column:
+        return jsonify({"error": "Thiếu label_column"}), 400
+    if label_column not in df.columns:
+        return jsonify({"error": f"Cột không tồn tại trong file: {label_column}"}), 400
+
+    # Chỉ lấy cột ĐỦ SỐ làm candidate -- loại tự động các cột chữ (vd
+    # "workclass", "occupation"...), khớp đúng lời hứa đã ghi trong mô tả
+    # panel ("cột không ép được thành số sẽ tự động bị loại").
+    candidate_columns = [
+        c for c in df.columns if c != label_column and _is_mostly_numeric(df[c])
+    ]
+    if not candidate_columns:
+        return jsonify(
+            {"error": "Không có cột số nào để chạy giảm cột (toàn bộ cột còn lại đều là cột chữ)"}
+        ), 400
+
+    n_estimators = int(payload.get("n_estimators") or 300)
+
+    try:
+        ranked = rank_by_importance(
+            df,
+            label_column=label_column,
+            candidate_columns=candidate_columns,
+            n_estimators=n_estimators,
+        )
+        after_importance = select_by_elbow(ranked)
+        after_correlation = filter_correlated(df, after_importance, threshold=0.8)
+    except (ValueError, KeyError) as exc:
+        return jsonify({"error": f"Không chạy được với cấu hình này: {exc}"}), 400
+
+    return jsonify(
+        {
+            "ranked": [{"column": r.column, "importance": r.importance} for r in ranked],
+            "after_importance": after_importance,
+            "after_correlation": after_correlation,
         }
     )
 

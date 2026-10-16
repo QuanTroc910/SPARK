@@ -141,6 +141,20 @@
         </div>
 
         <div class="sub-section">
+          <h3 class="sub-title">🪄 Giảm cột tự động (tuỳ chọn)</h3>
+          <p class="panel-desc">
+            Tự xếp hạng mức liên quan tới nhãn (Feature Importance), tự tìm điểm "gãy" để giữ nhóm cột quan
+            trọng nhất, rồi lọc bớt cột thừa thông tin lẫn nhau (tương quan ≥ 0.8) — không cần tự chọn số cột
+            hay ngưỡng nào tay. Kết quả sẽ tự tick vào danh sách bên dưới, vẫn sửa tay thêm được.
+          </p>
+          <div class="panel-actions">
+            <button class="btn btn-ghost" id="class-reduce-btn" type="button">🪄 Chạy giảm cột tự động</button>
+            <span class="status-text" id="class-reduce-status"></span>
+          </div>
+          <div id="class-reduce-result" hidden></div>
+        </div>
+
+        <div class="sub-section">
           <div class="sub-title-row">
             <h3 class="sub-title">Cột đặc trưng (feature)</h3>
             <div class="feature-bulk-actions">

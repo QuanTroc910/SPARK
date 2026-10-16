@@ -275,6 +275,8 @@ $("upload-btn").addEventListener("click", async () => {
   state.classFindings = [];
   state.classFindingsPage = 1;
   state.classFindingsFilterText = "";
+  $("class-reduce-result").hidden = true;
+  $("class-reduce-result").innerHTML = "";
 
   $("upload-status").textContent = `✅ Đã upload: ${data.row_count} dòng, ${data.columns.length} cột.`;
   unlockStep(2);
@@ -1503,6 +1505,10 @@ $("class-label-select").addEventListener("change", (e) => {
   state.classLabelColumn = e.target.value;
   state.classFeatureColumns.delete(e.target.value); // nhãn không được trùng đặc trưng
   renderClassFeatureList();
+  // Đổi nhãn thì kết quả "Giảm cột tự động" cũ (tính theo nhãn CŨ) không còn
+  // đúng nữa -- ẩn đi, tránh hiểu nhầm là kết quả ứng với nhãn đang chọn.
+  $("class-reduce-result").hidden = true;
+  $("class-reduce-result").innerHTML = "";
 });
 
 // Nút "Tích tất cả"/"Bỏ tích tất cả" -- tiện cho file nhiều cột (vd Credit
@@ -1521,6 +1527,96 @@ $("class-feature-list").addEventListener("change", (e) => {
   if (!h) return;
   if (e.target.checked) state.classFeatureColumns.add(h);
   else state.classFeatureColumns.delete(h);
+});
+
+// Biểu đồ cột ngang cho kết quả "Giảm cột tự động" -- tái dùng ĐÚNG pattern
+// .chart-row/.chart-bar-fill của renderNoiseTypeChart() ở Bước 4, không viết
+// cơ chế vẽ mới. Dùng 1 MÀU DUY NHẤT (--signal) nhưng 3 MỨC ĐỘ ĐẬM khác nhau
+// để thể hiện cột đó "đi được bao xa" qua pipeline 2 bước -- đậm nhất (1.0) =
+// qua được cả 2 bước (giữ lại thật sự); vừa (0.5) = qua Bước 1 nhưng bị loại
+// ở Bước 2 (thừa thông tin với cột khác); nhạt nhất (0.18) = bị loại ngay
+// Bước 1 (ít liên quan tới nhãn).
+function renderFeatureReductionChart(ranked, afterImportance, afterCorrelation) {
+  const wrap = $("class-reduce-result");
+  wrap.hidden = false;
+  const maxImportance = ranked[0]?.importance || 1;
+
+  const summary = `
+    <p class="hint-note">
+      <strong>${ranked.length}</strong> cột gốc → giữ <strong>${afterImportance.length}</strong> cột
+      (Bước 1 — Feature Importance + Elbow) → còn <strong>${afterCorrelation.length}</strong> cột
+      (Bước 2 — lọc tương quan ≥ 0.8). Đã tự tick ${afterCorrelation.length} cột này ở danh sách bên dưới.
+    </p>`;
+
+  const rows = ranked
+    .map((r) => {
+      const pct = Math.max(4, Math.round((r.importance / maxImportance) * 100));
+      let opacity = 0.18;
+      if (afterCorrelation.includes(r.column)) opacity = 1;
+      else if (afterImportance.includes(r.column)) opacity = 0.5;
+      return `
+        <div class="chart-row">
+          <span class="chart-label mono">${escapeHtml(r.column)}</span>
+          <span class="chart-bar-track"><span class="chart-bar-fill" style="width:${pct}%; background: var(--signal); opacity: ${opacity};"></span></span>
+          <span class="chart-count">${(r.importance * 100).toFixed(1)}%</span>
+        </div>`;
+    })
+    .join("");
+
+  wrap.innerHTML = `${summary}<div class="chart-card">${rows}</div>`;
+}
+
+$("class-reduce-btn").addEventListener("click", async () => {
+  const btn = $("class-reduce-btn");
+  const statusEl = $("class-reduce-status");
+
+  if (!state.classLabelColumn) {
+    alert("Hãy chọn cột nhãn trước.");
+    return;
+  }
+
+  setButtonLoading(btn, true, "Đang chạy...", "🪄 Chạy giảm cột tự động");
+  statusEl.textContent = "Đang train Random Forest để xếp hạng cột, có thể mất chút thời gian…";
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/class-noise/reduce-features`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        file_id: state.fileId,
+        label_column: state.classLabelColumn,
+        n_estimators: parseInt($("class-n-estimators").value, 10) || 300,
+      }),
+    });
+  } catch (err) {
+    alert("Không gọi được backend.");
+    setButtonLoading(btn, false, "Đang chạy...", "🪄 Chạy giảm cột tự động");
+    statusEl.textContent = "";
+    return;
+  }
+  setButtonLoading(btn, false, "Đang chạy...", "🪄 Chạy giảm cột tự động");
+  statusEl.textContent = "";
+
+  if (!response.ok) {
+    let message = "Giảm cột thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      /* giữ message mặc định */
+    }
+    alert(message);
+    return;
+  }
+
+  const data = await response.json();
+
+  // Tự tick lại danh sách feature theo đúng kết quả Bước 2 -- người dùng vẫn
+  // sửa tay thêm được sau đó, không bị khoá cứng theo kết quả tự động này.
+  state.classFeatureColumns = new Set(data.after_correlation);
+  renderClassFeatureList();
+  renderFeatureReductionChart(data.ranked, data.after_importance, data.after_correlation);
 });
 
 $("class-detect-btn").addEventListener("click", async () => {
