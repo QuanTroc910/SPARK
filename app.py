@@ -38,7 +38,9 @@ from attribute_noise.pipeline import NoiseFinding, detect_noise, get_flagged_row
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
 from class_noise.feature_selection import (
+    cap_outliers,
     filter_correlated,
+    log_transform,
     rank_by_importance,
     select_by_elbow,
 )
@@ -265,6 +267,12 @@ def class_noise_detect_api():
     CHỈ "phiên dịch" JSON <-> Python object + JSON-hoá kết quả, không có logic
     detect nào viết thêm ở đây.
 
+    **MỚI**: trước khi train, LUÔN tự động chạy Bước 3 của pipeline giảm cột
+    (`cap_outliers()` + `log_transform()`, xem class_noise/feature_selection.py)
+    lên feature_columns -- cap outlier về biên IQR + biến đổi logarit cho cột
+    không có giá trị âm. Không phải tuỳ chọn bật/tắt vì 2 bước này chỉ SỬA GIÁ
+    TRỊ (không xoá dòng/cột), không có rủi ro mất dữ liệu.
+
     CẢNH BÁO quan trọng cho người chạy thử: với file lớn (hàng trăm nghìn
     dòng) việc train Random Forest qua Cross-Validation có thể mất VÀI PHÚT.
     Route này chạy ĐỒNG BỘ (block luôn request), không có thanh tiến trình --
@@ -314,8 +322,16 @@ def class_noise_detect_api():
         cv_folds=int(payload.get("cv_folds") or 5),
     )
 
+    # Bước 3 (xem class_noise/feature_selection.py + CLAUDE.md mục 9): LUÔN áp
+    # dụng cap outlier (về biên IQR) + log-transform lên feature_columns TRƯỚC
+    # khi train -- không phải tuỳ chọn, vì đây là bước làm sạch mặc định theo
+    # đúng quy trình thầy hướng dẫn (outlier/log-transform không xoá dòng/cột
+    # nào, chỉ sửa GIÁ TRỊ, nên không có rủi ro mất dữ liệu khi luôn bật).
+    cleaned_df = cap_outliers(df, feature_columns)
+    cleaned_df = log_transform(cleaned_df, feature_columns)
+
     try:
-        result = detect_class_noise(df, config)
+        result = detect_class_noise(cleaned_df, config)
     except (ValueError, KeyError) as exc:
         # Hay gặp nhất: 1 lớp có quá ít dòng dùng được so với cv_folds (vd chọn
         # cv_folds=5 nhưng lớp hiếm chỉ có 3 dòng sau khi loại bỏ dòng hỏng) --

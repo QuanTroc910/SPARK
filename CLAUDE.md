@@ -76,8 +76,16 @@ tới khi có nhu cầu đổi tên repo thật sự.
     bằng Elbow Method — tìm vị trí tỉ lệ `importance[i]/importance[i-1]`
     THẤP NHẤT, KHÔNG cần tự chọn tay % hay số cột nào) + `filter_correlated()`
     (Bước 2 — loại cột THỪA THÔNG TIN LẪN NHAU, tương quan ≥ 0.8 giữa 2 cột
-    CÒN LẠI với nhau, không liên quan nhãn). Bước 3 của quy trình thầy gợi ý
-    (kiểm tra outlier + biến đổi logarit trên cột cuối cùng) CHƯA code.
+    CÒN LẠI với nhau, không liên quan nhãn) + `cap_outliers()` (Bước 3a —
+    cap outlier về biên IQR/Z-score, TÁI DÙNG `detect_outlier()` +
+    `apply_handling()` có sẵn ở `attribute_noise/`; BỎ QUA cột có IQR/độ
+    lệch chuẩn SUY BIẾN = 0 — lỗi thật đã gặp: `capital.gain`/`capital.loss`
+    của Adult Income "zero-inflated" (Q1=Q3=0) khiến mọi giá trị khác 0 bị
+    ép về 0, xoá sạch tín hiệu quan trọng nhất, làm CV accuracy tụt DƯỚI
+    baseline — đã fix bằng cách bỏ qua cột suy biến thay vì cap sai) +
+    `log_transform()` (Bước 3b — `ln(x+1)` cho cột KHÔNG có giá trị âm, giữ
+    nguyên cột có âm; bản đầu lặp Python từng dòng GẦN TREO MÁY trên 284k
+    dòng, đã sửa sang gán vector hoá, còn 0.53s).
   Dùng lại `attribute_noise/pipeline.py::load_data()` để đọc file (không
   viết lại hàm đọc CSV/Excel riêng). Có `demo_class_noise.py` ở gốc repo để
   chạy thử CLI, và 1 loạt file `demo_*.py` KHÁC (`demo_model_don_gian.py`,
@@ -126,7 +134,14 @@ tới khi có nhu cầu đổi tên repo thật sự.
     margin giảm dần). CHẠY ĐỒNG BỘ (block request), có thể mất VÀI PHÚT với
     file lớn — không có thanh tiến trình, chấp nhận được cho quy mô demo
     khoá luận. `app.run(..., threaded=True)` để request này không chặn các
-    request khác trong lúc chờ.
+    request khác trong lúc chờ. Validate `feature_columns` đều "đủ số"
+    (`_is_mostly_numeric()`) TRƯỚC khi chạy, báo lỗi nêu đúng tên cột chữ
+    nếu sai (cùng lỗi "0 dòng dùng được" như `reduce-features`, lúc đầu CHỈ
+    fix ở `reduce-features`, sau phát hiện endpoint này cũng dính y hệt vì
+    người dùng tick tay feature chữ được, đã fix bổ sung). **LUÔN** chạy
+    `cap_outliers()` + `log_transform()` (Bước 3, xem `feature_selection.py`)
+    lên `feature_columns` TRƯỚC khi train — không phải tuỳ chọn, vì 2 hàm
+    này chỉ sửa giá trị, không xoá dòng/cột.
   - `POST /api/class-noise/reduce-features` — **MỚI**: chạy
     `rank_by_importance()` → `select_by_elbow()` → `filter_correlated()`
     (xem `class_noise/feature_selection.py` ở mục kiến trúc trên) trên TẤT
@@ -221,7 +236,10 @@ tới khi có nhu cầu đổi tên repo thật sự.
     thì ẩn kết quả cũ (tránh hiểu nhầm là ứng với nhãn/file đang chọn). Sau
     đó mới tới danh sách checkbox chọn `feature_columns` (loại trừ cột đang
     là nhãn), tham số nâng cao `n_estimators`/`cv_folds` (mặc định 300/5,
-    khớp `ClassNoiseConfig`).
+    khớp `ClassNoiseConfig`). `panel-desc` đầu Bước 3 có ghi rõ: các cột đặc
+    trưng sẽ TỰ ĐỘNG được cap outlier + log-transform (Bước 3 ở mục 9) ngay
+    lúc bấm "Phát hiện Class Noise" — không phải khối riêng, không cần bấm
+    thêm nút nào, chỉ 1 dòng mô tả cho người dùng biết việc đang xảy ra.
   - Bước 4 (class): 3 thẻ thống kê (dòng dùng được, CV accuracy so baseline,
     số dòng nghi ngờ) + khung CẢNH BÁO màu đỏ nếu chênh lệch accuracy-baseline
     ≤ 2 điểm % (`isWeak` trong `renderClassResults()`) + bảng precision/
@@ -351,10 +369,18 @@ tới khi có nhu cầu đổi tên repo thật sự.
    - Nút "Xuất file CSV" cuối Bước 5 CHỈ đóng gói bản đang làm việc hiện tại
      (`POST /api/export-working`) để tải về — không tự chạy thêm xử lý nào.
 
-9. **Giảm số cột (feature selection) cho Class Noise — ĐÃ CODE XONG Bước 1+2
-   (`feature_selection.py` + `POST /api/class-noise/reduce-features` +
-   khối "Giảm cột tự động" ở Bước 3 FE), Bước 3 (outlier + log-transform)
-   CHƯA làm:**
+9. **Giảm số cột (feature selection) cho Class Noise — ĐÃ CODE XONG ĐỦ CẢ 3
+   BƯỚC (`feature_selection.py`), ĐÃ NỐI VÀO WEB:**
+   - Bước 1+2 (`rank_by_importance`/`select_by_elbow`/`filter_correlated`):
+     nối qua `POST /api/class-noise/reduce-features` + khối "Giảm cột tự
+     động" ở Bước 3 FE (TUỲ CHỌN, người dùng bấm nút, vẫn sửa tay thêm được).
+   - Bước 3 (`cap_outliers`/`log_transform`): nối TRỰC TIẾP vào
+     `POST /api/class-noise/detect` — LUÔN chạy tự động (KHÔNG phải tuỳ
+     chọn/nút riêng), vì 2 hàm này chỉ sửa GIÁ TRỊ chứ không xoá dòng/cột
+     nào nên không có rủi ro mất dữ liệu khi luôn bật. Áp dụng lên ĐÚNG
+     `feature_columns` mà request gửi lên tại thời điểm detect (không phải
+     cố định theo kết quả "Giảm cột tự động" trước đó), nên vẫn đúng dù
+     người dùng tick tay thêm/bớt cột sau khi chạy giảm cột tự động.
    - Nguồn gốc yêu cầu: sau buổi báo cáo, thầy nói Attribute noise được
      rồi nhưng Class noise CHƯA, bước đầu phải giảm số biến — đúng với phát
      hiện đã có từ trước (dữ liệu thầy chỉ 3 đặc trưng nên model học kém).
@@ -415,6 +441,36 @@ tới khi có nhu cầu đổi tên repo thật sự.
      nội bộ các cột gần ngang nhau bị xáo trộn) — chọn 300 vì nhất quán với
      số cây dùng ở bước detect chính, dễ giải thích hơn là 2 con số khác
      nhau cho 2 chỗ train Random Forest trong cùng hệ thống.
+   - **Thứ tự nội bộ Bước 3 (cap outlier TRƯỚC, log-transform SAU) + KHÔNG
+     đổi chỗ Bước 3 lên trước Bước 2 — đã cân nhắc kỹ, có đánh đổi thật ở cả
+     2 hướng:** nếu log TRƯỚC cap outlier thì tránh được IQR suy biến trên
+     dữ liệu lệch nặng, nhưng lại khó phát hiện lỗi nhập liệu thật hơn (giá
+     trị sai bị log "nén" bớt độ cực đoan, dễ lọt lưới outlier detector) —
+     chọn ưu tiên bắt lỗi nhập liệu thật (cap trước) vì hậu quả bỏ sót lỗi
+     thật nguy hiểm hơn hậu quả cap nhầm vài giá trị lệch-nhưng-hợp-lệ (cap
+     chỉ kéo về biên, không xoá mất dữ liệu). Đổi chỗ với Bước 2 (lọc tương
+     quan) thì CÀNG không nên — thầy đã mô tả thứ tự rõ ràng ("đầu tiên...
+     bước tiếp theo... công việc CUỐI CÙNG là log-transform"), không phải
+     chỗ mơ hồ để tự quyết, nên để nguyên, khác với thứ tự NỘI BỘ bước 3 là
+     chỗ thầy không chỉ định rõ.
+   - **LỖI NGHIÊM TRỌNG đã gặp + đã fix khi nối Bước 3 vào
+     `/api/class-noise/detect` (luôn bật tự động)**: `cap_outliers()` lúc
+     đầu áp dụng mù quáng IQR cho MỌI cột, kể cả cột có IQR SUY BIẾN (Q1=Q3,
+     vd `capital.gain`/`capital.loss` của Adult Income "zero-inflated" —
+     đa số = 0) — biên cap suy biến thành `[0, 0]`, khiến MỌI giá trị khác 0
+     (chính là tín hiệu quan trọng nhất của 2 cột này) bị ép về 0, xoá sạch
+     2.712/1.519 giá trị có ý nghĩa thật. Hậu quả đo được: CV accuracy tụt
+     từ ~78% xuống **73.11%, THẤP HƠN CẢ baseline (75.92%)** — tức là sau
+     "làm sạch", model tệ hơn cả đoán bừa. Đã fix: `cap_outliers()` giờ
+     BỎ QUA cột có IQR (hoặc độ lệch chuẩn, nếu dùng Z-score) = 0, không cap
+     gì cho cột đó — verify lại CV accuracy về 77.8% (trên baseline, hợp lý
+     trở lại). Bài học: PHẢI test kỹ với dữ liệu có đặc tính "lệch/suy biến"
+     (zero-inflated, ít giá trị khác nhau...) trước khi coi 1 phép biến đổi
+     thống kê là "luôn an toàn" — đây là LẦN THỨ 2 vấp phải vấn đề IQR suy
+     biến trên CHÍNH 2 cột này (lần đầu là lúc cân nhắc có nên chạy Attribute
+     Noise outlier-cleanup cho Adult Income hay không, đã kết luận KHÔNG nên
+     vì lý do tương tự — nhưng lúc nối Bước 3 vào đây lại quên mất bài học
+     cũ, phải phát hiện lại lần 2 bằng thực nghiệm).
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -457,11 +513,12 @@ tới khi có nhu cầu đổi tên repo thật sự.
       `income`, đúng 5/6 cột số được tự động tick) + verify kỹ bằng script
       riêng (sanity check cột trùng lặp, so sánh 200/300/500 cây, biểu đồ
       Pareto) trên Credit Card Fraud.
-- [ ] Class noise — GIẢM CỘT, Bước 3 còn thiếu (mục 9): kiểm tra outlier +
-      biến đổi logarit trên các cột CUỐI CÙNG sau khi đã giảm xong (outlier
-      có thể tái dùng detector sẵn có ở `attribute_noise/`, log-transform
-      cần viết mới). Nên làm NGAY SAU `filter_correlated()`, TRƯỚC khi đưa
-      vào Confident Learning.
+- [x] Class noise — GIẢM CỘT, Bước 3 (mục 9): `cap_outliers()` +
+      `log_transform()` trong `feature_selection.py`, nối TRỰC TIẾP vào
+      `POST /api/class-noise/detect` (LUÔN chạy tự động, không phải nút
+      riêng). Đã test qua HTTP thật + bắt được VÀ FIX 1 lỗi nghiêm trọng
+      (cap outlier xoá sạch tín hiệu `capital.gain`/`capital.loss` do IQR
+      suy biến, CV accuracy từng tụt dưới cả baseline — xem chi tiết mục 9).
 - [ ] Vẫn CHƯA có file gốc ~35 cột thật của thầy (đang chờ xin) — mọi kiểm
       chứng ở mục 9 mới chạy trên Credit Card Fraud/Adult Income (dữ liệu
       thay thế tạm thầy đồng ý dùng), chưa chạy được trên đúng dữ liệu mục

@@ -156,9 +156,23 @@ def cap_outliers(
     tìm ô outlier + `apply_handling()` (attribute_noise/attribute_handling.py)
     với action `CAP_TO_RANGE` để cap -- không viết lại công thức IQR/Z-score
     lần thứ 2, đúng tinh thần "tái dùng" đã áp dụng xuyên suốt dự án.
+
+    BỎ QUA cột có IQR/độ lệch chuẩn SUY BIẾN (= 0) -- LỖI THẬT đã gặp khi
+    test: `capital.gain`/`capital.loss` của Adult Income có Q1=Q3=0 (đa số
+    giá trị = 0, "zero-inflated"), nên biên cap = [0, 0], khiến MỌI giá trị
+    khác 0 (chính là tín hiệu quan trọng nhất của 2 cột này) bị ép về 0 --
+    xoá sạch 2.712/1.519 giá trị có ý nghĩa thật, làm CV accuracy tụt xuống
+    DƯỚI CẢ baseline. Cột nào rơi vào trường hợp này thì GIỮ NGUYÊN, không
+    cap gì cả -- an toàn hơn cap sai.
     """
     result = df.copy()
     for col in columns:
+        numeric = pd.to_numeric(result[col], errors="coerce")
+        valid = numeric.dropna()
+        spread = valid.std() if outlier_method == "zscore" else valid.quantile(0.75) - valid.quantile(0.25)
+        if spread == 0:
+            continue  # IQR/std suy biến -> không cap được an toàn, bỏ qua cột này
+
         cfg = ColumnNoiseConfig(
             column=col,
             dtype=ColumnDType.FLOAT,

@@ -132,7 +132,9 @@
         <p class="panel-desc">
           Chọn 1 cột làm <strong>nhãn</strong> (label) và các cột <strong>số</strong> làm đặc trưng (feature)
           để huấn luyện Random Forest + Confident Learning. Cột không ép được thành số sẽ tự động bị loại
-          khỏi lúc huấn luyện, không cần lọc tay trước.
+          khỏi lúc huấn luyện, không cần lọc tay trước. Trước khi train, các cột đặc trưng cũng sẽ TỰ ĐỘNG
+          được cap outlier (kéo giá trị quá lệch về biên IQR) + biến đổi logarit (cho cột không có giá trị
+          âm) — không cần làm gì thêm, không xoá mất dữ liệu nào.
         </p>
 
         <div class="field field-grow">
