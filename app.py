@@ -290,6 +290,23 @@ def class_noise_detect_api():
     if missing_cols:
         return jsonify({"error": f"Cột không tồn tại trong file: {', '.join(missing_cols)}"}), 400
 
+    # Nếu lỡ chọn 1 cột CHỮ làm đặc trưng, _prepare_usable_subset() trong
+    # confident_learning.py sẽ ép TOÀN BỘ dòng thành NaN ở đúng cột đó (vì cột
+    # chữ không ép được thành số), khiến KHÔNG CÒN DÒNG NÀO dùng được -- lỗi
+    # thật đã gặp khi test: sklearn raise ra thông báo rất khó hiểu ("Found
+    # array with 0 sample(s)..."). Validate rõ ràng TRƯỚC khi chạy, trả lỗi
+    # nêu đúng tên cột, để người dùng biết ngay cần bỏ tick cột nào.
+    non_numeric_cols = [c for c in feature_columns if not _is_mostly_numeric(df[c])]
+    if non_numeric_cols:
+        return jsonify(
+            {
+                "error": (
+                    "Cột đặc trưng phải là cột SỐ -- các cột sau là cột CHỮ, "
+                    f"không dùng được: {', '.join(non_numeric_cols)}"
+                )
+            }
+        ), 400
+
     config = ClassNoiseConfig(
         label_column=label_column,
         feature_columns=feature_columns,
