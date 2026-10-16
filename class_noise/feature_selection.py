@@ -75,7 +75,7 @@ def rank_by_importance(
 
 def select_top_features(
     ranked: list[FeatureRanking],
-    cumulative_target: float = 0.75,
+    cumulative_target: float = 0.90,
     max_count: int = 10,
 ) -> list[str]:
     """Chọn ra danh sách cột GIỮ LẠI sau Bước 1, theo ngưỡng % TÍCH LUỸ --
@@ -86,12 +86,13 @@ def select_top_features(
     tập trung vào vài cột đầu.
 
     Duyệt từ cột quan trọng nhất trở xuống, CỘNG DỒN importance, dừng lại
-    ngay khi: (a) tổng đã đạt >= cumulative_target (mặc định 75% -- chọn vì
-    đây đúng là mức % mà 8 cột đầu của Credit Card Fraud đạt được, tức là
-    ngưỡng này tái lập đúng kết quả "tầm 8 cột" thầy gợi ý trên bộ dữ liệu đã
-    thử nghiệm), HOẶC (b) đã lấy đủ `max_count` cột (chặn trần an toàn, phòng
-    trường hợp importance dàn trải quá đều khiến cộng dồn mãi không tới
-    ngưỡng, lấy quá nhiều thì mất ý nghĩa "giảm cột").
+    ngay khi: (a) tổng đã đạt >= cumulative_target (mặc định 90% -- mượn Ý
+    TƯỞNG từ quy ước PCA "giữ đủ thành phần giải thích 90-95% biến thiên dữ
+    liệu", là quy ước THẬT, có trích dẫn được, áp dụng tương tự ở đây: giữ
+    đủ cột để tổng importance đạt 90%, KHÔNG phải dò ngược để khớp 1 số
+    lượng cột có sẵn), HOẶC (b) đã lấy đủ `max_count` cột (chặn trần an
+    toàn, phòng trường hợp importance dàn trải quá đều khiến cộng dồn mãi
+    không tới ngưỡng, lấy quá nhiều thì mất ý nghĩa "giảm cột").
     """
     kept: list[str] = []
     cumulative = 0.0
