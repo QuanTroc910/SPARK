@@ -188,6 +188,10 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 .direction-card h3 { font-size: 15.5px; font-weight: 600; margin-bottom: 6px; }
 .direction-card p { font-size: 13px; color: var(--ink-dim); }
 .badge-soon { position: absolute; top: 16px; right: 16px; font-size: 11px; font-weight: 600; color: var(--amber-text); background: var(--amber-soft); border-radius: 999px; padding: 3px 9px; }
+/* 3 thẻ phương pháp Class Noise (Distance/Single/Ensemble) -- tái dùng CSS
+   .direction-card ở trên, chỉ đổi số cột lưới từ 2 sang 3. */
+.method-grid { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 720px) { .method-grid { grid-template-columns: 1fr; } }
 
 /* ===== Step 3: cấu hình noise theo cột ===== */
 .col-list { display: flex; flex-direction: column; gap: 12px; }

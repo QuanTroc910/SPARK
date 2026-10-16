@@ -124,7 +124,16 @@ const state = {
   // attribute ở trên vì cấu trúc dữ liệu hoàn toàn khác) ----
   classLabelColumn: null,
   classFeatureColumns: new Set(),
+  // "distance_based" | "single_learning" | "ensemble_based" (chưa khả dụng) --
+  // chọn ở Bước 2 ngay sau khi bấm thẻ Class Noise, xem Bảng 6 Gupta & Gupta
+  // 2019 (3 nhóm phương pháp phát hiện class noise).
+  classMethod: null,
   classDiagnostics: null,
+  // Method ĐÃ DÙNG để tạo ra classDiagnostics/classFindings hiện tại -- tách
+  // riêng khỏi classMethod (lựa chọn Ở BƯỚC 2) vì classMethod có thể bị đổi
+  // sau khi đã có kết quả cũ (chưa detect lại), renderClassResults() phải
+  // render theo đúng method CỦA KẾT QUẢ đang có, không phải lựa chọn hiện tại.
+  classResultMethod: null,
   classFindings: [],
   classFindingsPage: 1,
   classFindingsPerPage: 20,
@@ -271,12 +280,16 @@ $("upload-btn").addEventListener("click", async () => {
   // cũ nếu 2 file tình cờ trùng tên cột, cho kết quả sai mà không ai biết.
   state.classLabelColumn = null;
   state.classFeatureColumns = new Set();
+  state.classMethod = null;
   state.classDiagnostics = null;
+  state.classResultMethod = null;
   state.classFindings = [];
   state.classFindingsPage = 1;
   state.classFindingsFilterText = "";
   $("class-reduce-result").hidden = true;
   $("class-reduce-result").innerHTML = "";
+  $("class-method-section").hidden = true;
+  document.querySelectorAll("#class-method-grid .direction-card").forEach((c) => c.classList.remove("is-selected"));
 
   $("upload-status").textContent = `✅ Đã upload: ${data.row_count} dòng, ${data.columns.length} cột.`;
   unlockStep(2);
@@ -284,17 +297,34 @@ $("upload-btn").addEventListener("click", async () => {
 });
 
 // ====== BƯỚC 2: chọn hướng xử lý ======
-document.querySelectorAll(".direction-card").forEach((card) => {
+function updateContinueStep2Button() {
+  const ready = state.direction === "attribute" || (state.direction === "class" && state.classMethod);
+  $("continue-step2-btn").disabled = !ready;
+}
+document.querySelectorAll(".direction-grid:not(#class-method-grid) .direction-card").forEach((card) => {
   card.addEventListener("click", () => {
     if (card.classList.contains("is-disabled")) return;
-    document.querySelectorAll(".direction-card").forEach((c) => c.classList.remove("is-selected"));
+    document.querySelectorAll(".direction-grid:not(#class-method-grid) .direction-card").forEach((c) => c.classList.remove("is-selected"));
     card.classList.add("is-selected");
     state.direction = card.dataset.direction;
-    $("continue-step2-btn").disabled = false;
+    // Chỉ hướng Class Noise mới cần chọn thêm phương pháp (Bảng 6, Gupta &
+    // Gupta 2019) -- Attribute Noise giữ nguyên luồng cũ, không có bước này.
+    $("class-method-section").hidden = state.direction !== "class";
+    updateContinueStep2Button();
+  });
+});
+document.querySelectorAll("#class-method-grid .direction-card").forEach((card) => {
+  card.addEventListener("click", () => {
+    if (card.classList.contains("is-disabled")) return;
+    document.querySelectorAll("#class-method-grid .direction-card").forEach((c) => c.classList.remove("is-selected"));
+    card.classList.add("is-selected");
+    state.classMethod = card.dataset.method;
+    updateContinueStep2Button();
   });
 });
 $("continue-step2-btn").addEventListener("click", () => {
   if (!state.direction) return;
+  if (state.direction === "class" && !state.classMethod) return;
   unlockStep(3);
   if (state.direction === "attribute") renderColumnList();
   goStep(3); // goStep() tự gọi toggleStep3Direction() -> dựng form class nếu cần
@@ -1460,12 +1490,18 @@ $("apply-handling-btn").addEventListener("click", async () => {
 // ================================================================
 
 // ---- Bước 3: chọn nhãn + đặc trưng ----
+const CLASS_METHOD_LABELS = {
+  distance_based: "Distance-based (Mutual k-NN)",
+  single_learning: "Single learning-based (Confident Learning + Random Forest)",
+  ensemble_based: "Ensemble-based",
+};
+
 function toggleStep3Direction() {
   const isClass = state.direction === "class";
   $("panel-3-attribute").hidden = isClass;
   $("panel-3-class").hidden = !isClass;
   $("panel-3-title").textContent = isClass
-    ? "Bước 3: Chọn nhãn & đặc trưng"
+    ? `Bước 3: Chọn nhãn & đặc trưng — ${CLASS_METHOD_LABELS[state.classMethod] || ""}`
     : "Bước 3: Cấu hình noise cho từng cột";
   if (isClass) renderClassNoiseConfigForm();
 }
@@ -1483,6 +1519,15 @@ function renderClassNoiseConfigForm() {
   }
   labelSelect.value = state.classLabelColumn;
   renderClassFeatureList();
+
+  // Mỗi method có khối tham số nâng cao RIÊNG (n_estimators/cv_folds cho
+  // single_learning, k cho distance_based) -- ẩn/hiện đúng khối theo lựa
+  // chọn ở Bước 2. distance_based không train model nên câu cảnh báo "có thể
+  // mất vài phút" cũng không áp dụng.
+  const isDistance = state.classMethod === "distance_based";
+  $("class-params-single").hidden = isDistance;
+  $("class-params-distance").hidden = !isDistance;
+  $("class-wait-hint").hidden = isDistance;
 }
 
 function renderClassFeatureList() {
@@ -1633,29 +1678,39 @@ $("class-detect-btn").addEventListener("click", async () => {
     return;
   }
 
-  setButtonLoading(btn, true, "Đang train Random Forest...", "🔍 Phát hiện Class Noise");
-  statusEl.textContent = "Có thể mất vài phút với file lớn, vui lòng chờ…";
+  const isDistance = state.classMethod === "distance_based";
+  setButtonLoading(btn, true, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
+  statusEl.textContent = isDistance
+    ? "Đang tính khoảng cách giữa các dòng…"
+    : "Có thể mất vài phút với file lớn, vui lòng chờ…";
+
+  const requestBody = {
+    file_id: state.fileId,
+    label_column: state.classLabelColumn,
+    feature_columns: featureColumns,
+    method: state.classMethod,
+  };
+  if (isDistance) {
+    requestBody.k = parseInt($("class-k-neighbors").value, 10) || 5;
+  } else {
+    requestBody.n_estimators = parseInt($("class-n-estimators").value, 10) || 300;
+    requestBody.cv_folds = parseInt($("class-cv-folds").value, 10) || 5;
+  }
 
   let response;
   try {
     response = await fetch(`${API_BASE}/api/class-noise/detect`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        file_id: state.fileId,
-        label_column: state.classLabelColumn,
-        feature_columns: featureColumns,
-        n_estimators: parseInt($("class-n-estimators").value, 10) || 300,
-        cv_folds: parseInt($("class-cv-folds").value, 10) || 5,
-      }),
+      body: JSON.stringify(requestBody),
     });
   } catch (err) {
     alert("Không gọi được backend.");
-    setButtonLoading(btn, false, "Đang train Random Forest...", "🔍 Phát hiện Class Noise");
+    setButtonLoading(btn, false, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
     statusEl.textContent = "";
     return;
   }
-  setButtonLoading(btn, false, "Đang train Random Forest...", "🔍 Phát hiện Class Noise");
+  setButtonLoading(btn, false, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
   statusEl.textContent = "";
 
   if (!response.ok) {
@@ -1672,6 +1727,7 @@ $("class-detect-btn").addEventListener("click", async () => {
 
   const data = await response.json();
   state.classDiagnostics = data.diagnostics;
+  state.classResultMethod = data.method;
   state.classFindings = data.findings;
   state.classFindingsPage = 1;
   state.classFindingsFilterText = "";
@@ -1689,9 +1745,75 @@ function toggleStep4Direction() {
   if (isClass && state.classDiagnostics) renderClassResults();
 }
 
+// Dispatch theo method CỦA KẾT QUẢ đang có (classResultMethod, không phải
+// classMethod đang chọn ở Bước 2 -- 2 cái có thể lệch nhau nếu người dùng đổi
+// lựa chọn sau khi đã detect xong) -- 2 phương pháp có hình dạng diagnostics
+// KHÁC NHAU hẳn (distance-based không train model nên không có cv_accuracy/
+// per_class_report/confusion_matrix), nên không gộp chung 1 hàm render được.
 function renderClassResults() {
   const diag = state.classDiagnostics;
   if (!diag) return;
+  if (state.classResultMethod === "distance_based") {
+    renderClassResultsDistance(diag);
+  } else {
+    renderClassResultsSingleLearning(diag);
+  }
+  renderClassFindingsTable();
+}
+
+// ---- Distance-based (Mutual k-NN): không train model -> không có
+// cv_accuracy/baseline/per_class_report/confusion_matrix để chẩn đoán, thay
+// bằng chỉ số "độ phủ" (bao nhiêu dòng có láng giềng lẫn nhau) -- xem
+// DistanceNoiseDiagnostics trong class_noise/distance_based.py. ----
+function renderClassResultsDistance(diag) {
+  const coveragePct = diag.n_rows_used > 0 ? (diag.n_rows_with_mutual_neighbors / diag.n_rows_used) * 100 : 0;
+  const isLowCoverage = coveragePct < 50;
+
+  $("class-stats-grid").innerHTML = `
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng dùng được / ${diag.n_rows_total.toLocaleString("vi-VN")} tổng</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.k}</span>
+      <span class="stat-label">Số láng giềng (k)</span>
+    </div>
+    <div class="stat-card ${isLowCoverage ? "stat-crimson" : "stat-teal"}">
+      <span class="stat-value mono">${coveragePct.toFixed(1)}%</span>
+      <span class="stat-label">Dòng có láng giềng lẫn nhau</span>
+      <span class="stat-sub mono">${diag.n_rows_with_mutual_neighbors.toLocaleString("vi-VN")} / ${diag.n_rows_used.toLocaleString("vi-VN")} dòng</span>
+    </div>
+    <div class="stat-card stat-amber">
+      <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
+    </div>
+  `;
+
+  const warnCard = $("class-warning-card");
+  if (isLowCoverage) {
+    warnCard.hidden = false;
+    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
+      ⚠️ Chỉ ${coveragePct.toFixed(1)}% số dòng có "láng giềng lẫn nhau" (2 chiều) -- dữ liệu có thể quá thưa
+      hoặc k đang quá nhỏ so với số đặc trưng. Phần lớn dòng KHÔNG kết luận được gì, danh sách nghi ngờ bên
+      dưới có thể bỏ sót nhiều noise thật. Thử tăng k hoặc chọn lại cột đặc trưng.</p>`;
+  } else {
+    warnCard.hidden = true;
+  }
+
+  // Distance-based không có bảng precision/recall hay ma trận đếm (không
+  // train model nào để tính) -- ẩn hẳn 2 khối đó, chỉ Single learning-based
+  // mới hiện.
+  $("class-report-card").hidden = true;
+  $("class-confusion-card").hidden = true;
+}
+
+// ---- Single learning-based (Confident Learning + Random Forest): giữ
+// nguyên logic gốc, đầy đủ cv_accuracy/baseline/per_class_report/
+// confusion_matrix để chẩn đoán độ tin cậy trước khi tin findings. ----
+function renderClassResultsSingleLearning(diag) {
+  $("class-report-card").hidden = false;
+  $("class-confusion-card").hidden = false;
+  $("class-confusion-title").textContent = "Ma trận đếm (hàng = nhãn ghi, cột = nhãn model tự tin)";
 
   const diffPct = diag.cv_accuracy - diag.majority_baseline_accuracy;
 
@@ -1761,17 +1883,23 @@ function renderClassResults() {
     <tbody>${cm.class_names
       .map((rowName, i) => `<tr><td>${escapeHtml(rowName)}</td>${cm.rows[i].map((v) => `<td class="mono">${v}</td>`).join("")}</tr>`)
       .join("")}</tbody>`;
-
-  renderClassFindingsTable();
 }
 
+// Findings đã được backend CHUẨN HOÁ chung tên trường cho cả 2 method
+// (suggested_label, score) -- xem app.py::class_noise_detect_api(). Chỉ CHỮ
+// hiển thị (header, nhãn cột điểm số) khác nhau theo method.
 function getFilteredClassFindings() {
   const text = state.classFindingsFilterText.trim().toLowerCase();
   if (!text) return state.classFindings;
   return state.classFindings.filter((f) =>
-    `${f.row_number} ${f.recorded_label} ${f.confident_label}`.toLowerCase().includes(text)
+    `${f.row_number} ${f.recorded_label} ${f.suggested_label}`.toLowerCase().includes(text)
   );
 }
+
+const CLASS_SCORE_LABELS = {
+  distance_based: { suggested: "Gợi ý nhãn (đa số láng giềng)", score: "Tỉ lệ láng giềng bất đồng" },
+  single_learning: { suggested: "Model tự tin", score: "Margin" },
+};
 
 function renderClassFindingsTable() {
   const all = getFilteredClassFindings();
@@ -1781,15 +1909,16 @@ function renderClassFindingsTable() {
   const start = (state.classFindingsPage - 1) * perPage;
   const pageRows = all.slice(start, start + perPage);
 
+  const labels = CLASS_SCORE_LABELS[state.classResultMethod] || CLASS_SCORE_LABELS.single_learning;
   const table = $("class-findings-table");
-  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>Model tự tin</th><th>Margin</th></tr></thead>`;
+  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${labels.suggested}</th><th>${labels.score}</th></tr></thead>`;
   if (!pageRows.length) {
     table.innerHTML = `${headHtml}<tbody><tr><td colspan="4" class="empty-cell">Không có dòng nào khớp.</td></tr></tbody>`;
   } else {
     table.innerHTML = `${headHtml}<tbody>${pageRows
       .map(
         (f) =>
-          `<tr><td class="mono">${f.row_number}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.confident_label)}</td><td class="mono">${f.margin.toFixed(4)}</td></tr>`
+          `<tr><td class="mono">${f.row_number}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label)}</td><td class="mono">${f.score.toFixed(4)}</td></tr>`
       )
       .join("")}</tbody>`;
   }

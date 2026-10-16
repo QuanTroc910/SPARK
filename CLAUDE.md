@@ -68,6 +68,26 @@ tới khi có nhu cầu đổi tên repo thật sự.
     chat, dữ liệu đó chỉ có 3 đặc trưng, recall lớp hiếm ~30%, thấp hơn hẳn
     khi thử trên 2 bộ Kaggle khác có nhiều đặc trưng hơn — KHÔNG phải lỗi
     thuật toán, đã kiểm chứng bằng thí nghiệm có đối chứng).
+  - `distance_based.py` — **MỚI, thuật toán DETECT thứ 2** cho Class noise,
+    theo paper **N13** trong Bảng 6 Gupta & Gupta (2019) -- nhóm
+    "Distance based" (Liu & Zhang, 2012, "Noisy data elimination using
+    mutual k-nearest neighbor for classification mining", 9/9 điểm chất
+    lượng trong review đó, xem mục 10 dưới đây để biết đầy đủ lý do chọn).
+    KHÁC HẲN `confident_learning.py` ở chỗ KHÔNG train model học máy nào --
+    thuần dựa vào khoảng cách Euclid (sau chuẩn hoá z-score) giữa các dòng:
+    `detect_class_noise_distance(df, config, k=5, disagreement_threshold=0.5)`
+    tìm k láng giềng gần nhất mỗi dòng (`sklearn.neighbors.NearestNeighbors`),
+    lọc còn láng giềng LẪN NHAU (quan hệ 2 CHIỀU -- A trong top-k của B VÀ B
+    trong top-k của A, tránh báo nhầm do vùng dữ liệu thưa), gắn cờ dòng nào
+    có tỉ lệ láng giềng lẫn nhau mang nhãn khác > 50%. Trả về
+    `DistanceNoiseResult(findings, diagnostics)` -- `DistanceNoiseFinding`
+    (`row_number`, `recorded_label`, `suggested_label`, `disagreement_ratio`)
+    + `DistanceNoiseDiagnostics` (`k`, `n_rows_with_mutual_neighbors` -- chỉ
+    số "độ phủ" PHẢI xem trước khi tin findings, vai trò tương đương
+    `cv_accuracy` bên Confident Learning nhưng khác bản chất vì không có
+    model để đo accuracy). `_prepare_usable_subset()` CỐ TÌNH lặp lại logic
+    lọc dòng y hệt `confident_learning.py` (không import dùng chung) để 2
+    module độc lập nhau, không bị ràng buộc chéo khi sửa sau này.
   - `feature_selection.py` — **MỚI, GIẢM SỐ CỘT trước khi chạy Confident
     Learning** (theo yêu cầu thầy sau buổi báo cáo — xem mục 9 dưới đây để
     biết đầy đủ lý do/lịch sử quyết định): `rank_by_importance()` (Bước 1 —
@@ -124,24 +144,34 @@ tới khi có nhu cầu đổi tên repo thật sự.
     code vì không sai gì, không có gì phải xoá.
   - `GET /api/download/<download_id>` — trả file CSV (lưu tạm trong
     `CLEANED_FILES`, tách riêng khỏi `UPLOADED_FILES`/`WORKING_FILES`).
-  - `POST /api/class-noise/detect` — **MỚI, hướng Class noise**: nhận
-    `file_id` (DÙNG CHUNG `/api/upload` với hướng attribute, không có upload
-    riêng) + `label_column` + `feature_columns` (+ tuỳ chọn `n_estimators`,
-    `cv_folds`), gọi thẳng `class_noise/confident_learning.py::detect_class_noise()`,
-    trả về `diagnostics` (cv_accuracy, baseline, ngưỡng từng lớp, precision/
-    recall/F1, ma trận đếm — JSON-hoá bằng `.values.tolist()` vì
-    `confusion_count_matrix` là `pd.DataFrame`) + `findings` (đã sắp theo
-    margin giảm dần). CHẠY ĐỒNG BỘ (block request), có thể mất VÀI PHÚT với
-    file lớn — không có thanh tiến trình, chấp nhận được cho quy mô demo
-    khoá luận. `app.run(..., threaded=True)` để request này không chặn các
-    request khác trong lúc chờ. Validate `feature_columns` đều "đủ số"
-    (`_is_mostly_numeric()`) TRƯỚC khi chạy, báo lỗi nêu đúng tên cột chữ
-    nếu sai (cùng lỗi "0 dòng dùng được" như `reduce-features`, lúc đầu CHỈ
-    fix ở `reduce-features`, sau phát hiện endpoint này cũng dính y hệt vì
-    người dùng tick tay feature chữ được, đã fix bổ sung). **LUÔN** chạy
+  - `POST /api/class-noise/detect` — **hướng Class noise, MỚI (mục 10):
+    thêm field `method`** dispatch sang 1 trong 2 thuật toán DETECT đã có
+    (`"single_learning"` mặc định = Confident Learning, `"distance_based"`
+    = Mutual k-NN N13; `"ensemble_based"` trả lỗi 400 rõ ràng "chưa triển
+    khai" vì chưa code). Payload chung: `file_id` (DÙNG CHUNG `/api/upload`
+    với hướng attribute, không có upload riêng) + `label_column` +
+    `feature_columns`; `method="single_learning"` nhận thêm tuỳ chọn
+    `n_estimators`/`cv_folds`, `method="distance_based"` nhận thêm tuỳ chọn
+    `k` (mặc định 5). Response LUÔN có field `"method"` ở gốc để FE biết
+    nên render kiểu diagnostics nào (2 thuật toán có hình dạng diagnostics
+    KHÁC NHAU hẳn — distance-based không có cv_accuracy/per_class_report/
+    confusion_matrix vì không train model). `findings` được CHUẨN HOÁ chung
+    tên trường cho cả 2 method (`suggested_label` thay `confident_label`,
+    `score` thay `margin`/`disagreement_ratio`) để FE dùng CHUNG 1 cách
+    render bảng "danh sách dòng nghi ngờ", chỉ đổi chữ header theo method.
+    CHẠY ĐỒNG BỘ (block request); `single_learning` có thể mất VÀI PHÚT với
+    file lớn (train Random Forest qua CV), `distance_based` thường nhanh
+    hơn nhiều vì không train model nào — không có thanh tiến trình, chấp
+    nhận được cho quy mô demo khoá luận. `app.run(..., threaded=True)` để
+    request này không chặn các request khác trong lúc chờ. Validate
+    `feature_columns` đều "đủ số" (`_is_mostly_numeric()`) TRƯỚC khi chạy
+    (áp dụng cho CẢ 2 method, cùng 1 validate), báo lỗi nêu đúng tên cột
+    chữ nếu sai (cùng lỗi "0 dòng dùng được" như `reduce-features`, lúc đầu
+    CHỈ fix ở `reduce-features`, sau phát hiện endpoint này cũng dính y hệt
+    vì người dùng tick tay feature chữ được, đã fix bổ sung). **LUÔN** chạy
     `cap_outliers()` + `log_transform()` (Bước 3, xem `feature_selection.py`)
-    lên `feature_columns` TRƯỚC khi train — không phải tuỳ chọn, vì 2 hàm
-    này chỉ sửa giá trị, không xoá dòng/cột.
+    lên `feature_columns` TRƯỚC khi chạy — áp dụng cho CẢ 2 method, không
+    phải tuỳ chọn, vì 2 hàm này chỉ sửa giá trị, không xoá dòng/cột.
   - `POST /api/class-noise/reduce-features` — **MỚI**: chạy
     `rank_by_importance()` → `select_by_elbow()` → `filter_correlated()`
     (xem `class_noise/feature_selection.py` ở mục kiến trúc trên) trên TẤT
@@ -159,8 +189,16 @@ tới khi có nhu cầu đổi tên repo thật sự.
 - `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI dạng "panel theo
   bước" (chỉ 1 `.panel.is-active` hiện tại 1 thời điểm) với **5 bước**:
   1. Tải file lên → `POST /api/upload`.
-  2. Hướng xử lý — chọn Attribute noise hay Class noise (cả 2 thẻ đều bấm
-     được từ khi có backend `/api/class-noise/detect`).
+  2. Hướng xử lý — chọn Attribute noise hay Class noise. **MỚI (mục 10):**
+     chọn Class Noise xong hiện thêm khối "Chọn phương pháp phát hiện" (3
+     thẻ, `#class-method-section`, tái dùng CSS `.direction-card`/`.is-
+     disabled`/`.badge-soon`) khớp đúng Bảng 6 Gupta & Gupta (2019): Distance-
+     based + Single learning-based bấm được, Ensemble-based khoá "sắp có"
+     (chưa code `class_noise/ensemble_based.py`). Nút "Tiếp tục" chỉ mở khi
+     ĐÃ chọn xong cả hướng LẪN phương pháp (nếu là Class Noise) —
+     `updateContinueStep2Button()`. `state.classMethod` lưu lựa chọn này,
+     `state.classResultMethod` lưu riêng method CỦA KẾT QUẢ đang hiển thị
+     (2 giá trị có thể lệch nhau nếu đổi lựa chọn sau khi đã detect xong).
   3. Cấu hình noise — mỗi cột hiện dạng "chip" (nút bo tròn bật/tắt) cho ĐỦ 7
      loại noise, chỉ hiện chip hợp lý với dtype đang chọn (`COLUMN_TYPES` map
      dtype → danh sách noise khả dụng trong `script.js`); tick chip nào thì
@@ -235,16 +273,37 @@ tới khi có nhu cầu đổi tên repo thật sự.
     (vẫn sửa tay thêm được, không khoá cứng). Đổi nhãn hoặc upload file mới
     thì ẩn kết quả cũ (tránh hiểu nhầm là ứng với nhãn/file đang chọn). Sau
     đó mới tới danh sách checkbox chọn `feature_columns` (loại trừ cột đang
-    là nhãn), tham số nâng cao `n_estimators`/`cv_folds` (mặc định 300/5,
-    khớp `ClassNoiseConfig`). `panel-desc` đầu Bước 3 có ghi rõ: các cột đặc
-    trưng sẽ TỰ ĐỘNG được cap outlier + log-transform (Bước 3 ở mục 9) ngay
-    lúc bấm "Phát hiện Class Noise" — không phải khối riêng, không cần bấm
+    là nhãn), khối "Tham số nâng cao" **MỚI (mục 10) đổi theo `state.classMethod`**:
+    `#class-params-single` (n_estimators/cv_folds, mặc định 300/5, khớp
+    `ClassNoiseConfig`) hiện khi `single_learning`, `#class-params-distance`
+    (chỉ số `k`, mặc định 5) hiện khi `distance_based` — `renderClassNoiseConfigForm()`
+    ẩn/hiện đúng khối + dòng cảnh báo "có thể mất vài phút" (`#class-wait-hint`,
+    chỉ áp dụng cho `single_learning` vì `distance_based` không train model).
+    `panel-desc` đầu Bước 3 có ghi rõ: các cột đặc trưng sẽ TỰ ĐỘNG được cap
+    outlier + log-transform (Bước 3 ở mục 9) ngay lúc bấm "Phát hiện Class
+    Noise" — áp dụng cho CẢ 2 method, không phải khối riêng, không cần bấm
     thêm nút nào, chỉ 1 dòng mô tả cho người dùng biết việc đang xảy ra.
-  - Bước 4 (class): 3 thẻ thống kê (dòng dùng được, CV accuracy so baseline,
-    số dòng nghi ngờ) + khung CẢNH BÁO màu đỏ nếu chênh lệch accuracy-baseline
-    ≤ 2 điểm % (`isWeak` trong `renderClassResults()`) + bảng precision/
-    recall/F1 từng lớp + ma trận đếm + bảng danh sách dòng nghi ngờ (tìm
-    kiếm + phân trang 20 dòng/trang, đã sắp theo margin giảm dần từ backend).
+  - Bước 4 (class): **MỚI (mục 10) — `renderClassResults()` dispatch theo
+    `state.classResultMethod`, render 2 kiểu khác hẳn nhau** vì 2 thuật toán
+    có diagnostics khác bản chất:
+    - `single_learning` (`renderClassResultsSingleLearning()`, hành vi gốc):
+      5 thẻ thống kê (dòng dùng được, CV accuracy, baseline, chênh lệch,
+      số dòng nghi ngờ) + khung CẢNH BÁO màu đỏ nếu chênh lệch accuracy-
+      baseline ≤ 2 điểm % VÀ dưới 30% "mức trần tối đa" (`isWeak`) + bảng
+      precision/recall/F1 từng lớp (`#class-report-card`) + ma trận đếm
+      (`#class-confusion-card`).
+    - `distance_based` (`renderClassResultsDistance()`, **MỚI**): 4 thẻ
+      thống kê (dòng dùng được, k, % dòng có láng giềng lẫn nhau — "độ
+      phủ", số dòng nghi ngờ) + khung CẢNH BÁO nếu độ phủ < 50% (dữ liệu
+      quá thưa/k quá nhỏ). `#class-report-card`/`#class-confusion-card` bị
+      ẨN HẲN (không có precision/recall/confusion matrix vì không train
+      model nào để tính).
+    - Bảng danh sách dòng nghi ngờ dùng CHUNG 1 hàm `renderClassFindingsTable()`
+      cho cả 2 method (đọc `f.suggested_label`/`f.score` đã CHUẨN HOÁ từ
+      backend), chỉ đổi chữ header qua `CLASS_SCORE_LABELS` ("Model tự
+      tin"/"Margin" cho single_learning, "Gợi ý nhãn"/"Tỉ lệ láng giềng bất
+      đồng" cho distance_based) — tìm kiếm + phân trang 20 dòng/trang, đã
+      sắp theo score giảm dần từ backend.
   - Bước 5 (class): CHỈ có placeholder "đang phát triển" — xử lý/handling
     cho class noise CHƯA code (xem roadmap cuối file), nút quay lại Bước 4.
 
@@ -472,6 +531,86 @@ tới khi có nhu cầu đổi tên repo thật sự.
      vì lý do tương tự — nhưng lúc nối Bước 3 vào đây lại quên mất bài học
      cũ, phải phát hiện lại lần 2 bằng thực nghiệm).
 
+10. **Thêm thuật toán DETECT thứ 2 cho Class Noise (Distance-based, N13) +
+    khung chọn 1-trong-3 phương pháp ở Bước 2 — ĐÃ CODE XONG cả backend +
+    frontend cho 2/3 phương pháp, đã nối vào web, đã test qua Playwright:**
+    - **Nguồn gốc quyết định**: sau khi đọc kỹ Bảng 6 (Class Noise
+      Identification studies) của chính bài báo Gupta & Gupta (2019) mà
+      project dựa theo (3 nhóm: Distance based / Single learning-based /
+      Ensemble based), user đổi ý từ "chỉ dùng Confident Learning + Random
+      Forest" sang muốn triển khai đủ cả 3 nhóm để SO SÁNH THỰC NGHIỆM —
+      đây là hướng mạnh hơn hẳn cho khoá luận (có số liệu đối chứng thay vì
+      chọn 1 thuật toán theo cảm tính), đồng thời lấp được khoảng trống
+      "đánh giá định lượng" đã ghi là rủi ro điểm số lớn nhất ở mục roadmap.
+    - **Vì sao chọn chính xác N13 (Liu & Zhang, 2012) đại diện nhóm
+      Distance-based**: soi lại điểm chất lượng QA1-9 (Bảng 4/5) của TẤT CẢ
+      9 paper trong nhóm Distance-based (N12,N13,N14,N15,N16,N17,N18,N47,N50)
+      — chỉ N13 và N17 đạt 9/9. N17 (Sluban, Gamberger, Lavrac 2012) bị LOẠI
+      dù cùng 9/9 vì tên bài thật của nó là *"Ensemble-based noise
+      detection..."* — mâu thuẫn với chính category Distance-based mà bài
+      báo xếp nó vào (nghi là 1 điểm chưa nhất quán của review gốc, không tự
+      ý diễn giải thêm). N13 ("Noisy data elimination using mutual
+      k-nearest neighbor...") vừa 9/9 vừa tên bài khớp 100% với định nghĩa
+      distance-based của chính bài báo (dùng thuần khoảng cách), lại là kỹ
+      thuật tổng quát cho bài toán classification (không riêng domain nào
+      như gene expression/software defect của vài paper khác trong nhóm).
+    - **Vì sao Ensemble-based (N29, Khoshgoftaar/Zhong/Joshi 2005 — "nhiều
+      classifier khác nhau biểu quyết") CHƯA code**: user yêu cầu tập trung
+      làm xong Distance-based trước ("làm cái thuật toán vừa nãy vào trong
+      web đi"), Ensemble-based để sau. Thẻ chọn Ensemble-based vẫn hiện sẵn
+      trên UI (khoá "sắp có", tái dùng CSS `.is-disabled`/`.badge-soon`
+      sẵn có) để khung 3-lựa-chọn đã đúng hình dạng cuối cùng ngay từ bây
+      giờ, tránh phải thiết kế lại UI lần 2 khi code nốt sau này.
+    - **Phương pháp đánh giá N13 vs Confident Learning**: KHÔNG tự tạo
+      script đánh giá mới từ đầu — tái dùng NGUYÊN VẸN kỹ thuật "cấy nhiễu
+      nhãn có kiểm soát" đã có sẵn ở `evaluate_class_noise_synthetic.py`
+      (biết trước chính xác dòng nào bị flip nhãn → đo được Precision/
+      Recall/F1 THẬT, không chỉ suy luận gián tiếp qua cv_accuracy/baseline
+      như trước). Viết `evaluate_distance_vs_confident.py` (Adult Income) +
+      `evaluate_distance_vs_confident_creditcard.py` (Credit Card Fraud,
+      284.807 dòng — CHƯA chạy xong vì quá chậm, RF 300 cây × 5-fold CV ×
+      2 mức nhiễu + Mutual k-NN × 2 mức nhiễu trên file lớn, đã huỷ giữa
+      chừng theo yêu cầu user; nếu cần chạy lại nên giảm n_estimators hoặc
+      lấy mẫu con).
+    - **Kết quả đo được trên Adult Income (10%/30% nhiễu cấy thêm) — BẤT
+      NGỜ: Mutual k-NN (N13) THẮNG Confident Learning về F1 ở CẢ 2 mức
+      nhiễu** (10%: F1 0.410 vs 0.356; 30%: F1 0.510 vs 0.489), thắng cả
+      Precision ở cả 2 mức, chỉ thua Recall ở mức 30%. Lý do khả dĩ (có căn
+      cứ số liệu, không suy đoán suông): `cv_accuracy` của Confident
+      Learning ở CẢ 2 mức nhiễu (0.6997/0.5582) THẤP HƠN CẢ `baseline`
+      (0.7067/0.6010) — theo đúng quy tắc đã ghi ở mục kiến trúc
+      `confident_learning.py` ("nếu cv_accuracy thấp hơn baseline thì
+      model gần như không học được gì"), Confident Learning đang chạy
+      trong vùng KHÔNG đáng tin trên bộ 6-đặc-trưng-số yếu này (đã biết từ
+      trước). Mutual k-NN không cần học 1 ranh giới quyết định TOÀN CỤC,
+      chỉ cần cấu trúc láng giềng CỤC BỘ còn giữ được, nên ít bị ảnh hưởng
+      hơn khi tín hiệu toàn cục yếu — độ phủ (% dòng có láng giềng lẫn
+      nhau) vẫn cao (97.1%), không bị lỗi do dữ liệu thưa. **Lưu ý khi
+      trích dẫn trong khoá luận**: đây là kết quả trên ĐÚNG 1 bộ dữ liệu
+      (đặc trưng yếu) + 1 kiểu cấy nhiễu (random flip đồng đều) — KHÔNG đủ
+      để kết luận "N13 luôn tốt hơn Confident Learning nói chung", chỉ nên
+      diễn đạt "trên dữ liệu có đặc trưng dự đoán yếu, phương pháp dựa
+      khoảng cách tỏ ra ổn định hơn phương pháp dựa trên model học máy".
+    - **Chuẩn hoá response JSON cho cả 2 method**: `app.py` đổi tên trường
+      findings từ `confident_label`/`margin` (gốc, chỉ đúng với Confident
+      Learning) sang `suggested_label`/`score` (trung lập, đúng với CẢ 2
+      method) — nhờ vậy `renderClassFindingsTable()` ở FE dùng CHUNG được 1
+      hàm cho cả 2 kiểu kết quả, chỉ đổi CHỮ header hiển thị
+      (`CLASS_SCORE_LABELS`), không phải viết 2 hàm render bảng riêng biệt.
+      Diagnostics thì KHÔNG chuẩn hoá chung được (2 thuật toán đo "độ tin
+      cậy" theo 2 cách hoàn toàn khác bản chất — model accuracy vs coverage
+      láng giềng), nên giữ response field `"method"` ở gốc để FE dispatch
+      sang đúng hàm render (`renderClassResultsSingleLearning()` vs
+      `renderClassResultsDistance()`).
+    - **Đã test qua Playwright THẬT (không chỉ gọi API trực tiếp)** — 2
+      luồng độc lập: (1) upload Adult Income → Class Noise → Distance-based
+      → tick 6 cột số → detect → kiểm tra đúng card ẩn/hiện + bảng đúng
+      header "Gợi ý nhãn"/"Tỉ lệ bất đồng"; (2) luồng y hệt nhưng chọn
+      Single learning-based → verify CV accuracy 77.99%/baseline 75.92%
+      KHỚP ĐÚNG số liệu lịch sử đã biết (không bị hồi quy sau khi sửa
+      chung 1 endpoint cho cả 2 method) + bảng precision/recall/confusion
+      matrix hiện đúng, header "Model tự tin"/"Margin" không đổi.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -519,6 +658,19 @@ tới khi có nhu cầu đổi tên repo thật sự.
       riêng). Đã test qua HTTP thật + bắt được VÀ FIX 1 lỗi nghiêm trọng
       (cap outlier xoá sạch tín hiệu `capital.gain`/`capital.loss` do IQR
       suy biến, CV accuracy từng tụt dưới cả baseline — xem chi tiết mục 9).
+- [x] Class noise — thuật toán DETECT thứ 2 (mục 10): Distance-based (N13,
+      Mutual k-NN) `class_noise/distance_based.py` + khung chọn 1-trong-3
+      phương pháp ở Bước 2 FE + backend `/api/class-noise/detect` dispatch
+      theo `method`. Đã test qua Playwright (cả 2 luồng Distance-based và
+      Single learning-based, không hồi quy). Đã viết script đánh giá so
+      sánh thực nghiệm (`evaluate_distance_vs_confident.py`) trên Adult
+      Income — N13 thắng Confident Learning về F1 (xem chi tiết mục 10).
+- [ ] Ensemble-based (N29) — nhóm thứ 3 trong Bảng 6, CHƯA code (xem mục 10
+      để biết lý do). Thẻ chọn đã hiện trên UI nhưng khoá "sắp có".
+- [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá
+      chậm trên 284.807 dòng, đã huỷ giữa chừng) — cần chạy lại với
+      n_estimators thấp hơn hoặc lấy mẫu con nếu muốn có số liệu so sánh
+      N13 vs Confident Learning trên bộ đặc trưng MẠNH hơn Adult Income.
 - [ ] Vẫn CHƯA có file gốc ~35 cột thật của thầy (đang chờ xin) — mọi kiểm
       chứng ở mục 9 mới chạy trên Credit Card Fraud/Adult Income (dữ liệu
       thay thế tạm thầy đồng ý dùng), chưa chạy được trên đúng dữ liệu mục

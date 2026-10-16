@@ -37,6 +37,7 @@ from attribute_noise.cross_field_rules import FormulaError
 from attribute_noise.pipeline import NoiseFinding, detect_noise, get_flagged_rows, load_data
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
+from class_noise.distance_based import detect_class_noise_distance
 from class_noise.feature_selection import (
     cap_outliers,
     filter_correlated,
@@ -260,31 +261,51 @@ def _duplicate_handling_from_json(item: dict) -> DuplicateHandlingChoice:
 def class_noise_detect_api():
     """Hướng Class Noise, Bước 3 -> 4: frontend gửi lên file_id (từ /api/upload,
     DÙNG CHUNG với hướng attribute -- không có endpoint upload riêng) +
-    label_column + feature_columns (+ tuỳ chọn n_estimators, cv_folds).
+    label_column + feature_columns + method (+ tham số riêng từng method).
 
-    Chạy ĐÚNG module class_noise/confident_learning.py (Random Forest + 5-fold
-    CV + Confident Learning) đã được kiểm chứng kỹ qua nhiều demo -- route này
-    CHỈ "phiên dịch" JSON <-> Python object + JSON-hoá kết quả, không có logic
-    detect nào viết thêm ở đây.
+    **method** (mới, 3 giá trị khớp đúng Bảng 6 Gupta & Gupta 2019):
+      - "single_learning" (mặc định, giữ nguyên hành vi cũ): Random Forest +
+        5-fold CV + Confident Learning (class_noise/confident_learning.py).
+        Tham số riêng: n_estimators, cv_folds.
+      - "distance_based": Mutual k-Nearest Neighbor, N13
+        (class_noise/distance_based.py) -- KHÔNG train model nào, chỉ xét
+        khoảng cách. Tham số riêng: k.
+      - "ensemble_based": CHƯA triển khai, trả lỗi rõ ràng.
+    Route này CHỈ "phiên dịch" JSON <-> Python object + JSON-hoá kết quả,
+    không có logic detect nào viết thêm ở đây -- logic thật nằm hết ở 2 module
+    class_noise/confident_learning.py và class_noise/distance_based.py.
 
-    **MỚI**: trước khi train, LUÔN tự động chạy Bước 3 của pipeline giảm cột
-    (`cap_outliers()` + `log_transform()`, xem class_noise/feature_selection.py)
-    lên feature_columns -- cap outlier về biên IQR + biến đổi logarit cho cột
-    không có giá trị âm. Không phải tuỳ chọn bật/tắt vì 2 bước này chỉ SỬA GIÁ
-    TRỊ (không xoá dòng/cột), không có rủi ro mất dữ liệu.
+    Response LUÔN có field "method" ở gốc để frontend biết nên render kiểu
+    diagnostics/findings nào (2 phương pháp có hình dạng diagnostics KHÁC
+    NHAU -- distance-based không có khái niệm cv_accuracy/per_class_report/
+    confusion_matrix vì không train model). Findings được CHUẨN HOÁ chung tên
+    trường (`suggested_label`, `score`) cho cả 2 method để bảng "danh sách
+    dòng nghi ngờ" ở frontend dùng chung được 1 cách render.
+
+    **MỚI (giữ nguyên từ trước)**: trước khi chạy, LUÔN tự động áp dụng Bước 3
+    của pipeline giảm cột (`cap_outliers()` + `log_transform()`, xem
+    class_noise/feature_selection.py) lên feature_columns -- áp dụng cho CẢ 2
+    method vì đều cần feature_columns đã được làm sạch outlier/phân phối.
 
     CẢNH BÁO quan trọng cho người chạy thử: với file lớn (hàng trăm nghìn
-    dòng) việc train Random Forest qua Cross-Validation có thể mất VÀI PHÚT.
-    Route này chạy ĐỒNG BỘ (block luôn request), không có thanh tiến trình --
-    chấp nhận được cho quy mô 1 công cụ demo khoá luận, KHÔNG phù hợp sản xuất
-    thật (nên app.run(..., threaded=True) để ít nhất không chặn các request
-    khác trong lúc chờ, xem cuối file).
+    dòng), "single_learning" (train Random Forest qua Cross-Validation) có
+    thể mất VÀI PHÚT; "distance_based" thường nhanh hơn nhiều vì không train
+    model nào. Route này chạy ĐỒNG BỘ (block luôn request), không có thanh
+    tiến trình -- chấp nhận được cho quy mô 1 công cụ demo khoá luận.
     """
     payload = request.get_json()
     file_id = payload.get("file_id")
     df = UPLOADED_FILES.get(file_id)
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+
+    method = payload.get("method") or "single_learning"
+    if method == "ensemble_based":
+        return jsonify(
+            {"error": "Phương pháp Ensemble-based chưa được triển khai, sẽ bổ sung sau."}
+        ), 400
+    if method not in ("single_learning", "distance_based"):
+        return jsonify({"error": f"method không hợp lệ: {method}"}), 400
 
     label_column = payload.get("label_column")
     feature_columns = payload.get("feature_columns") or []
@@ -298,12 +319,12 @@ def class_noise_detect_api():
     if missing_cols:
         return jsonify({"error": f"Cột không tồn tại trong file: {', '.join(missing_cols)}"}), 400
 
-    # Nếu lỡ chọn 1 cột CHỮ làm đặc trưng, _prepare_usable_subset() trong
-    # confident_learning.py sẽ ép TOÀN BỘ dòng thành NaN ở đúng cột đó (vì cột
-    # chữ không ép được thành số), khiến KHÔNG CÒN DÒNG NÀO dùng được -- lỗi
-    # thật đã gặp khi test: sklearn raise ra thông báo rất khó hiểu ("Found
-    # array with 0 sample(s)..."). Validate rõ ràng TRƯỚC khi chạy, trả lỗi
-    # nêu đúng tên cột, để người dùng biết ngay cần bỏ tick cột nào.
+    # Nếu lỡ chọn 1 cột CHỮ làm đặc trưng, bước lọc "dòng dùng được" của CẢ 2
+    # module (confident_learning.py lẫn distance_based.py) sẽ ép TOÀN BỘ dòng
+    # thành NaN ở đúng cột đó, khiến KHÔNG CÒN DÒNG NÀO dùng được -- lỗi thật
+    # đã gặp khi test: sklearn raise ra thông báo rất khó hiểu ("Found array
+    # with 0 sample(s)..."). Validate rõ ràng TRƯỚC khi chạy, trả lỗi nêu đúng
+    # tên cột, để người dùng biết ngay cần bỏ tick cột nào.
     non_numeric_cols = [c for c in feature_columns if not _is_mostly_numeric(df[c])]
     if non_numeric_cols:
         return jsonify(
@@ -315,21 +336,53 @@ def class_noise_detect_api():
             }
         ), 400
 
+    # Bước 3 (xem class_noise/feature_selection.py + CLAUDE.md mục 9): LUÔN áp
+    # dụng cap outlier (về biên IQR) + log-transform lên feature_columns TRƯỚC
+    # khi chạy -- áp dụng cho CẢ 2 method, không phải tuỳ chọn, vì đây là bước
+    # làm sạch mặc định (chỉ sửa GIÁ TRỊ, không xoá dòng/cột, không có rủi ro
+    # mất dữ liệu khi luôn bật).
+    cleaned_df = cap_outliers(df, feature_columns)
+    cleaned_df = log_transform(cleaned_df, feature_columns)
+
+    if method == "distance_based":
+        dist_config = ClassNoiseConfig(label_column=label_column, feature_columns=feature_columns)
+        k = int(payload.get("k") or 5)
+        try:
+            result = detect_class_noise_distance(cleaned_df, dist_config, k=k)
+        except (ValueError, KeyError) as exc:
+            return jsonify({"error": f"Không chạy được với cấu hình này: {exc}"}), 400
+
+        diag = result.diagnostics
+        return jsonify(
+            {
+                "method": "distance_based",
+                "diagnostics": {
+                    "n_rows_total": diag.n_rows_total,
+                    "n_rows_used": diag.n_rows_used,
+                    "k": diag.k,
+                    "n_rows_with_mutual_neighbors": diag.n_rows_with_mutual_neighbors,
+                    "class_names": diag.class_names,
+                    "class_counts": diag.class_counts,
+                },
+                "findings": [
+                    {
+                        "row_number": f.row_number,
+                        "recorded_label": f.recorded_label,
+                        "suggested_label": f.suggested_label,
+                        "score": f.disagreement_ratio,
+                    }
+                    for f in result.findings
+                ],
+            }
+        )
+
+    # method == "single_learning" (hành vi gốc, Confident Learning + Random Forest)
     config = ClassNoiseConfig(
         label_column=label_column,
         feature_columns=feature_columns,
         n_estimators=int(payload.get("n_estimators") or 300),
         cv_folds=int(payload.get("cv_folds") or 5),
     )
-
-    # Bước 3 (xem class_noise/feature_selection.py + CLAUDE.md mục 9): LUÔN áp
-    # dụng cap outlier (về biên IQR) + log-transform lên feature_columns TRƯỚC
-    # khi train -- không phải tuỳ chọn, vì đây là bước làm sạch mặc định theo
-    # đúng quy trình thầy hướng dẫn (outlier/log-transform không xoá dòng/cột
-    # nào, chỉ sửa GIÁ TRỊ, nên không có rủi ro mất dữ liệu khi luôn bật).
-    cleaned_df = cap_outliers(df, feature_columns)
-    cleaned_df = log_transform(cleaned_df, feature_columns)
-
     try:
         result = detect_class_noise(cleaned_df, config)
     except (ValueError, KeyError) as exc:
@@ -341,6 +394,7 @@ def class_noise_detect_api():
     diag = result.diagnostics
     return jsonify(
         {
+            "method": "single_learning",
             "diagnostics": {
                 "n_rows_total": diag.n_rows_total,
                 "n_rows_used": diag.n_rows_used,
@@ -361,8 +415,8 @@ def class_noise_detect_api():
                 {
                     "row_number": f.row_number,
                     "recorded_label": f.recorded_label,
-                    "confident_label": f.confident_label,
-                    "margin": f.margin,
+                    "suggested_label": f.confident_label,
+                    "score": f.margin,
                 }
                 for f in result.findings
             ],
