@@ -26,7 +26,15 @@ tới khi có nhu cầu đổi tên repo thật sự.
     (whitelist theo NODE TYPE: chỉ +,-,*,/, số, tên cột) -- KHÔNG dùng
     `eval()`/`exec()` (đã test kỹ, xem `FormulaError`).
   - `pipeline.py` — `load_data()`, `detect_noise()` (nhận thêm
-    `cross_field_rules` tuỳ chọn), `get_flagged_rows()`.
+    `cross_field_rules` tuỳ chọn), `get_flagged_rows()`, `guess_column_dtype()`
+    — **MỚI (mục 12)**: đoán `ColumnDType` hợp lý nhất cho 1 cột dựa trên GIÁ
+    TRỊ THẬT (không phải tên cột) -- kiểm tra thứ tự email → phone → date (thử
+    4 định dạng phổ biến) → integer → float → category (≤50 giá trị khác nhau
+    VÀ chiếm ≤50% số dòng không rỗng) → text (mặc định cuối). Ngưỡng 90% khớp
+    (không bắt buộc 100%) để chấp nhận vài ô lỗi định dạng trong cột mà vẫn
+    đoán đúng kiểu tổng thể. CHỈ dùng để TỰ CHỌN SẴN dropdown "Kiểu dữ liệu" ở
+    Bước 3 FE, KHÔNG ảnh hưởng gì tới logic detect thật (`cfg.dtype` vẫn lấy
+    từ lựa chọn cuối cùng của người dùng lúc bấm "Detect Noise").
   - `attribute_handling.py` — **ĐÃ CODE XONG** bảng quyết định dtype×noise_type
     (mục 6 dưới đây): `get_available_actions(dtype, noise_type)` +
     `HandlingAction` (enum: remove_row/impute_mean/impute_median/impute_knn/
@@ -150,7 +158,10 @@ tới khi có nhu cầu đổi tên repo thật sự.
 - `app.py` — Flask backend, CHỈ đóng vai trò "phiên dịch" JSON ⟷ Python object,
   KHÔNG chứa logic detect/handle (logic nằm hết ở `attribute_noise/`).
   Endpoints:
-  - `POST /api/upload`
+  - `POST /api/upload` — response **MỚI (mục 12)** có thêm field
+    `guessed_dtypes` (dict tên cột → dtype đoán được qua `guess_column_dtype()`)
+    để FE tự chọn sẵn dropdown kiểu dữ liệu ở Bước 3, thay vì mặc định "text"
+    cho mọi cột như trước.
   - `POST /api/detect-noise` (payload có thêm field `cross_field_rules`,
     `check_duplicate_row`, `duplicate_subset_columns`; xem mẫu JSON trong
     `_cross_field_rule_from_json()`).
@@ -237,7 +248,11 @@ tới khi có nhu cầu đổi tên repo thật sự.
      (2 giá trị có thể lệch nhau nếu đổi lựa chọn sau khi đã detect xong).
   3. Cấu hình noise — mỗi cột hiện dạng "chip" (nút bo tròn bật/tắt) cho ĐỦ 7
      loại noise, chỉ hiện chip hợp lý với dtype đang chọn (`COLUMN_TYPES` map
-     dtype → danh sách noise khả dụng trong `script.js`); tick chip nào thì
+     dtype → danh sách noise khả dụng trong `script.js`). **MỚI (mục 12)**:
+     dropdown "Kiểu dữ liệu" của mỗi cột TỰ CHỌN SẴN theo `guessed_dtypes` từ
+     `/api/upload` (thay vì luôn mặc định "text" như trước) — `defaultColumnConfig(dtype)`
+     nhận dtype đoán được làm giá trị khởi đầu, người dùng vẫn đổi lại bình
+     thường qua đúng dropdown, không khoá gì. Tick chip nào thì
      panel tham số của chip đó (`param-panel`) mới xổ ra. State mỗi cột lưu
      trong `state.columnConfig[tên cột]` (object, KHÔNG đọc lại DOM mỗi lần
      submit — khác cách làm cũ), đồng bộ qua 1 listener `change` gắn trên
@@ -709,6 +724,52 @@ tới khi có nhu cầu đổi tên repo thật sự.
       mới + Single learning-based + Distance-based cũ) — không luồng nào
       hồi quy, số liệu CV accuracy/coverage của 2 luồng cũ khớp y hệt lịch
       sử đã biết trước đó.
+
+12. **Tự đoán kiểu dữ liệu (dtype) cho từng cột ở Bước 3 Attribute Noise —
+    ĐÃ CODE XONG, ĐÃ TEST QUA PLAYWRIGHT:**
+    - **Nguồn gốc yêu cầu**: user tạm gác việc chỉnh thuật toán detect ("lú
+      quá, lúc khác check và sửa sau"), chuyển sang xin cải thiện trải
+      nghiệm giao diện. Yêu cầu cụ thể: dropdown "Kiểu dữ liệu" ở Bước 3
+      lúc đó LUÔN mặc định "Văn bản (text)" cho MỌI cột (kể cả cột rõ ràng
+      là số như `age`), bắt người dùng phải tự đổi tay từng cột một với file
+      nhiều cột — muốn hệ thống TỰ ĐOÁN kiểu hợp lý, nhưng vẫn giữ nguyên
+      dropdown để tự sửa lại được, không khoá cứng.
+    - **Đặt logic đoán ở BACKEND** (`guess_column_dtype()` trong
+      `attribute_noise/pipeline.py`), KHÔNG viết lại bằng JS — đúng quyết
+      định kiến trúc đã chốt từ đầu dự án ("mọi detect/xử lý LUÔN gọi backend
+      Flask thật", xem mục `frontend/` ở trên) — tái dùng NGUYÊN VẸN
+      `EMAIL_RE`/`PHONE_RE`/`INTEGER_RE` đã có sẵn trong `detectors.py`
+      thay vì viết regex riêng lần 2.
+    - **Thứ tự kiểm tra kiểu (từ CHẶT nhất tới LỎNG nhất)**: email → phone →
+      date (thử 4 định dạng phổ biến) → integer → float → category → text.
+      Phải kiểm tra theo thứ tự này vì 1 giá trị có thể khớp NHIỀU kiểu cùng
+      lúc (vd số điện thoại cũng toàn chữ số, nếu kiểm tra integer TRƯỚC
+      phone sẽ đoán nhầm thành integer).
+    - **Ngưỡng 90% khớp** (không bắt buộc 100%) cho mỗi kiểu — cố tình THẤP
+      hơn 100% để chấp nhận vài ô lỗi định dạng trong cột (đó CHÍNH LÀ
+      attribute noise mà hệ thống sẽ đi tìm ở bước sau) mà không làm hỏng
+      việc đoán đúng kiểu tổng thể của cả cột.
+    - **CATEGORY dùng ngưỡng cardinality** (≤50 giá trị khác nhau VÀ chiếm
+      ≤50% tổng số dòng không rỗng) thay vì so khớp định dạng như các kiểu
+      khác — vì category không có "định dạng" cố định (vd "Nam"/"Nữ" hay
+      "Sales"/"HR"/"IT" trông không giống nhau về mặt ký tự), chỉ phân biệt
+      được qua việc SỐ GIÁ TRỊ KHÁC NHAU ít so với tổng số dòng. Ngưỡng kép
+      (vừa giới hạn SỐ TUYỆT ĐỐI vừa giới hạn TỈ LỆ) để không đoán nhầm 1 cột
+      toàn giá trị khác nhau (vd `full_name`) thành category chỉ vì file nhỏ.
+    - **Đã verify kỹ trên 2 bộ dữ liệu khác hẳn nhau**: Adult Income (6 cột
+      số đều ra đúng `integer`, 9 cột chữ đều ra đúng `category`) và bộ nhân
+      viên `noisy_employee_dataset.csv` (đủ cả 7 kiểu: `id`→integer,
+      `full_name`→text, `age`→integer, `gender`→category, `email`→email,
+      `department`→category, `salary`→float, `join_date`→date, `phone`→phone,
+      `performance_score`→float) — ĐOÁN ĐÚNG TUYỆT ĐỐI cả 2 bộ, không sai
+      cột nào. Đã test qua Playwright thật (không chỉ gọi hàm Python trực
+      tiếp) — dropdown trên UI hiện đúng giá trị đoán được cho từng cột.
+    - **Không ảnh hưởng logic detect thật**: `guessed_dtypes` CHỈ dùng để
+      set `dtype` KHỞI ĐẦU của `state.columnConfig[cột]`
+      (`defaultColumnConfig(dtype)`, đổi tham số mặc định từ cứng "text"
+      sang nhận dtype đoán được) — khi người dùng bấm "Detect Noise", backend
+      vẫn dùng ĐÚNG dtype người dùng đang chọn trên dropdown lúc đó (có thể
+      đã tự sửa lại), không phải giá trị đoán ban đầu.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 

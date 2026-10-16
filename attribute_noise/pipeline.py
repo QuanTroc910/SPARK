@@ -1,12 +1,13 @@
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
 
-from .config import ColumnNoiseConfig, CrossFieldRuleConfig, DuplicateRowConfig, NoiseType
+from .config import ColumnDType, ColumnNoiseConfig, CrossFieldRuleConfig, DuplicateRowConfig, NoiseType
 from .cross_field_rules import CROSS_FIELD_RULE_DETECTORS, describe_rule
-from .detectors import DETECTORS, detect_duplicate_rows
+from .detectors import DETECTORS, EMAIL_RE, INTEGER_RE, PHONE_RE, detect_duplicate_rows
 
 
 def load_data(file_path: str) -> pd.DataFrame:
@@ -24,6 +25,86 @@ def load_data(file_path: str) -> pd.DataFrame:
     if suffix in (".xlsx", ".xls"):
         return pd.read_excel(path, dtype=str).fillna("")
     raise ValueError(f"Unsupported file type: {suffix}")
+
+
+# Vài định dạng ngày phổ biến hay gặp trong file CSV/Excel -- thử lần lượt,
+# KHÔNG đảm bảo đoán đúng 100% định dạng người dùng cần (vd không phân biệt
+# được %d/%m/%Y với %m/%d/%Y nếu ngày <= 12), chỉ là gợi ý ban đầu hợp lý,
+# người dùng luôn sửa lại được ở ô "Định dạng chuẩn" nếu đoán sai.
+_COMMON_DATE_FORMATS = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"]
+
+
+def guess_column_dtype(series: pd.Series, sample_size: int = 200) -> str:
+    """Đoán `ColumnDType` hợp lý nhất cho 1 cột dựa trên GIÁ TRỊ THẬT trong đó
+    -- dùng để TỰ ĐIỀN SẴN dropdown "Kiểu dữ liệu" ở Bước 3 FE ngay sau khi
+    upload file, đỡ phải người dùng tự đổi từng cột một (mặc định cũ luôn là
+    "text" cho MỌI cột, kể cả cột rõ ràng là số). Đây CHỈ là gợi ý mặc định --
+    người dùng vẫn đổi lại bình thường qua đúng dropdown đã có, không khoá gì
+    cả, không ảnh hưởng tới logic detect (cfg.dtype vẫn lấy từ lựa chọn cuối
+    cùng của người dùng khi bấm "Detect Noise", không phải giá trị đoán này).
+
+    Chỉ xét `sample_size` giá trị KHÔNG RỖNG ĐẦU TIÊN của cột (đủ để đoán đúng
+    với file lớn hàng trăm nghìn dòng, không cần quét hết).
+
+    Thứ tự kiểm tra (từ ĐỊNH DẠNG CHẶT nhất tới LỎNG nhất, vì 1 giá trị có thể
+    khớp nhiều kiểu cùng lúc -- vd số điện thoại cũng là 1 chuỗi số, phải kiểm
+    tra PHONE trước INTEGER mới không bị đoán nhầm): email -> phone -> date ->
+    integer -> float -> category (ít giá trị khác nhau, không phải số) -> text
+    (mặc định cuối cùng nếu không khớp kiểu nào ở trên).
+    """
+    non_empty = series.astype(str).str.strip()
+    non_empty = non_empty[non_empty != ""]
+    if non_empty.empty:
+        return ColumnDType.TEXT.value
+
+    sample = non_empty.head(sample_size)
+    n = len(sample)
+
+    def ratio_matching(predicate) -> float:
+        return sample.apply(predicate).sum() / n
+
+    # Ngưỡng 90% (không bắt buộc 100%) -- chấp nhận 1 số ít ô lỗi định dạng
+    # trong cột (chính là attribute noise mà hệ thống sẽ đi tìm sau), không
+    # để vài ô sai làm hỏng cả việc đoán kiểu đúng của toàn cột.
+    if ratio_matching(lambda v: bool(EMAIL_RE.match(v))) >= 0.9:
+        return ColumnDType.EMAIL.value
+    if ratio_matching(lambda v: bool(PHONE_RE.match(v))) >= 0.9:
+        return ColumnDType.PHONE.value
+
+    for fmt in _COMMON_DATE_FORMATS:
+        def is_date(v: str, fmt: str = fmt) -> bool:
+            try:
+                datetime.strptime(v, fmt)
+                return True
+            except ValueError:
+                return False
+
+        if ratio_matching(is_date) >= 0.9:
+            return ColumnDType.DATE.value
+
+    if ratio_matching(lambda v: bool(INTEGER_RE.match(v))) >= 0.9:
+        return ColumnDType.INTEGER.value
+
+    def is_float(v: str) -> bool:
+        try:
+            float(v)
+            return True
+        except ValueError:
+            return False
+
+    if ratio_matching(is_float) >= 0.9:
+        return ColumnDType.FLOAT.value
+
+    # CATEGORY: không phải số/ngày/email/phone, nhưng số GIÁ TRỊ KHÁC NHAU ít
+    # so với tổng số dòng (vd "Nam"/"Nữ", "Sales"/"HR"/"IT"...) -- ngưỡng kinh
+    # nghiệm: tối đa 50 giá trị khác nhau VÀ chiếm không quá 50% tổng số dòng
+    # không rỗng (cột toàn giá trị khác nhau, vd tên người, thì KHÔNG phải
+    # category dù ít hơn 50 dòng).
+    unique_count = non_empty.nunique()
+    if unique_count <= 50 and unique_count / len(non_empty) <= 0.5:
+        return ColumnDType.CATEGORY.value
+
+    return ColumnDType.TEXT.value
 
 
 @dataclass

@@ -34,7 +34,13 @@ from attribute_noise.config import (
     RuleValueType,
 )
 from attribute_noise.cross_field_rules import FormulaError
-from attribute_noise.pipeline import NoiseFinding, detect_noise, get_flagged_rows, load_data
+from attribute_noise.pipeline import (
+    NoiseFinding,
+    detect_noise,
+    get_flagged_rows,
+    guess_column_dtype,
+    load_data,
+)
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
 from class_noise.distance_based import detect_class_noise_distance
@@ -90,8 +96,12 @@ def _get_working_df(file_id: str):
 def upload_file():
     """Bước 1: Frontend gửi file CSV/Excel lên đây.
 
-    Trả về file_id (để các request sau tham chiếu tới đúng file này) và
-    danh sách tên cột (để frontend hiển thị cho user chọn).
+    Trả về file_id (để các request sau tham chiếu tới đúng file này), danh
+    sách tên cột, và `guessed_dtypes` -- **MỚI**: đoán sẵn kiểu dữ liệu hợp
+    lý nhất cho TỪNG cột (`guess_column_dtype()`, xem pipeline.py) để frontend
+    TỰ CHỌN SẴN trong dropdown "Kiểu dữ liệu" ở Bước 3, đỡ người dùng phải tự
+    đổi từng cột một (mặc định cũ luôn là "text" cho mọi cột). Chỉ là gợi ý --
+    người dùng vẫn đổi lại bình thường, backend không ép buộc gì.
     """
     file = request.files.get("file")
     if file is None:
@@ -109,6 +119,7 @@ def upload_file():
             "file_id": file_id,
             "columns": list(df.columns),
             "row_count": len(df),
+            "guessed_dtypes": {col: guess_column_dtype(df[col]) for col in df.columns},
         }
     )
 

@@ -77,9 +77,13 @@ const COLUMN_TYPES = {
   category: { label: "Phân loại (category)", noises: ["missing_value", "format_noise", "inconsistent_category"] },
 };
 
-function defaultColumnConfig() {
+// dtype mặc định ĐƯỢC BACKEND ĐOÁN SẴN (guess_column_dtype(), xem
+// attribute_noise/pipeline.py) dựa trên GIÁ TRỊ THẬT của cột -- đỡ người
+// dùng phải tự đổi dropdown cho từng cột một khi file nhiều cột. Chỉ là gợi
+// ý mặc định, người dùng vẫn đổi lại bình thường qua đúng dropdown đã có.
+function defaultColumnConfig(dtype = "text") {
   return {
-    dtype: "text",
+    dtype,
     missing_value: true,
     format_noise: true,
     out_of_range: { enabled: false, min: "", max: "" },
@@ -262,11 +266,16 @@ $("upload-btn").addEventListener("click", async () => {
     return;
   }
 
-  const data = await response.json(); // { file_id, columns, row_count }
+  const data = await response.json(); // { file_id, columns, row_count, guessed_dtypes }
   state.fileId = data.file_id;
   state.headers = data.columns;
   state.columnConfig = {};
-  state.headers.forEach((h) => (state.columnConfig[h] = defaultColumnConfig()));
+  // guessed_dtypes: backend đã tự đoán kiểu dữ liệu hợp lý nhất cho từng cột
+  // dựa trên giá trị thật (xem guess_column_dtype() trong app.py) -- dùng
+  // làm dtype KHỞI ĐẦU cho mỗi cột, người dùng vẫn đổi lại được bình thường.
+  state.headers.forEach(
+    (h) => (state.columnConfig[h] = defaultColumnConfig((data.guessed_dtypes && data.guessed_dtypes[h]) || "text"))
+  );
   $("rules-list").innerHTML = ""; // reset rule liên cột khi upload file mới
   state.hasWorkingCopy = false;
   state.appliedGroups = new Set();
