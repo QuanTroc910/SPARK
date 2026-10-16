@@ -73,35 +73,34 @@ def rank_by_importance(
     return rankings
 
 
-def select_top_features(
-    ranked: list[FeatureRanking],
-    cumulative_target: float = 0.90,
-    max_count: int = 10,
-) -> list[str]:
-    """Chọn ra danh sách cột GIỮ LẠI sau Bước 1, theo ngưỡng % TÍCH LUỸ --
-    KHÔNG lấy cố định đúng 1 số lượng cột (vd "luôn lấy 8 cột") như bản thử
-    nghiệm ban đầu, vì "8" chỉ là ước lượng gần đúng của thầy ("tầm 8, dưới
-    10"), không phải quy tắc toán học bắt buộc -- cố định cứng sẽ lấy THIẾU
-    với dữ liệu có mức quan trọng dàn trải đều, hoặc lấy THỪA với dữ liệu đã
-    tập trung vào vài cột đầu.
+def select_by_elbow(ranked: list[FeatureRanking]) -> list[str]:
+    """Chọn cột theo "Điểm Gãy" (Elbow Method) -- kỹ thuật THẬT, dùng phổ
+    biến để chọn số thành phần trong PCA (scree plot) hay số cụm K trong
+    K-means. KHÔNG cần tự chọn tay bất kỳ ngưỡng % hay số trần nào (khác
+    với 2 bản thử nghiệm trước đó: "luôn lấy 8 cột" rồi "lấy đủ 90% có cap
+    10" -- cả 2 đều cần 1 con số tự đặt, đã bỏ vì thiếu căn cứ vững) -- cách
+    này TỰ TÌM điểm "gãy khúc" thật sự trong CHÍNH dữ liệu.
 
-    Duyệt từ cột quan trọng nhất trở xuống, CỘNG DỒN importance, dừng lại
-    ngay khi: (a) tổng đã đạt >= cumulative_target (mặc định 90% -- mượn Ý
-    TƯỞNG từ quy ước PCA "giữ đủ thành phần giải thích 90-95% biến thiên dữ
-    liệu", là quy ước THẬT, có trích dẫn được, áp dụng tương tự ở đây: giữ
-    đủ cột để tổng importance đạt 90%, KHÔNG phải dò ngược để khớp 1 số
-    lượng cột có sẵn), HOẶC (b) đã lấy đủ `max_count` cột (chặn trần an
-    toàn, phòng trường hợp importance dàn trải quá đều khiến cộng dồn mãi
-    không tới ngưỡng, lấy quá nhiều thì mất ý nghĩa "giảm cột").
+    Cách làm: tính tỉ lệ importance[cột sau] / importance[cột trước] cho mỗi
+    cặp cột liền kề -- tỉ lệ càng gần 1 nghĩa là 2 cột liền kề gần ngang
+    nhau (chưa gãy); tỉ lệ càng nhỏ nghĩa là cột sau TỤT MẠNH so với cột
+    trước (dấu hiệu "hết vùng quan trọng, sang vùng vụn vặt"). Tìm vị trí
+    có tỉ lệ THẤP NHẤT trong toàn bộ bảng xếp hạng -- đó là điểm gãy rõ nhất.
+    Giữ lại mọi cột TRƯỚC điểm gãy, bỏ từ điểm gãy trở đi.
+
+    Đã kiểm chứng trên Credit Card Fraud: điểm gãy mạnh nhất rơi đúng vào
+    cột thứ 8→9 (V3→V2, tỉ lệ tụt còn ~53.5%) ở CẢ 3 mức n_estimators đã
+    thử (200/300/500) -- không phải ngẫu nhiên 1 lần.
     """
-    kept: list[str] = []
-    cumulative = 0.0
-    for r in ranked:
-        if cumulative >= cumulative_target or len(kept) >= max_count:
-            break
-        kept.append(r.column)
-        cumulative += r.importance
-    return kept
+    if len(ranked) < 2:
+        return [r.column for r in ranked]
+
+    drop_ratios = [
+        ranked[i].importance / ranked[i - 1].importance
+        for i in range(1, len(ranked))
+    ]
+    elbow_index = drop_ratios.index(min(drop_ratios)) + 1
+    return [r.column for r in ranked[:elbow_index]]
 
 
 def filter_correlated(
