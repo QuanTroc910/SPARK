@@ -96,9 +96,9 @@
             <h3>🌲 Single learning-based</h3>
             <p>Confident Learning + Random Forest — dùng xác suất dự đoán của 1 model để tìm dòng nghi ngờ sai nhãn.</p>
           </div>
-          <div class="direction-card is-disabled" data-method="ensemble_based" tabindex="0" role="button">
-            <h3>🗳️ Ensemble-based <span class="badge-soon">sắp có</span></h3>
-            <p>Nhiều classifier khác nhau cùng biểu quyết — chưa triển khai, sẽ bổ sung sau.</p>
+          <div class="direction-card" data-method="ensemble_based" tabindex="0" role="button">
+            <h3>🗳️ Ensemble-based</h3>
+            <p>3 classifier khác họ (Logistic Regression, Naive Bayes, Linear SVM) cùng biểu quyết — dòng nào bị đa số bất đồng với nhãn ghi thì nghi ngờ.</p>
           </div>
         </div>
       </div>
@@ -218,6 +218,21 @@
           </p>
         </div>
 
+        <div class="sub-section" id="class-params-ensemble" hidden>
+          <h3 class="sub-title">Tham số nâng cao (tuỳ chọn)</h3>
+          <div class="field-row">
+            <div class="field">
+              <label>Số fold (cv_folds)</label>
+              <input type="number" class="input" id="class-ensemble-cv-folds" value="5" min="2" max="10" />
+            </div>
+          </div>
+          <p class="panel-desc">
+            Train 3 classifier khác họ (Logistic Regression, Gaussian Naive Bayes, Linear SVM) qua Cross-Validation,
+            dòng nào bị ĐA SỐ (≥2/3) classifier dự đoán khác nhãn ghi thì gắn cờ nghi ngờ. Nhẹ hơn nhiều so với
+            Random Forest 300 cây nên vẫn chạy nhanh dù phải train tới 3 model.
+          </p>
+        </div>
+
         <p class="hint-note" id="class-wait-hint">
           ⚠️ Huấn luyện qua Cross-Validation có thể mất từ vài giây đến vài phút tuỳ kích thước file — trang
           sẽ không phản hồi gì trong lúc chờ, đừng tắt tab.
@@ -293,7 +308,7 @@
         <div class="chart-card" id="class-warning-card" hidden></div>
 
         <div class="chart-card" id="class-report-card">
-          <h3 class="sub-title">Precision / Recall / F1 từng lớp</h3>
+          <h3 class="sub-title" id="class-report-title">Precision / Recall / F1 từng lớp</h3>
           <div class="table-wrap">
             <table class="results-table" id="class-report-table"></table>
           </div>

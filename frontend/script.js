@@ -1521,13 +1521,13 @@ function renderClassNoiseConfigForm() {
   renderClassFeatureList();
 
   // Mỗi method có khối tham số nâng cao RIÊNG (n_estimators/cv_folds cho
-  // single_learning, k cho distance_based) -- ẩn/hiện đúng khối theo lựa
-  // chọn ở Bước 2. distance_based không train model nên câu cảnh báo "có thể
-  // mất vài phút" cũng không áp dụng.
-  const isDistance = state.classMethod === "distance_based";
-  $("class-params-single").hidden = isDistance;
-  $("class-params-distance").hidden = !isDistance;
-  $("class-wait-hint").hidden = isDistance;
+  // single_learning, k cho distance_based, cv_folds cho ensemble_based) --
+  // ẩn/hiện đúng khối theo lựa chọn ở Bước 2. distance_based không train
+  // model nên câu cảnh báo "có thể mất vài phút" cũng không áp dụng.
+  $("class-params-single").hidden = state.classMethod !== "single_learning";
+  $("class-params-distance").hidden = state.classMethod !== "distance_based";
+  $("class-params-ensemble").hidden = state.classMethod !== "ensemble_based";
+  $("class-wait-hint").hidden = state.classMethod === "distance_based";
 }
 
 function renderClassFeatureList() {
@@ -1682,7 +1682,7 @@ $("class-detect-btn").addEventListener("click", async () => {
   setButtonLoading(btn, true, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
   statusEl.textContent = isDistance
     ? "Đang tính khoảng cách giữa các dòng…"
-    : "Có thể mất vài phút với file lớn, vui lòng chờ…";
+    : "Có thể mất vài giây đến vài phút tuỳ kích thước file, vui lòng chờ…";
 
   const requestBody = {
     file_id: state.fileId,
@@ -1690,8 +1690,10 @@ $("class-detect-btn").addEventListener("click", async () => {
     feature_columns: featureColumns,
     method: state.classMethod,
   };
-  if (isDistance) {
+  if (state.classMethod === "distance_based") {
     requestBody.k = parseInt($("class-k-neighbors").value, 10) || 5;
+  } else if (state.classMethod === "ensemble_based") {
+    requestBody.cv_folds = parseInt($("class-ensemble-cv-folds").value, 10) || 5;
   } else {
     requestBody.n_estimators = parseInt($("class-n-estimators").value, 10) || 300;
     requestBody.cv_folds = parseInt($("class-cv-folds").value, 10) || 5;
@@ -1755,6 +1757,8 @@ function renderClassResults() {
   if (!diag) return;
   if (state.classResultMethod === "distance_based") {
     renderClassResultsDistance(diag);
+  } else if (state.classResultMethod === "ensemble_based") {
+    renderClassResultsEnsemble(diag);
   } else {
     renderClassResultsSingleLearning(diag);
   }
@@ -1807,12 +1811,77 @@ function renderClassResultsDistance(diag) {
   $("class-confusion-card").hidden = true;
 }
 
+// ---- Ensemble-based (N29 -- LogisticRegression + GaussianNB + LinearSVC
+// biểu quyết): không có 1 cv_accuracy duy nhất (3 model riêng biệt), thay
+// bằng accuracy RIÊNG của từng classifier (per_classifier_accuracy) --
+// PHẢI xem cả 3 trước khi tin findings, giống hệt lý do cv_accuracy bên
+// Single learning-based. Không có ma trận đếm (không có 1 "model" duy nhất
+// để tính ma trận nhãn-ghi-vs-dự-đoán theo đúng nghĩa). ----
+function renderClassResultsEnsemble(diag) {
+  $("class-report-card").hidden = false;
+  $("class-confusion-card").hidden = true;
+  $("class-report-title").textContent = "Accuracy từng classifier (so với nhãn ghi)";
+
+  const baseline = diag.majority_baseline_accuracy;
+  const entries = diag.classifier_names.map((name) => ({
+    name,
+    acc: diag.per_classifier_accuracy[name],
+    diff: diag.per_classifier_accuracy[name] - baseline,
+  }));
+  const bestDiff = Math.max(...entries.map((e) => e.diff));
+  // "Yếu" = ngay cả classifier TỐT NHẤT trong 3 cái cũng chỉ nhỉnh hơn
+  // baseline rất ít (<=2 điểm %) -- không classifier nào học được gì đáng
+  // kể từ feature_columns.
+  const isWeak = bestDiff <= 0.02;
+
+  $("class-stats-grid").innerHTML = `
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng dùng được / ${diag.n_rows_total.toLocaleString("vi-VN")} tổng</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.classifier_names.length}</span>
+      <span class="stat-label">Số classifier biểu quyết</span>
+    </div>
+    <div class="stat-card ${isWeak ? "stat-crimson" : "stat-teal"}">
+      <span class="stat-value mono">${(baseline * 100).toFixed(2)}%</span>
+      <span class="stat-label">Baseline (đoán bừa lớp đa số)</span>
+      <span class="stat-sub mono">Tốt nhất: ${bestDiff > 0 ? "+" : ""}${(bestDiff * 100).toFixed(2)} điểm %</span>
+    </div>
+    <div class="stat-card stat-amber">
+      <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
+    </div>
+  `;
+
+  const warnCard = $("class-warning-card");
+  if (isWeak) {
+    warnCard.hidden = false;
+    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
+      ⚠️ Cả 3 classifier đều chỉ nhỉnh hơn baseline rất ít (tốt nhất chỉ ${(bestDiff * 100).toFixed(2)} điểm %)
+      — không classifier nào học được gì đáng kể từ các cột đặc trưng đã chọn. Các dòng bị gắn cờ bên dưới
+      RẤT KHÔNG đáng tin, cân nhắc chọn lại cột đặc trưng khác trước khi kết luận.</p>`;
+  } else {
+    warnCard.hidden = true;
+  }
+
+  $("class-report-table").innerHTML = `
+    <thead><tr><th>Classifier</th><th>Accuracy</th><th>Chênh lệch baseline</th></tr></thead>
+    <tbody>${entries
+      .map((e) => {
+        const sign = e.diff >= 0 ? "+" : "";
+        return `<tr><td>${escapeHtml(e.name)}</td><td class="mono">${(e.acc * 100).toFixed(2)}%</td><td class="mono">${sign}${(e.diff * 100).toFixed(2)} điểm %</td></tr>`;
+      })
+      .join("")}</tbody>`;
+}
+
 // ---- Single learning-based (Confident Learning + Random Forest): giữ
 // nguyên logic gốc, đầy đủ cv_accuracy/baseline/per_class_report/
 // confusion_matrix để chẩn đoán độ tin cậy trước khi tin findings. ----
 function renderClassResultsSingleLearning(diag) {
   $("class-report-card").hidden = false;
   $("class-confusion-card").hidden = false;
+  $("class-report-title").textContent = "Precision / Recall / F1 từng lớp";
   $("class-confusion-title").textContent = "Ma trận đếm (hàng = nhãn ghi, cột = nhãn model tự tin)";
 
   const diffPct = diag.cv_accuracy - diag.majority_baseline_accuracy;
@@ -1899,6 +1968,7 @@ function getFilteredClassFindings() {
 const CLASS_SCORE_LABELS = {
   distance_based: { suggested: "Gợi ý nhãn (đa số láng giềng)", score: "Tỉ lệ láng giềng bất đồng" },
   single_learning: { suggested: "Model tự tin", score: "Margin" },
+  ensemble_based: { suggested: "Gợi ý nhãn (đa số classifier)", score: "Tỉ lệ classifier bất đồng" },
 };
 
 function renderClassFindingsTable() {

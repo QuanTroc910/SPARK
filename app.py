@@ -38,6 +38,7 @@ from attribute_noise.pipeline import NoiseFinding, detect_noise, get_flagged_row
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
 from class_noise.distance_based import detect_class_noise_distance
+from class_noise.ensemble_based import detect_class_noise_ensemble
 from class_noise.feature_selection import (
     cap_outliers,
     filter_correlated,
@@ -270,9 +271,11 @@ def class_noise_detect_api():
       - "distance_based": Mutual k-Nearest Neighbor, N13
         (class_noise/distance_based.py) -- KHÔNG train model nào, chỉ xét
         khoảng cách. Tham số riêng: k.
-      - "ensemble_based": CHƯA triển khai, trả lỗi rõ ràng.
+      - "ensemble_based": N29 (class_noise/ensemble_based.py) -- 3 classifier
+        khác họ (LogisticRegression, GaussianNB, LinearSVC) biểu quyết qua
+        cross-validation. Tham số riêng: cv_folds.
     Route này CHỈ "phiên dịch" JSON <-> Python object + JSON-hoá kết quả,
-    không có logic detect nào viết thêm ở đây -- logic thật nằm hết ở 2 module
+    không có logic detect nào viết thêm ở đây -- logic thật nằm hết ở 3 module
     class_noise/confident_learning.py và class_noise/distance_based.py.
 
     Response LUÔN có field "method" ở gốc để frontend biết nên render kiểu
@@ -300,11 +303,7 @@ def class_noise_detect_api():
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
 
     method = payload.get("method") or "single_learning"
-    if method == "ensemble_based":
-        return jsonify(
-            {"error": "Phương pháp Ensemble-based chưa được triển khai, sẽ bổ sung sau."}
-        ), 400
-    if method not in ("single_learning", "distance_based"):
+    if method not in ("single_learning", "distance_based", "ensemble_based"):
         return jsonify({"error": f"method không hợp lệ: {method}"}), 400
 
     label_column = payload.get("label_column")
@@ -370,6 +369,39 @@ def class_noise_detect_api():
                         "recorded_label": f.recorded_label,
                         "suggested_label": f.suggested_label,
                         "score": f.disagreement_ratio,
+                    }
+                    for f in result.findings
+                ],
+            }
+        )
+
+    if method == "ensemble_based":
+        ens_config = ClassNoiseConfig(label_column=label_column, feature_columns=feature_columns)
+        cv_folds = int(payload.get("cv_folds") or 5)
+        try:
+            result = detect_class_noise_ensemble(cleaned_df, ens_config, cv_folds=cv_folds)
+        except (ValueError, KeyError) as exc:
+            return jsonify({"error": f"Không chạy được với cấu hình này: {exc}"}), 400
+
+        diag = result.diagnostics
+        return jsonify(
+            {
+                "method": "ensemble_based",
+                "diagnostics": {
+                    "n_rows_total": diag.n_rows_total,
+                    "n_rows_used": diag.n_rows_used,
+                    "classifier_names": diag.classifier_names,
+                    "per_classifier_accuracy": diag.per_classifier_accuracy,
+                    "majority_baseline_accuracy": diag.majority_baseline_accuracy,
+                    "class_names": diag.class_names,
+                    "class_counts": diag.class_counts,
+                },
+                "findings": [
+                    {
+                        "row_number": f.row_number,
+                        "recorded_label": f.recorded_label,
+                        "suggested_label": f.suggested_label,
+                        "score": f.disagree_ratio,
                     }
                     for f in result.findings
                 ],

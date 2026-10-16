@@ -88,6 +88,37 @@ tới khi có nhu cầu đổi tên repo thật sự.
     model để đo accuracy). `_prepare_usable_subset()` CỐ TÌNH lặp lại logic
     lọc dòng y hệt `confident_learning.py` (không import dùng chung) để 2
     module độc lập nhau, không bị ràng buộc chéo khi sửa sau này.
+  - `ensemble_based.py` — **MỚI, thuật toán DETECT thứ 3** cho Class noise,
+    theo paper **N29** trong Bảng 6 Gupta & Gupta (2019) -- nhóm "Ensemble
+    based" (Khoshgoftaar, Zhong, Joshi, 2005, "Enhancing software quality
+    estimation using ensemble-classifier based noise filtering", 9/9 điểm
+    chất lượng; xem mục 11 dưới đây để biết đầy đủ lý do chọn 3 classifier
+    cụ thể). KHÁC CẢ 2 module trên: train **3 classifier THUỘC HỌ THUẬT
+    TOÁN KHÁC NHAU** (không phải nhiều lần cùng 1 loại như Random Forest) --
+    `LogisticRegression` (tuyến tính), `GaussianNB` (xác suất), `LinearSVC`
+    (biên cực đại/margin-based) -- CỐ TÌNH không trùng họ với Random Forest
+    (tree-based, confident_learning.py) lẫn Mutual k-NN (instance-based,
+    distance_based.py), để 3 phương pháp trong hệ thống là 3 góc nhìn ĐỘC
+    LẬP thật sự, không trùng điểm mù nhau. Mỗi classifier tự dự đoán qua
+    `StratifiedKFold` + `cross_val_predict` (out-of-fold, cùng cơ chế
+    confident_learning.py); dòng nào bị ĐA SỐ (>50%, tức ≥2/3) classifier dự
+    đoán KHÁC nhãn ghi thì gắn cờ. Xử lý mất cân bằng lớp: `LogisticRegression`/
+    `LinearSVC` dùng `class_weight="balanced"`; `GaussianNB` không hỗ trợ
+    tham số này nên ép `priors` đều nhau giữa các lớp thay vì theo đúng tỉ lệ
+    thật. `detect_class_noise_ensemble(df, config, cv_folds=5, random_state=42)`
+    trả về `EnsembleNoiseResult(findings, diagnostics)` -- `EnsembleNoiseFinding`
+    (`row_number`, `recorded_label`, `suggested_label` = nhãn đa số classifier
+    chọn, `disagree_ratio`) + `EnsembleNoiseDiagnostics` (`classifier_names`,
+    `per_classifier_accuracy` -- accuracy RIÊNG từng classifier so với nhãn
+    ghi, PHẢI xem cả 3 trước khi tin findings giống hệt lý do cv_accuracy ở
+    Confident Learning; `majority_baseline_accuracy`). **Tốc độ**: tuy train
+    tới 3 model (so với 1 model của Confident Learning), vẫn NHANH HƠN HẲN
+    Random Forest 300 cây -- đã đo thật trên Adult Income (32.561 dòng):
+    Random Forest 12.72-13.47s, còn LogisticRegression+GaussianNB+LinearSVC
+    cộng lại chỉ 2.15-2.40s (nhanh hơn ~6 lần) -- vì Random Forest thực chất
+    là 300 cây con cộng lại (mỗi cây phải mọc qua nhiều bước chia nhánh tốn
+    kém), còn 3 classifier kia đều là bài toán tối ưu LỒI (hoặc không cần
+    tối ưu gì như GaussianNB) nên hội tụ rất nhanh dù "có train".
   - `feature_selection.py` — **MỚI, GIẢM SỐ CỘT trước khi chạy Confident
     Learning** (theo yêu cầu thầy sau buổi báo cáo — xem mục 9 dưới đây để
     biết đầy đủ lý do/lịch sử quyết định): `rank_by_importance()` (Bước 1 —
@@ -144,26 +175,30 @@ tới khi có nhu cầu đổi tên repo thật sự.
     code vì không sai gì, không có gì phải xoá.
   - `GET /api/download/<download_id>` — trả file CSV (lưu tạm trong
     `CLEANED_FILES`, tách riêng khỏi `UPLOADED_FILES`/`WORKING_FILES`).
-  - `POST /api/class-noise/detect` — **hướng Class noise, MỚI (mục 10):
-    thêm field `method`** dispatch sang 1 trong 2 thuật toán DETECT đã có
+  - `POST /api/class-noise/detect` — **hướng Class noise (mục 10+11):
+    field `method`** dispatch sang 1 trong **ĐỦ CẢ 3** thuật toán DETECT
     (`"single_learning"` mặc định = Confident Learning, `"distance_based"`
-    = Mutual k-NN N13; `"ensemble_based"` trả lỗi 400 rõ ràng "chưa triển
-    khai" vì chưa code). Payload chung: `file_id` (DÙNG CHUNG `/api/upload`
-    với hướng attribute, không có upload riêng) + `label_column` +
-    `feature_columns`; `method="single_learning"` nhận thêm tuỳ chọn
-    `n_estimators`/`cv_folds`, `method="distance_based"` nhận thêm tuỳ chọn
-    `k` (mặc định 5). Response LUÔN có field `"method"` ở gốc để FE biết
-    nên render kiểu diagnostics nào (2 thuật toán có hình dạng diagnostics
-    KHÁC NHAU hẳn — distance-based không có cv_accuracy/per_class_report/
-    confusion_matrix vì không train model). `findings` được CHUẨN HOÁ chung
-    tên trường cho cả 2 method (`suggested_label` thay `confident_label`,
-    `score` thay `margin`/`disagreement_ratio`) để FE dùng CHUNG 1 cách
+    = Mutual k-NN N13, `"ensemble_based"` = N29 — **MỚI, mục 11, vừa nối
+    xong**). Payload chung: `file_id` (DÙNG CHUNG `/api/upload` với hướng
+    attribute, không có upload riêng) + `label_column` + `feature_columns`;
+    `method="single_learning"` nhận thêm tuỳ chọn `n_estimators`/`cv_folds`,
+    `method="distance_based"` nhận thêm tuỳ chọn `k` (mặc định 5),
+    `method="ensemble_based"` nhận thêm tuỳ chọn `cv_folds` (mặc định 5).
+    Response LUÔN có field `"method"` ở gốc để FE biết nên render kiểu
+    diagnostics nào (3 thuật toán có hình dạng diagnostics KHÁC NHAU hẳn —
+    distance-based không có cv_accuracy/per_class_report/confusion_matrix vì
+    không train model; ensemble-based có `per_classifier_accuracy` (accuracy
+    RIÊNG từng trong 3 classifier) thay vì 1 `cv_accuracy` duy nhất, cũng
+    không có confusion_matrix). `findings` được CHUẨN HOÁ chung tên trường
+    cho CẢ 3 method (`suggested_label` thay `confident_label`, `score` thay
+    `margin`/`disagreement_ratio`/`disagree_ratio`) để FE dùng CHUNG 1 cách
     render bảng "danh sách dòng nghi ngờ", chỉ đổi chữ header theo method.
     CHẠY ĐỒNG BỘ (block request); `single_learning` có thể mất VÀI PHÚT với
-    file lớn (train Random Forest qua CV), `distance_based` thường nhanh
-    hơn nhiều vì không train model nào — không có thanh tiến trình, chấp
-    nhận được cho quy mô demo khoá luận. `app.run(..., threaded=True)` để
-    request này không chặn các request khác trong lúc chờ. Validate
+    file lớn (train Random Forest 300 cây qua CV), `distance_based`/
+    `ensemble_based` thường nhanh hơn nhiều (đã đo thật, xem mục 11) — không
+    có thanh tiến trình, chấp nhận được cho quy mô demo khoá luận.
+    `app.run(..., threaded=True)` để request này không chặn các request
+    khác trong lúc chờ. Validate
     `feature_columns` đều "đủ số" (`_is_mostly_numeric()`) TRƯỚC khi chạy
     (áp dụng cho CẢ 2 method, cùng 1 validate), báo lỗi nêu đúng tên cột
     chữ nếu sai (cùng lỗi "0 dòng dùng được" như `reduce-features`, lúc đầu
@@ -191,10 +226,11 @@ tới khi có nhu cầu đổi tên repo thật sự.
   1. Tải file lên → `POST /api/upload`.
   2. Hướng xử lý — chọn Attribute noise hay Class noise. **MỚI (mục 10):**
      chọn Class Noise xong hiện thêm khối "Chọn phương pháp phát hiện" (3
-     thẻ, `#class-method-section`, tái dùng CSS `.direction-card`/`.is-
-     disabled`/`.badge-soon`) khớp đúng Bảng 6 Gupta & Gupta (2019): Distance-
-     based + Single learning-based bấm được, Ensemble-based khoá "sắp có"
-     (chưa code `class_noise/ensemble_based.py`). Nút "Tiếp tục" chỉ mở khi
+     thẻ, `#class-method-section`) khớp đúng Bảng 6 Gupta & Gupta (2019):
+     **MỚI (mục 11) cả 3 thẻ đều bấm được** — Distance-based, Single
+     learning-based, Ensemble-based (CSS `.is-disabled`/`.badge-soon` vẫn
+     giữ nguyên trong `style.css` phòng khi cần khoá tạm 1 phương pháp
+     khác sau này, chỉ không còn gắn vào thẻ nào). Nút "Tiếp tục" chỉ mở khi
      ĐÃ chọn xong cả hướng LẪN phương pháp (nếu là Class Noise) —
      `updateContinueStep2Button()`. `state.classMethod` lưu lựa chọn này,
      `state.classResultMethod` lưu riêng method CỦA KẾT QUẢ đang hiển thị
@@ -273,36 +309,50 @@ tới khi có nhu cầu đổi tên repo thật sự.
     (vẫn sửa tay thêm được, không khoá cứng). Đổi nhãn hoặc upload file mới
     thì ẩn kết quả cũ (tránh hiểu nhầm là ứng với nhãn/file đang chọn). Sau
     đó mới tới danh sách checkbox chọn `feature_columns` (loại trừ cột đang
-    là nhãn), khối "Tham số nâng cao" **MỚI (mục 10) đổi theo `state.classMethod`**:
+    là nhãn), khối "Tham số nâng cao" **(mục 10+11) đổi theo `state.classMethod`**:
     `#class-params-single` (n_estimators/cv_folds, mặc định 300/5, khớp
     `ClassNoiseConfig`) hiện khi `single_learning`, `#class-params-distance`
-    (chỉ số `k`, mặc định 5) hiện khi `distance_based` — `renderClassNoiseConfigForm()`
-    ẩn/hiện đúng khối + dòng cảnh báo "có thể mất vài phút" (`#class-wait-hint`,
-    chỉ áp dụng cho `single_learning` vì `distance_based` không train model).
-    `panel-desc` đầu Bước 3 có ghi rõ: các cột đặc trưng sẽ TỰ ĐỘNG được cap
-    outlier + log-transform (Bước 3 ở mục 9) ngay lúc bấm "Phát hiện Class
-    Noise" — áp dụng cho CẢ 2 method, không phải khối riêng, không cần bấm
-    thêm nút nào, chỉ 1 dòng mô tả cho người dùng biết việc đang xảy ra.
-  - Bước 4 (class): **MỚI (mục 10) — `renderClassResults()` dispatch theo
-    `state.classResultMethod`, render 2 kiểu khác hẳn nhau** vì 2 thuật toán
-    có diagnostics khác bản chất:
+    (chỉ số `k`, mặc định 5) hiện khi `distance_based`, `#class-params-ensemble`
+    (chỉ số `cv_folds`, mặc định 5 — **MỚI, mục 11**) hiện khi `ensemble_based`
+    — `renderClassNoiseConfigForm()` ẩn/hiện đúng khối + dòng cảnh báo "có
+    thể mất vài phút" (`#class-wait-hint`, chỉ ẩn khi `distance_based` vì đây
+    là method duy nhất không train model nào). `panel-desc` đầu Bước 3 có ghi
+    rõ: các cột đặc trưng sẽ TỰ ĐỘNG được cap outlier + log-transform (Bước 3
+    ở mục 9) ngay lúc bấm "Phát hiện Class Noise" — áp dụng cho CẢ 3 method,
+    không phải khối riêng, không cần bấm thêm nút nào, chỉ 1 dòng mô tả cho
+    người dùng biết việc đang xảy ra.
+  - Bước 4 (class): `renderClassResults()` dispatch theo
+    `state.classResultMethod`, render **3 kiểu khác hẳn nhau** (mục 10+11)
+    vì 3 thuật toán có diagnostics khác bản chất:
     - `single_learning` (`renderClassResultsSingleLearning()`, hành vi gốc):
       5 thẻ thống kê (dòng dùng được, CV accuracy, baseline, chênh lệch,
       số dòng nghi ngờ) + khung CẢNH BÁO màu đỏ nếu chênh lệch accuracy-
       baseline ≤ 2 điểm % VÀ dưới 30% "mức trần tối đa" (`isWeak`) + bảng
-      precision/recall/F1 từng lớp (`#class-report-card`) + ma trận đếm
-      (`#class-confusion-card`).
-    - `distance_based` (`renderClassResultsDistance()`, **MỚI**): 4 thẻ
-      thống kê (dòng dùng được, k, % dòng có láng giềng lẫn nhau — "độ
-      phủ", số dòng nghi ngờ) + khung CẢNH BÁO nếu độ phủ < 50% (dữ liệu
-      quá thưa/k quá nhỏ). `#class-report-card`/`#class-confusion-card` bị
-      ẨN HẲN (không có precision/recall/confusion matrix vì không train
-      model nào để tính).
+      precision/recall/F1 từng lớp (`#class-report-card`, tiêu đề đặt qua
+      `#class-report-title`) + ma trận đếm (`#class-confusion-card`).
+    - `distance_based` (`renderClassResultsDistance()`): 4 thẻ thống kê
+      (dòng dùng được, k, % dòng có láng giềng lẫn nhau — "độ phủ", số dòng
+      nghi ngờ) + khung CẢNH BÁO nếu độ phủ < 50% (dữ liệu quá thưa/k quá
+      nhỏ). `#class-report-card`/`#class-confusion-card` bị ẨN HẲN (không
+      có precision/recall/confusion matrix vì không train model nào).
+    - `ensemble_based` (`renderClassResultsEnsemble()`, **MỚI, mục 11**):
+      4 thẻ thống kê (dòng dùng được, số classifier = 3, baseline + chênh
+      lệch của classifier TỐT NHẤT trong 3 cái, số dòng nghi ngờ) + khung
+      CẢNH BÁO nếu ngay cả classifier tốt nhất cũng chỉ nhỉnh hơn baseline
+      ≤ 2 điểm % (`isWeak` riêng, so TỪNG classifier chứ không phải 1
+      cv_accuracy duy nhất). `#class-report-card` đổi tiêu đề thành
+      "Accuracy từng classifier (so với nhãn ghi)" (qua `#class-report-title`),
+      bảng liệt kê accuracy + chênh lệch baseline của TỪNG trong 3 classifier
+      (`per_classifier_accuracy`) — không phải precision/recall/F1 theo
+      lớp như single_learning. `#class-confusion-card` bị ẨN HẲN (không có
+      1 "model" duy nhất để tính ma trận đếm nhãn-ghi-vs-dự-đoán).
     - Bảng danh sách dòng nghi ngờ dùng CHUNG 1 hàm `renderClassFindingsTable()`
-      cho cả 2 method (đọc `f.suggested_label`/`f.score` đã CHUẨN HOÁ từ
+      cho CẢ 3 method (đọc `f.suggested_label`/`f.score` đã CHUẨN HOÁ từ
       backend), chỉ đổi chữ header qua `CLASS_SCORE_LABELS` ("Model tự
-      tin"/"Margin" cho single_learning, "Gợi ý nhãn"/"Tỉ lệ láng giềng bất
-      đồng" cho distance_based) — tìm kiếm + phân trang 20 dòng/trang, đã
+      tin"/"Margin" cho single_learning, "Gợi ý nhãn (đa số láng giềng)"/
+      "Tỉ lệ láng giềng bất đồng" cho distance_based, "Gợi ý nhãn (đa số
+      classifier)"/"Tỉ lệ classifier bất đồng" cho ensemble_based — MỚI) —
+      tìm kiếm + phân trang 20 dòng/trang, đã
       sắp theo score giảm dần từ backend.
   - Bước 5 (class): CHỈ có placeholder "đang phát triển" — xử lý/handling
     cho class noise CHƯA code (xem roadmap cuối file), nút quay lại Bước 4.
@@ -611,6 +661,55 @@ tới khi có nhu cầu đổi tên repo thật sự.
       chung 1 endpoint cho cả 2 method) + bảng precision/recall/confusion
       matrix hiện đúng, header "Model tự tin"/"Margin" không đổi.
 
+11. **Thêm thuật toán DETECT thứ 3 (Ensemble-based, N29) + nối ĐỦ CẢ 3
+    phương pháp vào web — ĐÃ CODE XONG, ĐÃ NỐI VÀO WEB, ĐÃ TEST QUA
+    PLAYWRIGHT cho cả 3 luồng:**
+    - **Lý do chọn đúng 3 classifier `LogisticRegression`/`GaussianNB`/
+      `LinearSVC`** — lúc đầu định dùng Decision Tree + KNN trong bộ 4, user
+      TỰ PHÁT HIỆN 2 vấn đề trùng hướng nghiêm trọng trước khi code: (1)
+      KNN trong ensemble sẽ trùng cơ chế với chính N13 (cùng hỏi "láng giềng
+      gần nghĩ gì"), (2) Decision Tree sẽ trùng họ với Random Forest của
+      Confident Learning (RF vốn LÀ nhiều Decision Tree gộp lại) — cả 2 sẽ
+      làm 2/3 phương pháp trong hệ thống đưa ra phán đoán TƯƠNG QUAN nhau
+      thay vì độc lập, làm yếu mục đích so sánh 3 góc nhìn tách biệt. Đã đổi
+      sang `LogisticRegression` (tuyến tính) + `GaussianNB` (xác suất) +
+      `LinearSVC` (biên cực đại) — 3 họ thuật toán không trùng cả Random
+      Forest (tree-based) lẫn Mutual k-NN (instance-based). Cũng đã cân nhắc
+      và LOẠI SVM kernel phi tuyến (vd RBF) dù có thể bắt ranh giới cong tốt
+      hơn LinearSVC — lý do: `sklearn` tự ghi rõ SVM kernel có độ phức tạp
+      O(n²) đến O(n³) theo số dòng, "hard to scale to datasets with more
+      than a couple of 10000 samples" — với file thầy 588.393 dòng sẽ CHẬM
+      GẤP HÀNG TRĂM/NGHÌN LẦN LinearSVC, lặp lại đúng kiểu vấn đề đã gặp với
+      Random Forest trên Credit Card Fraud (phải huỷ giữa chừng).
+    - **Kết quả thực nghiệm trên Adult Income** (`evaluate_ensemble_vs_others.py`,
+      cấy nhiễu có kiểm soát, so cả 3 thuật toán): N29 THẮNG CẢ 2 CHỈ SỐ ở
+      mức nhiễu 30% (Precision 0.495, Recall 0.691 → F1 0.576, cao nhất
+      trong 3) — ở mức 10% ngang Confident Learning về F1 (0.358 vs 0.356)
+      nhưng Recall cao nhất (0.730, đổi lại Precision thấp nhất 0.237).
+      `per_classifier_accuracy` cho thấy điều đáng chú ý: chỉ `GaussianNB`
+      học rõ ràng tốt hơn baseline (+1.8 đến +3.55 điểm %), còn
+      `LogisticRegression`/`LinearSVC` đều THẤP HƠN baseline ở cả 2 mức
+      nhiễu (ranh giới tuyến tính không hợp với dữ liệu Adult Income) — dù
+      vậy kết quả TỔNG HỢP (biểu quyết) vẫn tốt hơn từng classifier riêng lẻ,
+      cho thấy ngay cả khi 2/3 thành phần yếu, sự BẤT ĐỒNG giữa chúng vẫn
+      mang tín hiệu hữu ích.
+    - **Tốc độ — đã đo thật, xem lại mục kiến trúc `ensemble_based.py`**:
+      dù train tới 3 model (so với 1 của Confident Learning), N29 vẫn nhanh
+      hơn Random Forest ~6 lần (2.15-2.40s vs 12.72-13.47s trên Adult
+      Income) — vì RF thực chất là 300 cây con cộng lại (mỗi cây tốn kém),
+      còn 3 classifier kia là bài toán tối ưu LỒI (hoặc không cần tối ưu gì
+      như GaussianNB, chỉ tính thống kê 1 lần) nên hội tụ rất nhanh.
+    - **Nối vào web**: mở khoá thẻ Ensemble-based ở Bước 2 (gỡ `is-disabled`/
+      `badge-soon` khỏi HTML, không xoá CSS class vì có thể cần lại sau),
+      thêm `#class-params-ensemble` (chỉ `cv_folds`) ở Bước 3, thêm
+      `renderClassResultsEnsemble()` ở Bước 4 (xem mục kiến trúc frontend ở
+      trên), backend thêm nhánh `method == "ensemble_based"` trong
+      `class_noise_detect_api()` gọi thẳng `detect_class_noise_ensemble()`.
+      Đã test qua Playwright CẢ 3 luồng trong cùng 1 lượt (Ensemble-based
+      mới + Single learning-based + Distance-based cũ) — không luồng nào
+      hồi quy, số liệu CV accuracy/coverage của 2 luồng cũ khớp y hệt lịch
+      sử đã biết trước đó.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -665,8 +764,11 @@ tới khi có nhu cầu đổi tên repo thật sự.
       Single learning-based, không hồi quy). Đã viết script đánh giá so
       sánh thực nghiệm (`evaluate_distance_vs_confident.py`) trên Adult
       Income — N13 thắng Confident Learning về F1 (xem chi tiết mục 10).
-- [ ] Ensemble-based (N29) — nhóm thứ 3 trong Bảng 6, CHƯA code (xem mục 10
-      để biết lý do). Thẻ chọn đã hiện trên UI nhưng khoá "sắp có".
+- [x] Ensemble-based (N29) — nhóm thứ 3 trong Bảng 6: `class_noise/ensemble_based.py`
+      (LogisticRegression + GaussianNB + LinearSVC biểu quyết) + nối vào web
+      (Bước 2/3/4) + `evaluate_ensemble_vs_others.py` so sánh đủ cả 3 thuật
+      toán. CẢ 3 phương pháp giờ đều bấm được trên UI (xem mục 11). N29
+      thắng cả Precision/Recall ở mức nhiễu 30% trên Adult Income.
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá
       chậm trên 284.807 dòng, đã huỷ giữa chừng) — cần chạy lại với
       n_estimators thấp hơn hoặc lấy mẫu con nếu muốn có số liệu so sánh
