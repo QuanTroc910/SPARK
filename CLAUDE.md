@@ -68,6 +68,16 @@ tới khi có nhu cầu đổi tên repo thật sự.
     chat, dữ liệu đó chỉ có 3 đặc trưng, recall lớp hiếm ~30%, thấp hơn hẳn
     khi thử trên 2 bộ Kaggle khác có nhiều đặc trưng hơn — KHÔNG phải lỗi
     thuật toán, đã kiểm chứng bằng thí nghiệm có đối chứng).
+  - `feature_selection.py` — **MỚI, GIẢM SỐ CỘT trước khi chạy Confident
+    Learning** (theo yêu cầu thầy sau buổi báo cáo — xem mục 9 dưới đây để
+    biết đầy đủ lý do/lịch sử quyết định): `rank_by_importance()` (Bước 1 —
+    train 1 Random Forest, đọc `feature_importances_`, xếp hạng cột theo mức
+    LIÊN QUAN TỚI NHÃN) + `select_by_elbow()` (TỰ chọn giữ bao nhiêu cột
+    bằng Elbow Method — tìm vị trí tỉ lệ `importance[i]/importance[i-1]`
+    THẤP NHẤT, KHÔNG cần tự chọn tay % hay số cột nào) + `filter_correlated()`
+    (Bước 2 — loại cột THỪA THÔNG TIN LẪN NHAU, tương quan ≥ 0.8 giữa 2 cột
+    CÒN LẠI với nhau, không liên quan nhãn). Bước 3 của quy trình thầy gợi ý
+    (kiểm tra outlier + biến đổi logarit trên cột cuối cùng) CHƯA code.
   Dùng lại `attribute_noise/pipeline.py::load_data()` để đọc file (không
   viết lại hàm đọc CSV/Excel riêng). Có `demo_class_noise.py` ở gốc repo để
   chạy thử CLI, và 1 loạt file `demo_*.py` KHÁC (`demo_model_don_gian.py`,
@@ -117,6 +127,18 @@ tới khi có nhu cầu đổi tên repo thật sự.
     file lớn — không có thanh tiến trình, chấp nhận được cho quy mô demo
     khoá luận. `app.run(..., threaded=True)` để request này không chặn các
     request khác trong lúc chờ.
+  - `POST /api/class-noise/reduce-features` — **MỚI**: chạy
+    `rank_by_importance()` → `select_by_elbow()` → `filter_correlated()`
+    (xem `class_noise/feature_selection.py` ở mục kiến trúc trên) trên TẤT
+    CẢ cột trừ cột đang là nhãn, trả về cả bảng xếp hạng đầy đủ lẫn 2 danh
+    sách cột sau mỗi bước. TỰ LỌC BỎ cột không "đủ số" (`_is_mostly_numeric()`
+    — ít nhất 90% ô không rỗng ép được thành số) khỏi candidate TRƯỚC khi
+    đưa vào `rank_by_importance()` — thiếu bước này sẽ lỗi "0 dòng dùng
+    được" nếu lỡ lẫn cột chữ (vd `workclass` của Adult Income) vào, vì hàm
+    đó yêu cầu MỌI candidate đều là số trên CÙNG 1 dòng mới tính dòng đó
+    dùng được (lỗi thật đã gặp lúc code, đã fix). CHỈ TÍNH TOÁN, KHÔNG tự
+    áp dụng xuống cấu hình detect thật — FE nhận kết quả rồi tự tick lại
+    checkbox đặc trưng sẵn có.
   Rule/config sai (formula lỗi cú pháp, cột không tồn tại...) trả HTTP 400
   kèm message rõ ràng, không crash 500.
 - `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI dạng "panel theo
@@ -186,9 +208,20 @@ tới khi có nhu cầu đổi tên repo thật sự.
   `toggleStep4Direction()`/`toggleStep5Direction()`, được `goStep()` tự gọi
   mỗi lần VÀO bước đó dù đi bằng nút "Tiếp tục" hay bấm thẳng stepper):
   - Bước 3 (class): dropdown chọn `label_column` (mặc định CỘT CUỐI — quy
-    ước phổ biến của dữ liệu phân loại), danh sách checkbox chọn
-    `feature_columns` (loại trừ cột đang là nhãn), tham số nâng cao
-    `n_estimators`/`cv_folds` (mặc định 300/5, khớp `ClassNoiseConfig`).
+    ước phổ biến của dữ liệu phân loại), **MỚI** khối "🪄 Giảm cột tự động"
+    (nằm GIỮA ô chọn nhãn và danh sách checkbox đặc trưng — phải chọn nhãn
+    trước mới bấm được) gọi `POST /api/class-noise/reduce-features`, hiện
+    dòng tóm tắt "X cột gốc → Y cột (Bước 1) → Z cột (Bước 2)" + biểu đồ cột
+    ngang `renderFeatureReductionChart()` (tái dùng ĐÚNG pattern
+    `.chart-row`/`.chart-bar-fill` có sẵn của `renderNoiseTypeChart()`, không
+    viết cơ chế vẽ mới — 1 màu `--signal` duy nhất, 3 MỨC ĐỘ ĐẬM khác nhau:
+    1.0 = qua được cả 2 bước, 0.5 = qua Bước 1 nhưng bị loại Bước 2, 0.18 =
+    loại ngay Bước 1) rồi TỰ TICK kết quả vào danh sách checkbox bên dưới
+    (vẫn sửa tay thêm được, không khoá cứng). Đổi nhãn hoặc upload file mới
+    thì ẩn kết quả cũ (tránh hiểu nhầm là ứng với nhãn/file đang chọn). Sau
+    đó mới tới danh sách checkbox chọn `feature_columns` (loại trừ cột đang
+    là nhãn), tham số nâng cao `n_estimators`/`cv_folds` (mặc định 300/5,
+    khớp `ClassNoiseConfig`).
   - Bước 4 (class): 3 thẻ thống kê (dòng dùng được, CV accuracy so baseline,
     số dòng nghi ngờ) + khung CẢNH BÁO màu đỏ nếu chênh lệch accuracy-baseline
     ≤ 2 điểm % (`isWeak` trong `renderClassResults()`) + bảng precision/
@@ -318,6 +351,71 @@ tới khi có nhu cầu đổi tên repo thật sự.
    - Nút "Xuất file CSV" cuối Bước 5 CHỈ đóng gói bản đang làm việc hiện tại
      (`POST /api/export-working`) để tải về — không tự chạy thêm xử lý nào.
 
+9. **Giảm số cột (feature selection) cho Class Noise — ĐÃ CODE XONG Bước 1+2
+   (`feature_selection.py` + `POST /api/class-noise/reduce-features` +
+   khối "Giảm cột tự động" ở Bước 3 FE), Bước 3 (outlier + log-transform)
+   CHƯA làm:**
+   - Nguồn gốc yêu cầu: sau buổi báo cáo, thầy nói Attribute noise được
+     rồi nhưng Class noise CHƯA, bước đầu phải giảm số biến — đúng với phát
+     hiện đã có từ trước (dữ liệu thầy chỉ 3 đặc trưng nên model học kém).
+     Thầy mô tả quy trình 3 bước: (1) giảm sơ bộ còn "tầm 8, dưới 10" biến,
+     (2) kiểm tra tương quan giữa các biến còn lại, giảm thêm còn ~3-5 cột,
+     (3) kiểm tra outlier + biến đổi logarit (chuẩn hoá phân phối) — có gửi
+     kèm 1 ảnh chụp tài liệu khác (KHÔNG phải bài báo Gupta & Gupta ở trên,
+     nguồn gốc cụ thể chưa xác định) cho thấy ma trận tương quan 3 cột
+     `V44/V12/V4` (0.76/0.60/0.67, tất cả < 0.8) của chính dữ liệu thầy.
+   - **Bước 1 (chọn cột liên quan tới NHÃN)** dùng Feature Importance của
+     Random Forest (`rf.feature_importances_`, đo mức giảm độ "lẫn lộn"
+     Gini qua các lần rẽ nhánh của 300 cây) — chọn cách này thay vì
+     Permutation Importance (model-agnostic nhưng chậm hơn, cần train xong
+     rồi xáo trộn từng cột đo lại accuracy) vì đây đúng use-case
+     "Quick ranking in Random Forest" theo chính tài liệu tham khảo so sánh
+     4 phương pháp Feature Importance phổ biến (Feature Importance Scores,
+     Permutation Importance, SHAP, Information Gain).
+   - **Cách chọn GIỮ BAO NHIÊU cột sau khi xếp hạng — lịch sử 3 phương án,
+     2 phương án đầu đã bị LOẠI vì phát hiện lỗi/thiếu căn cứ khi kiểm
+     chứng thật:**
+     1. ~~Lấy cứng đúng top-8~~ — "8" chỉ là ước lượng miệng của thầy
+        ("tầm 8, dưới 10"), không phải quy tắc toán học, không thích ứng
+        được với dữ liệu khác.
+     2. ~~`select_top_features()`: lấy đủ cột để đạt 90% importance cộng
+        dồn, chặn trần `max_count=10`~~ — mượn ý tưởng quy ước PCA ("giữ đủ
+        thành phần giải thích 90-95% biến thiên") nên 90% tưởng có căn cứ,
+        nhưng kiểm chứng thật trên Credit Card Fraud thì `max_count=10`
+        LUÔN chặn TRƯỚC khi đạt 90% thật (chỉ đạt ~80-81%) — nghĩa là cap
+        10 mới là thứ quyết định kết quả, mà cap 10 cũng chỉ là ước lượng
+        chưa có căn cứ vững hơn "8" cũ là bao. Đã XOÁ hẳn hàm này khỏi code
+        (không giữ lại làm dự phòng, vì có lỗi thiết kế thật chứ không chỉ
+        là bị thay thế).
+     3. **`select_by_elbow()` — Elbow Method, ĐANG DÙNG:** tìm vị trí tỉ lệ
+        `importance[cột sau] / importance[cột trước]` THẤP NHẤT trong toàn
+        bộ bảng xếp hạng (điểm "gãy khúc" rõ nhất), giữ mọi cột TRƯỚC điểm
+        gãy. KHÔNG cần tự chọn tay bất kỳ % hay số cột nào — cùng kỹ thuật
+        dùng để chọn số thành phần trong PCA (scree plot) hay số cụm K
+        trong K-means (mượn Ý TƯỞNG "elbow", KHÔNG dùng PCA/K-means thật
+        trong code — chỉ là 1 ví dụ khác cho thấy kỹ thuật này có căn cứ).
+        Đã verify: điểm gãy mạnh nhất trên Credit Card Fraud rơi đúng cột
+        8→9 (V3→V2, tỉ lệ tụt còn ~53.5%) ở CẢ 3 mức n_estimators thử
+        (200/300/500) — không phải ngẫu nhiên 1 lần; phép thử tạo cột giả
+        TRÙNG LẶP y hệt 1 cột thật (tương quan = 1.0) xác nhận cơ chế lọc
+        tương quan ở Bước 2 hoạt động đúng.
+   - **Credit Card Fraud (29 cột `V1-28`+`Amount`, PCA-transformed) là bộ
+     test TẠM THỜI, không phải dữ liệu thầy thật** (vẫn chưa xin được file
+     gốc ~35 cột) — vì các cột `V` của bộ này đã qua PCA nên LUÔN có tương
+     quan ~0.00 với nhau (đúng tính chất toán học của PCA: mỗi thành phần
+     mới luôn trực giao/không liên quan các thành phần trước nó), khiến
+     Bước 2 (lọc tương quan) không loại được cột nào trên bộ này — ĐÂY LÀ
+     KẾT QUẢ ĐÚNG KỲ VỌNG, không phải lỗi, chỉ là Credit Card Fraud không
+     phải bộ dữ liệu phù hợp để CHO THẤY Bước 2 có tác dụng (ngược lại, ảnh
+     ma trận tương quan thật của thầy có số 0.6-0.76, không phải PCA, nên
+     Bước 2 sẽ thực sự lọc được gì đó trên đúng dữ liệu mục tiêu).
+   - `n_estimators` cho `rank_by_importance()` giữ mặc định 300 (khớp
+     `ClassNoiseConfig`) dù đã test riêng không cần tới mức đó (100 cây đã
+     cho ra ĐÚNG tập cột y hệt 500 cây trên Credit Card Fraud, chỉ thứ tự
+     nội bộ các cột gần ngang nhau bị xáo trộn) — chọn 300 vì nhất quán với
+     số cây dùng ở bước detect chính, dễ giải thích hơn là 2 con số khác
+     nhau cho 2 chỗ train Random Forest trong cùng hệ thống.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -352,12 +450,37 @@ tới khi có nhu cầu đổi tên repo thật sự.
       Adult Income) để xác nhận thuật toán hoạt động đúng, vấn đề accuracy
       thấp trên dữ liệu thầy là do ĐẶC TRƯNG (chỉ 3 cột) chứ không phải lỗi
       code (thí nghiệm có đối chứng: tách 3/29 cột trên CÙNG 1 bộ Kaggle).
+- [x] Class noise — GIẢM CỘT (mục 9 ở trên): `class_noise/feature_selection.py`
+      (`rank_by_importance()` + `select_by_elbow()` + `filter_correlated()`)
+      + backend `POST /api/class-noise/reduce-features` + khối "🪄 Giảm cột
+      tự động" ở Bước 3 FE. Đã test qua Playwright (Adult Income, nhãn
+      `income`, đúng 5/6 cột số được tự động tick) + verify kỹ bằng script
+      riêng (sanity check cột trùng lặp, so sánh 200/300/500 cây, biểu đồ
+      Pareto) trên Credit Card Fraud.
+- [ ] Class noise — GIẢM CỘT, Bước 3 còn thiếu (mục 9): kiểm tra outlier +
+      biến đổi logarit trên các cột CUỐI CÙNG sau khi đã giảm xong (outlier
+      có thể tái dùng detector sẵn có ở `attribute_noise/`, log-transform
+      cần viết mới). Nên làm NGAY SAU `filter_correlated()`, TRƯỚC khi đưa
+      vào Confident Learning.
+- [ ] Vẫn CHƯA có file gốc ~35 cột thật của thầy (đang chờ xin) — mọi kiểm
+      chứng ở mục 9 mới chạy trên Credit Card Fraud/Adult Income (dữ liệu
+      thay thế tạm thầy đồng ý dùng), chưa chạy được trên đúng dữ liệu mục
+      tiêu. Cần chạy lại + đối chiếu kết quả khi có file thật.
 - [ ] Class noise — HANDLE: Bước 5 hiện CHỈ có placeholder "đang phát
       triển". Cần thiết kế: hành động nào hợp lý cho 1 dòng bị gắn cờ sai
       nhãn (xoá dòng? sửa lại nhãn theo `confident_label` model gợi ý? để
       người dùng tự sửa tay?) — xem phân loại robust/filtering/polishing
       trong bài báo "Dealing with Noise Problem in ML Data-sets: A
-      Systematic Review" (Gupta & Gupta, 2019) mà project này dựa theo.
+      Systematic Review" (Gupta & Gupta, 2019) mà project này dựa theo. Đã
+      so sánh kỹ 3N đại diện mỗi nhóm (Robust: Sabzevari et al. 2015,
+      Filtering: Kubica & Moore 2003, Polishing: Liebchen et al. 2007) —
+      Polishing có căn cứ thực nghiệm tốt nhất (kết hợp Filtering+Polishing
+      cho accuracy cao nhất, ít mất dữ liệu nhất) và khớp tự nhiên với
+      `confident_label` đã có sẵn trong `ClassNoiseFinding`.
+- [ ] One-Hot Encoding cho cột CHỮ (category) làm đặc trưng Class Noise —
+      vẫn để dành chờ ý kiến thầy; hiện tại cả danh sách checkbox đặc trưng
+      LẪN endpoint `reduce-features` mới đều chỉ chấp nhận cột SỐ, cột chữ
+      hoàn toàn không dùng được làm đặc trưng.
 - [ ] (Khuyến nghị, chưa có yêu cầu code cụ thể) Đánh giá định lượng: tính
       precision/recall/F1 của 7 detector + rule liên cột so với
       `noise_ground_truth.csv`/`noise_ground_truth_large.csv` — rủi ro lớn
