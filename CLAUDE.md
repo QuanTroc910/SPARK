@@ -154,7 +154,6 @@ tới khi có nhu cầu đổi tên repo thật sự.
   THUẦN PHỤC VỤ GIẢI THÍCH/HỌC (viết tay lại Decision Tree/Random Forest
   không dùng sklearn, so sánh với dữ liệu Kaggle...), KHÔNG phải code sản
   phẩm, không bị import bởi `app.py`/`class_noise/`.
-    `_format_numeric_for_column()`).
 - `app.py` — Flask backend, CHỈ đóng vai trò "phiên dịch" JSON ⟷ Python object,
   KHÔNG chứa logic detect/handle (logic nằm hết ở `attribute_noise/`).
   Endpoints:
