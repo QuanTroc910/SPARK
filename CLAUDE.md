@@ -175,6 +175,15 @@ tới khi có nhu cầu đổi tên repo thật sự.
     "đang làm việc", tách khỏi `UPLOADED_FILES` gốc — tạo lười qua
     `_get_working_df()`), rồi detect lại trên bản mới, trả về NGUYÊN DẠNG
     response giống `/api/detect-noise` (FE tái dùng thẳng `renderStep4()`).
+  - **Bước 5 AN TOÀN (mục 13)** — 3 thay đổi quanh `/api/apply-handling-partial`:
+    (1) nhận thêm `dry_run: true` = CHẠY THỬ (tính trên bản sao, KHÔNG ghi gì, trả
+    `{dry_run, rows_before, rows_after, rows_removed, cells_changed}`); (2) chạy thật thì
+    response có thêm `history` (nhật ký + `can_undo`) và `applied` (tác động THẬT:
+    `rows_removed`/`cells_changed`, để FE không báo "đã xử lý" khi thực tế không đổi gì);
+    (3) route mới `POST /api/undo-handling` (lùi 1 bước) và `POST /api/reset-working`
+    (về bản upload gốc) -- cả hai trả response dạng `/api/detect-noise` + `history`.
+    `/api/detect-noise` giờ detect trên BẢN ĐANG LÀM VIỆC nếu đã xử lý (`_peek_working_df()`),
+    trước đây luôn detect trên bản gốc nên Detect lại sau khi xử lý hiện lại các lỗi đã sửa.
   - `GET /api/working-data/<file_id>` — **MỚI**: trả TOÀN BỘ dữ liệu ở trạng
     thái HIỆN TẠI (không chỉ các dòng còn lỗi) — dùng cho nút "Xem sau xử lý".
   - `POST /api/export-working` — **MỚI**: đóng gói `WORKING_FILES[file_id]`
@@ -305,6 +314,13 @@ tới khi có nhu cầu đổi tên repo thật sự.
      bản ĐẦU TIÊN (giữ lại), tính qua `computeDuplicateDefaultChecks()`.
      Nút "✅ Xuất file CSV" ở cuối trang KHÔNG tự xử lý gì thêm — chỉ đóng gói
      bản đang làm việc hiện tại qua `/api/export-working` rồi tải về.
+
+     **Bước 5 AN TOÀN (mục 13)**: dropdown "Đặt hàng loạt" và "Tự điều chỉnh" mặc định
+     "— Chọn cách xử lý —" (trừ hành động `auto_*` an toàn thì chọn sẵn), bấm Áp dụng khi còn
+     dòng chưa chọn → báo lỗi ngay trong nhóm (không `alert`), có xoá dòng → chạy thử
+     (`dry_run`) rồi hiện hộp "Sẽ xoá N dòng (a → b)" xin xác nhận, thanh "Lịch sử xử lý" ở đầu
+     bước có Hoàn tác (5 bước gần nhất) và Về dữ liệu gốc. Mọi lệnh làm đổi dữ liệu chạy tuần tự
+     qua `withHandlingLock()` (cờ `state.handlingBusy` + class `is-busy`).
 
   **Nhánh CLASS NOISE ở Bước 3/4/5** — Bước 3/4/5 mỗi bước có 2 khung con
   nằm CHUNG 1 panel, đổi `hidden` theo `state.direction`
@@ -771,6 +787,37 @@ tới khi có nhu cầu đổi tên repo thật sự.
       vẫn dùng ĐÚNG dtype người dùng đang chọn trên dropdown lúc đó (có thể
       đã tự sửa lại), không phải giá trị đoán ban đầu.
 
+13. **Bước 5 AN TOÀN (không xoá nhầm, xem trước, hoàn tác) — ĐÃ CODE XONG, ĐÃ KIỂM CHỨNG:**
+    - **Nguồn gốc**: đánh giá UX phát hiện 1 cú bấm "Áp dụng" ở Bước 5 xoá cả nhóm (đã chạy thật:
+      313 → 309 dòng) vì 3 thứ cộng lại: dropdown mặc định `remove_row` (đứng đầu `ACTION_TABLE`),
+      mọi checkbox tick sẵn, và `handleGroupApply` tự mở bảng rồi gửi luôn. Không có hoàn tác.
+    - **Lớp 1 (mặc định an toàn)**: `pickDefaultAction()` + `actionOptionsHTML()` trong `script.js`;
+      `validateRowActions()` chặn Áp dụng khi dòng chưa chọn cách xử lý HOẶC chọn "Tự nhập tay" mà
+      để trống giá trị (giá trị rỗng sẽ ghi đè ô thành chuỗi rỗng = âm thầm tạo ô thiếu).
+    - **Lớp 2 (xem trước)**: `dry_run` ở backend + hộp xác nhận ở FE, chỉ hỏi khi có XOÁ dòng.
+      Sau khi chạy thử, FE tính lại danh sách dòng tick và so với lúc bấm: khác thì bỏ, bắt bấm lại.
+    - **Lớp 3 (hoàn tác)**: `HANDLING_HISTORY[file_id]` giữ nhật ký (tối đa 20 bước) và snapshot
+      DataFrame TRƯỚC mỗi bước (tối đa 5 bước gần nhất). Snapshot lưu bằng THAM CHIẾU, không `.copy()`,
+      vì mọi lần sửa đều tạo DataFrame MỚI (`apply_handling()` bắt đầu bằng `df.copy()`, xoá trùng
+      dùng `df.drop()`) -- không có chỗ nào sửa tại chỗ `WORKING_FILES`. Bảng quá lớn
+      (`UNDO_MAX_CELLS` = 5.000.000 ô) thì không lưu snapshot, chỉ còn "Về dữ liệu gốc" (luôn dùng được
+      vì `UPLOADED_FILES` không bao giờ đổi). Chỉ giữ lịch sử của 3 file thao tác gần nhất
+      (`MAX_FILES_WITH_HISTORY`). Bước "rỗng" (không đổi gì) không ghi vào nhật ký.
+    - **Độ an toàn khi chạy song song**: `HANDLING_LOCK` bao toàn bộ đọc-sửa-ghi ở 3 route; `detect_noise`
+      chạy TRƯỚC khi ghi `WORKING_FILES`/lịch sử (detect lỗi thì dữ liệu nguyên vẹn); cờ `dry_run`
+      đọc bằng `_as_bool()` (`bool("false")` là True trong Python). FE khoá thao tác khi đang chờ server.
+    - **Quyết định đổi hành vi có chủ đích**: `/api/detect-noise` detect trên bản đang làm việc (xem
+      mục endpoint). Lý do: Bước 5 luôn thao tác trên bản đang làm việc nên Bước 4 phải khớp; muốn
+      detect lại từ đầu thì bấm "Về dữ liệu gốc". `/api/class-noise/*` vẫn đọc bản GỐC (chưa đổi).
+    - **Cách kiểm chứng (để trích trong khoá luận)**: workflow 5 tác tử độc lập (2 reviewer đọc diff +
+      3 tester Playwright/Flask), mỗi lỗi báo cáo được 1 tác tử khác thử tái hiện: 13 lỗi xác nhận
+      (không lỗi nào bị bác bỏ) → sửa hết → 11 kịch bản tái hiện lỗi đều PASS + các bộ test cũ không
+      hồi quy. Lỗi điển hình tìm được: ghi dữ liệu TRƯỚC khi detect (detect lỗi vẫn bị sửa), mất cập
+      nhật khi 2 request chạy chồng, upload file mới không reset `maxReached` nên bấm thanh bước 5
+      vẫn áp dụng nhóm lỗi của file CŨ lên file MỚI.
+    - **Giới hạn đã biết** (chấp nhận cho demo 1 người dùng): lịch sử/snapshot nằm trong RAM nên mất khi
+      server restart; không có "làm lại" (redo); `HANDLING_LOCK` là khoá toàn cục, không theo file_id.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -830,6 +877,9 @@ tới khi có nhu cầu đổi tên repo thật sự.
       (Bước 2/3/4) + `evaluate_ensemble_vs_others.py` so sánh đủ cả 3 thuật
       toán. CẢ 3 phương pháp giờ đều bấm được trên UI (xem mục 11). N29
       thắng cả Precision/Recall ở mức nhiễu 30% trên Adult Income.
+- [x] Bước 5 AN TOÀN (mục 13): mặc định "— Chọn cách xử lý —", xem trước tác động (`dry_run`) +
+      hộp xác nhận khi xoá, lịch sử + Hoàn tác (5 bước) + Về dữ liệu gốc, khoá chạy chồng, sửa 13 lỗi do
+      workflow kiểm chứng tìm ra. Đã test bằng Playwright thật (11 kịch bản tái hiện lỗi + hồi quy).
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá
       chậm trên 284.807 dòng, đã huỷ giữa chừng) — cần chạy lại với
       n_estimators thấp hơn hoặc lấy mẫu con nếu muốn có số liệu so sánh

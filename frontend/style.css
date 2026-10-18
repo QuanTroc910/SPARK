@@ -318,6 +318,52 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 .handling-detail { margin-top: 2px; }
 .handling-detail-table { max-height: 320px; }
 
+/* ===== Bước 5 AN TOÀN: thông báo inline, ô chưa chọn, hộp xác nhận, thanh lịch sử ===== */
+/* Thông báo trong trang (thay cho alert()): đỏ = lỗi/thiếu, teal = thành công. */
+.status-text.is-error { color: var(--danger); font-weight: 600; }
+.status-text.is-ok { color: var(--signal-dark); }
+
+/* Dropdown/ô nhập bị bỏ trống khi bấm "Áp dụng" -> viền đỏ + nền đỏ nhạt. */
+.select.is-invalid, .input.is-invalid { border-color: var(--danger); background: var(--danger-soft); }
+
+/* Nút nguy hiểm (xác nhận xoá) -- chỉ dùng trong hộp xác nhận bên dưới. */
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: var(--crimson-text); }
+
+/* Hộp "Sẽ xoá N dòng ... [Xác nhận xoá] [Huỷ]" hiện ngay trong nhóm, và dùng lại
+   cho xác nhận "Về dữ liệu gốc" ở thanh lịch sử (nhờ vậy 2 chỗ trông giống nhau). */
+.handling-confirm {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--danger); border-radius: var(--radius-sm);
+  background: var(--danger-soft); font-size: 13px; color: var(--ink);
+}
+.handling-confirm[hidden] { display: none; }
+.handling-confirm-text { flex: 1 1 260px; }
+
+/* Thanh lịch sử ở đầu Bước 5. */
+.history-bar {
+  border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2);
+  padding: 12px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.history-bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.history-bar-title { font-size: 13.5px; font-weight: 600; }
+.history-bar-top .status-text { margin-right: auto; }
+.history-status { margin: 0; min-height: 1em; }
+.history-status:empty { display: none; } /* chưa có thông báo thì khỏi chiếm 1 dòng trống trong thanh lịch sử */
+.history-log {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px;
+  max-height: 150px; overflow: auto; font-size: 12.5px; color: var(--ink-dim);
+}
+.history-log-item.is-latest { color: var(--ink); }
+.history-log-empty { color: var(--ink-faint); }
+.history-actions { color: var(--ink-faint); }
+
+/* Khi Bước 5 đang chờ server (xem withHandlingLock() trong script.js): chặn chuột vào danh
+   sách nhóm, thanh lịch sử và nút xuất file, đổi con trỏ thành "đang chờ". Phím Enter/Space
+   vẫn bấm được nút nên script.js còn chặn riêng bằng cờ state.handlingBusy. */
+.is-busy { cursor: progress; }
+.is-busy .handling-list, .is-busy .history-bar, .is-busy .panel-actions { pointer-events: none; }
+
 /* ===== 11 family màu: chip/tag/badge/cell dùng chung 1 công thức ===== */
 .chip.tag-slate.is-checked, .filter-chip.tag-slate.is-checked, .tag.tag-slate { background: var(--slate-soft); border-color: var(--slate-border); color: var(--slate-text); }
 .chip.tag-amber.is-checked, .filter-chip.tag-amber.is-checked, .tag.tag-amber { background: var(--amber-soft); border-color: var(--amber-border); color: var(--amber-text); }
