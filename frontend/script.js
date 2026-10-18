@@ -123,6 +123,14 @@ const state = {
   // ngay khi renderHandlingSection() DỰNG LẠI TOÀN BỘ DOM (mỗi lần dựng lại
   // các nút đều bắt đầu từ mặc định "ẩn", nên phải tự nhớ lại qua state này).
   appliedGroups: new Set(),
+  // Lịch sử các lần Áp dụng ở Bước 5 (server giữ bản thật, đây là bản sao để
+  // vẽ thanh "Lịch sử" + biết nút Hoàn tác có bấm được không) -- dạng
+  // { entries: [...], can_undo: bool, undo_limit: số }, xem _history_payload()
+  // trong app.py. Rỗng khi chưa xử lý gì hoặc vừa upload file mới.
+  history: { entries: [], can_undo: false, undo_limit: 5 },
+  // true khi Bước 5 đang chờ server trả lời 1 lệnh (chạy thử / áp dụng / hoàn tác /
+  // về dữ liệu gốc) -- xem withHandlingLock(): trong lúc đó mọi lệnh khác bị chặn.
+  handlingBusy: false,
 
   // ---- Riêng cho hướng Class Noise (song song, KHÔNG dùng chung state
   // attribute ở trên vì cấu trúc dữ liệu hoàn toàn khác) ----
@@ -162,6 +170,12 @@ function goStep(n) {
   state.currentStep = n;
   document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
   $("panel-" + n).classList.add("is-active");
+  // Rời Bước 5 thì đóng mọi hộp xác nhận đang mở (xoá nhóm / về dữ liệu gốc): con số
+  // trong hộp chỉ đúng tại thời điểm tính, quay lại sau đó có thể đã cũ.
+  if (n !== 5) {
+    dismissResetConfirm();
+    dismissAllHandlingConfirms();
+  }
   // Bước 3/4/5 có 2 khung con (attribute/class) nằm chung trong cùng 1
   // panel -- luôn gọi lại hàm chuyển nhánh mỗi lần VÀO bước đó, bất kể đi
   // tới bằng cách nào (bấm "Tiếp tục" hay bấm thẳng vào stepper phía trên),
@@ -279,6 +293,22 @@ $("upload-btn").addEventListener("click", async () => {
   $("rules-list").innerHTML = ""; // reset rule liên cột khi upload file mới
   state.hasWorkingCopy = false;
   state.appliedGroups = new Set();
+  state.history = { entries: [], can_undo: false, undo_limit: 5 };
+  // Upload file MỚI = bắt đầu lại từ đầu: phải xoá hết kết quả/cấu hình/lịch sử của
+  // file CŨ và KHOÁ lại các bước phía sau (maxReached). Trước đây quên 2 việc này nên
+  // bấm thẳng vào thanh bước 5 vẫn thấy nhóm lỗi + lịch sử của file cũ, và bấm
+  // "Áp dụng" sẽ sửa nhầm lên dữ liệu file mới (cùng số dòng nhưng khác nội dung).
+  state.maxReached = 1;
+  state.lastColumnConfigs = [];
+  state.lastDuplicateConfig = null;
+  state.lastFindings = [];
+  state.lastFlaggedRows = [];
+  state.rowFindingsMap = new Map();
+  state.handlingBusy = false;
+  $("handling-list").innerHTML = "";
+  dismissResetConfirm();
+  setStatusMessage($("history-status"), "", "");
+  renderHistoryBar();
 
   // Reset TOÀN BỘ state riêng của Class Noise khi upload file MỚI -- nếu
   // không, cột đã tích (classFeatureColumns) hoặc cột nhãn (classLabelColumn)
@@ -731,6 +761,11 @@ $("detect-btn").addEventListener("click", async () => {
 function renderFilterChips() {
   const present = new Set();
   state.lastFindings.forEach((f) => present.add(f.noise_type));
+  // Bỏ khỏi bộ lọc các loại đã biến mất (vd vừa xoá hết dòng trùng ở Bước 5): nếu không,
+  // bảng cứ trống vì lọc theo 1 loại mà chip của loại đó không còn để bấm bỏ lọc.
+  state.resultsFilter.types.forEach((t) => {
+    if (!present.has(t)) state.resultsFilter.types.delete(t);
+  });
   const wrap = $("filter-chips");
   wrap.innerHTML = Array.from(present)
     .map((t) => {
@@ -893,6 +928,8 @@ function renderNoiseTypeChart(findings) {
 $("goto-handling-btn").addEventListener("click", () => {
   unlockStep(5);
   renderHandlingSection();
+  setStatusMessage($("history-status"), "", ""); // thông báo "Đã hoàn tác..." của lần trước không còn nghĩa nữa
+  renderHistoryBar();
   goStep(5);
 });
 
@@ -934,6 +971,26 @@ const ACTION_LABELS = {
   keep: "Giữ nguyên (không sửa)",
 };
 
+// ---- Bước 5 AN TOÀN: không có hành động mặc định nguy hiểm ----
+// Trước đây dropdown luôn lấy hành động ĐẦU TIÊN trong ACTION_TABLE, tức
+// "Xoá cả dòng" (remove_row) -- cộng với việc mọi checkbox đều tick sẵn, chỉ
+// 1 cú bấm "Áp dụng" là xoá sạch cả nhóm. Giờ dropdown mặc định là lựa chọn
+// trống "— Chọn cách xử lý —" (value rỗng, bị disabled nên không chọn lại
+// được sau khi đã chọn); người dùng PHẢI chọn rõ ràng thì mới Áp dụng được.
+// NGOẠI LỆ: hành động tự động an toàn (auto_*, vd dọn khoảng trắng, chuẩn hoá
+// category) thì chọn sẵn -- theo quyết định #6 trong CLAUDE.md đó là xử lý
+// "an toàn, mặc định luôn bật", không xoá dữ liệu.
+function pickDefaultAction(availableActions) {
+  return availableActions.find((a) => a.startsWith("auto_")) || "";
+}
+function actionOptionsHTML(availableActions, selectedAction) {
+  const placeholder = `<option value="" disabled ${selectedAction ? "" : "selected"}>— Chọn cách xử lý —</option>`;
+  const options = availableActions
+    .map((a) => `<option value="${a}" ${a === selectedAction ? "selected" : ""}>${ACTION_LABELS[a]}</option>`)
+    .join("");
+  return placeholder + options;
+}
+
 function renderHandlingSection() {
   const container = $("handling-list");
   container.innerHTML = "";
@@ -954,7 +1011,12 @@ function renderHandlingSection() {
   });
 
   counts.forEach((count, key) => {
-    const [column, noiseType] = key.split("|");
+    // key = "tên cột|loại noise". Tên CỘT có thể chứa "|" (vd "a|b") còn loại noise thì
+    // không bao giờ chứa -> cắt tại dấu "|" CUỐI CÙNG, không phải dấu đầu tiên (cắt ở dấu
+    // đầu làm nhóm của cột đó biến mất khỏi Bước 5, không xử lý được).
+    const sep = key.lastIndexOf("|");
+    const column = key.slice(0, sep);
+    const noiseType = key.slice(sep + 1);
     const dtype = configByColumn[column] ? configByColumn[column].dtype : null;
     const availableActions = ACTION_TABLE[`${dtype}|${noiseType}`] || [];
     if (availableActions.length === 0) return;
@@ -975,13 +1037,13 @@ function renderHandlingSection() {
         </button>
         <label class="handling-bulk-label">Đặt hàng loạt:
           <select class="select handling-action">
-            ${availableActions.map((a) => `<option value="${a}">${ACTION_LABELS[a]}</option>`).join("")}
+            ${actionOptionsHTML(availableActions, pickDefaultAction(availableActions))}
           </select>
         </label>
         <button type="button" class="btn btn-ghost handling-apply-btn">Áp dụng</button>
         <button type="button" class="btn btn-ghost handling-preview-btn" ${alreadyApplied ? "" : "hidden"}>👁 Xem sau xử lý</button>
       </div>
-      <p class="status-text handling-row-status"></p>
+      <p class="status-text handling-row-status" aria-live="polite"></p>
       <div class="handling-detail" hidden></div>
     `;
     container.appendChild(row);
@@ -1004,7 +1066,7 @@ function renderHandlingSection() {
         <button type="button" class="btn btn-ghost handling-apply-btn">Xoá các dòng đã tick</button>
         <button type="button" class="btn btn-ghost handling-preview-btn" ${dupAlreadyApplied ? "" : "hidden"}>👁 Xem sau xử lý</button>
       </div>
-      <p class="status-text handling-row-status"></p>
+      <p class="status-text handling-row-status" aria-live="polite"></p>
       <div class="handling-detail" hidden></div>
     `;
     container.appendChild(row);
@@ -1080,9 +1142,7 @@ function pendingRowHTML(r, dataColumns, availableActions, defaultChecked, defaul
     `<tr data-row-number="${r.row_number}">${checkboxCell}`
   );
   if (availableActions) {
-    const options = availableActions
-      .map((a) => `<option value="${a}" ${a === defaultAction ? "selected" : ""}>${ACTION_LABELS[a]}</option>`)
-      .join("");
+    const options = actionOptionsHTML(availableActions, defaultAction);
     const actionCell = `<td class="handling-action-col">
       <select class="select handling-row-action">${options}</select>
       <input type="text" class="input handling-row-fixed-value" placeholder="giá trị" ${defaultAction === "fixed_value" ? "" : "hidden"} />
@@ -1117,8 +1177,11 @@ function renderHandlingDetail(row) {
   } else {
     const column = row.dataset.column;
     const noiseType = row.dataset.noiseType;
-    const availableActions = Array.from(row.querySelectorAll(".handling-action option")).map((o) => o.value);
-    const defaultAction = row.querySelector(".handling-action").value;
+    // Bỏ lựa chọn trống "— Chọn cách xử lý —" (value rỗng) khỏi danh sách hành động thật.
+    const availableActions = Array.from(row.querySelectorAll(".handling-action option"))
+      .map((o) => o.value)
+      .filter(Boolean);
+    const defaultAction = row.querySelector(".handling-action").value; // "" nếu người dùng chưa chọn hàng loạt
     detail.innerHTML = handlingDetailTableHTML(rowsForHandlingKey(column, noiseType), availableActions, null, defaultAction);
   }
   detail.dataset.rendered = "true";
@@ -1164,6 +1227,15 @@ $("handling-list").addEventListener("click", async (e) => {
   }
 });
 $("handling-list").addEventListener("change", (e) => {
+  // Người dùng vừa đổi tick/dropdown trong 1 nhóm -> hộp "Sẽ xoá N dòng..." đang
+  // hiện (nếu có) đã tính cho lựa chọn CŨ, không còn đúng nữa -> đóng lại, bắt
+  // buộc bấm "Áp dụng" lần nữa để xem con số mới (tránh xác nhận nhầm số cũ).
+  const changedGroup = e.target.closest(".handling-row");
+  if (changedGroup) {
+    dismissHandlingConfirm(changedGroup);
+    clearGroupError(changedGroup);
+  }
+
   if (e.target.classList.contains("handling-check-all")) {
     const table = e.target.closest("table");
     table.querySelectorAll(".handling-row-check").forEach((cb) => (cb.checked = e.target.checked));
@@ -1188,6 +1260,18 @@ $("handling-list").addEventListener("change", (e) => {
     // khi chính dòng đó chọn hành động "Điền giá trị cố định".
     const tr = e.target.closest("tr");
     tr.querySelector(".handling-row-fixed-value").hidden = e.target.value !== "fixed_value";
+    e.target.classList.remove("is-invalid"); // đã chọn rồi -> bỏ viền đỏ "chưa chọn"
+    tr.querySelector(".handling-row-fixed-value").classList.remove("is-invalid"); // đổi hành động thì ô giá trị không còn bị tính là "thiếu"
+  }
+});
+// Gõ vào ô "giá trị" của 1 dòng: bỏ viền đỏ "chưa nhập" và đóng hộp xác nhận cũ.
+$("handling-list").addEventListener("input", (e) => {
+  if (!e.target.classList.contains("handling-row-fixed-value")) return;
+  e.target.classList.remove("is-invalid");
+  const group = e.target.closest(".handling-row");
+  if (group) {
+    dismissHandlingConfirm(group);
+    clearGroupError(group);
   }
 });
 
@@ -1284,59 +1368,72 @@ function updateGroupSummaryAfterApply(row) {
   }
 }
 
-// Bấm "Áp dụng" trên 1 nhóm cụ thể -- CHỈ xử lý các dòng đang được tick trong
-// bảng chi tiết của CHÍNH nhóm đó (mở ra hộ nếu đang đóng), MỖI DÒNG dùng
-// đúng hành động dropdown RIÊNG của chính nó (không còn dùng chung 1 hành
-// động cho cả nhóm). Sau khi xong, cập nhật NGAY TẠI CHỖ (không rebuild lại
-// toàn bộ Bước 5) để người dùng thấy kết quả ngay trong bảng đang mở.
-async function handleGroupApply(row) {
-  const isDuplicate = row.dataset.duplicateRow === "true";
-  if (row.querySelector(".handling-detail").hidden) openHandlingDetail(row);
+// ---- Thông báo inline cho từng nhóm (thay cho alert() của trình duyệt) ----
+// kind: "error" (chữ đỏ) | "ok" (chữ teal) | "" (mặc định, xám). Hiện ngay
+// trong nhóm gây ra thông báo nên người dùng không phải đóng hộp thoại nào,
+// và vẫn nhìn thấy bảng + dòng bị lỗi khi đọc.
+function setStatusMessage(el, text, kind) {
+  el.textContent = text;
+  el.classList.toggle("is-error", kind === "error");
+  el.classList.toggle("is-ok", kind === "ok");
+}
 
-  const detail = row.querySelector(".handling-detail");
-  const checkedTrs = Array.from(detail.querySelectorAll(".handling-row-check:checked")).map((cb) => cb.closest("tr"));
-  if (checkedTrs.length === 0) {
-    alert("Hãy tick ít nhất 1 dòng để xử lý.");
-    return;
-  }
-
-  const rowsPayload = checkedTrs.map((tr) => {
-    const rowNumber = parseInt(tr.dataset.rowNumber, 10);
-    if (isDuplicate) return { row_number: rowNumber, action: "remove_row" };
-    const action = tr.querySelector(".handling-row-action").value;
-    const item = { row_number: rowNumber, action };
-    if (action === "fixed_value") item.fixed_value = tr.querySelector(".handling-row-fixed-value").value;
-    return item;
+// Bước 5 AN TOÀN, lớp 1 (xem pickDefaultAction): trước khi gửi bất cứ thứ gì
+// lên server, kiểm tra MỌI dòng đang tick đã chọn cách xử lý chưa, và nếu chọn
+// "Tự nhập tay" thì đã gõ giá trị chưa (giá trị rỗng sẽ GHI ĐÈ ô thành chuỗi
+// rỗng -- tức là âm thầm biến ô thành "thiếu giá trị"). Dòng nào thiếu thì
+// tô viền đỏ ô đó. Trả về số lỗi + ô đầu tiên bị thiếu (để focus).
+function validateRowActions(checkedTrs) {
+  let missingAction = 0;
+  let missingValue = 0;
+  let firstInvalid = null;
+  checkedTrs.forEach((tr) => {
+    const actionSelect = tr.querySelector(".handling-row-action");
+    const valueInput = tr.querySelector(".handling-row-fixed-value");
+    actionSelect.classList.remove("is-invalid");
+    valueInput.classList.remove("is-invalid");
+    if (!actionSelect.value) {
+      actionSelect.classList.add("is-invalid");
+      missingAction += 1;
+      firstInvalid = firstInvalid || actionSelect;
+    } else if (actionSelect.value === "fixed_value" && valueInput.value.trim() === "") {
+      valueInput.classList.add("is-invalid");
+      missingValue += 1;
+      firstInvalid = firstInvalid || valueInput;
+    }
   });
+  return { missingAction, missingValue, firstInvalid };
+}
 
-  const applyBtn = row.querySelector(".handling-apply-btn");
-  const statusEl = row.querySelector(".handling-row-status");
-  const normalLabel = applyBtn.textContent;
-  setButtonLoading(applyBtn, true, "Đang xử lý...", normalLabel);
-  statusEl.textContent = "";
+// Body gửi lên /api/apply-handling-partial -- dùng CHUNG cho lượt chạy thử
+// (dry_run: true, chỉ tính "sẽ xoá bao nhiêu") lẫn lượt chạy thật, để 2 lượt
+// luôn gửi đúng cùng 1 nội dung và con số xem trước khớp với kết quả thật.
+function buildApplyBody(row, rowsPayload, isDuplicate, dryRun) {
+  return {
+    file_id: state.fileId,
+    column_configs: state.lastColumnConfigs,
+    cross_field_rules: [],
+    duplicate_row: state.lastDuplicateConfig,
+    column: isDuplicate ? null : row.dataset.column,
+    noise_type: isDuplicate ? "duplicate_row" : row.dataset.noiseType,
+    rows: rowsPayload,
+    dry_run: dryRun,
+  };
+}
 
+// Gọi /api/apply-handling-partial, trả về { data } nếu thành công hoặc { error }
+// (chuỗi thông báo đã sẵn sàng hiện cho người dùng) nếu lỗi mạng/backend.
+async function postApplyHandling(body) {
   let response;
   try {
     response = await fetch(`${API_BASE}/api/apply-handling-partial`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        file_id: state.fileId,
-        column_configs: state.lastColumnConfigs,
-        cross_field_rules: [],
-        duplicate_row: state.lastDuplicateConfig,
-        column: isDuplicate ? null : row.dataset.column,
-        noise_type: isDuplicate ? "duplicate_row" : row.dataset.noiseType,
-        rows: rowsPayload,
-      }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
-    alert("Không gọi được backend.");
-    setButtonLoading(applyBtn, false, "Đang xử lý...", normalLabel);
-    return;
+    return { error: "Không gọi được backend. Kiểm tra xem python3 app.py có đang chạy không." };
   }
-  setButtonLoading(applyBtn, false, "Đang xử lý...", normalLabel);
-
   if (!response.ok) {
     let message = "Xử lý thất bại, kiểm tra console/backend log.";
     try {
@@ -1345,27 +1442,400 @@ async function handleGroupApply(row) {
     } catch (parseErr) {
       /* giữ message mặc định */
     }
-    alert(message);
+    return { error: message };
+  }
+  return { data: await response.json() };
+}
+
+// ---- Khoá thao tác khi server đang bận ----
+// Mọi lệnh làm đổi dữ liệu ở Bước 5 (chạy thử, áp dụng, hoàn tác, về dữ liệu gốc) chạy
+// TUẦN TỰ từng lệnh một: bấm lệnh thứ hai khi lệnh đầu chưa xong sẽ bị bỏ qua. Nếu cho
+// chạy chồng nhau thì 2 phản hồi có thể về lệch thứ tự và giao diện hiện trạng thái khác
+// hẳn server (vd bấm Hoàn tác lúc Áp dụng còn đang chờ -> giao diện hiện 2 bước lịch
+// sử trong khi server chỉ có 1). Class `is-busy` (xem style.css) chặn thêm chuột; còn
+// phím Enter/Space vẫn bấm được nút nên PHẢI chặn cả ở đây bằng cờ state.handlingBusy.
+async function withHandlingLock(task) {
+  if (state.handlingBusy) return undefined;
+  state.handlingBusy = true;
+  $("panel-5-attribute").classList.add("is-busy");
+  try {
+    return await task();
+  } finally {
+    state.handlingBusy = false;
+    $("panel-5-attribute").classList.remove("is-busy");
+  }
+}
+
+// Các <tr> đang được tick trong bảng chi tiết của 1 nhóm + payload gửi server tương ứng
+// (mỗi dòng 1 hành động riêng). Tách riêng để có thể TÍNH LẠI sau khi chạy thử và so
+// với lúc bấm (xem applyGroupFlow()).
+function getCheckedRows(row) {
+  return Array.from(row.querySelectorAll(".handling-detail .handling-row-check:checked")).map((cb) =>
+    cb.closest("tr")
+  );
+}
+function buildRowsPayload(checkedTrs, isDuplicate) {
+  return checkedTrs.map((tr) => {
+    const rowNumber = parseInt(tr.dataset.rowNumber, 10);
+    if (isDuplicate) return { row_number: rowNumber, action: "remove_row" };
+    const action = tr.querySelector(".handling-row-action").value;
+    const item = { row_number: rowNumber, action };
+    if (action === "fixed_value") item.fixed_value = tr.querySelector(".handling-row-fixed-value").value;
+    return item;
+  });
+}
+
+// ---- Bước 5 AN TOÀN, lớp 2: xem trước tác động rồi mới xác nhận ----
+// Hộp "Sẽ xoá N dòng (a → b). [Xác nhận xoá] [Huỷ]" hiện NGAY TRONG nhóm vừa
+// bấm Áp dụng, chỉ xuất hiện khi hành động thật sự xoá dòng (sửa giá trị thì
+// chạy luôn, vì đã có nút Hoàn tác và dòng "Đã xử lý").
+function dismissHandlingConfirm(row) {
+  const box = row.querySelector(".handling-confirm");
+  if (box) box.remove();
+}
+// Đóng hộp xác nhận của MỌI nhóm -- gọi sau khi dữ liệu đã đổi (do nhóm khác Áp dụng):
+// con số "313 → 309" trong các hộp còn lại đã cũ, xác nhận theo số cũ sẽ gây hiểu nhầm.
+function dismissAllHandlingConfirms() {
+  document.querySelectorAll("#handling-list .handling-confirm").forEach((box) => box.remove());
+}
+// Xoá thông báo LỖI cũ của nhóm khi người dùng bắt đầu sửa lựa chọn (thông báo thành
+// công/trung tính thì giữ nguyên).
+function clearGroupError(group) {
+  const statusEl = group.querySelector(".handling-row-status");
+  if (statusEl && statusEl.classList.contains("is-error")) setStatusMessage(statusEl, "", "");
+}
+
+function showHandlingConfirm(row, preview, rowsPayload, isDuplicate) {
+  dismissHandlingConfirm(row);
+  const rowsRemoved = Number(preview.rows_removed);
+  const cellsChanged = Number(preview.cells_changed);
+  const effects = [`xoá <strong>${rowsRemoved}</strong> dòng`];
+  if (cellsChanged > 0) effects.push(`sửa <strong>${cellsChanged}</strong> ô`);
+
+  const box = document.createElement("div");
+  box.className = "handling-confirm";
+  box.setAttribute("role", "alert");
+  box.innerHTML = `
+    <span class="handling-confirm-text">⚠ Sẽ ${effects.join(" và ")}
+      (${Number(preview.rows_before)} → ${Number(preview.rows_after)} dòng).</span>
+    <button type="button" class="btn btn-danger btn-small handling-confirm-yes">Xác nhận xoá</button>
+    <button type="button" class="btn btn-ghost btn-small handling-confirm-no">Huỷ</button>
+  `;
+  row.querySelector(".handling-row-top").insertAdjacentElement("afterend", box);
+
+  const yesBtn = box.querySelector(".handling-confirm-yes");
+  const noBtn = box.querySelector(".handling-confirm-no");
+  noBtn.addEventListener("click", () => dismissHandlingConfirm(row));
+  yesBtn.addEventListener("click", async () => {
+    if (state.handlingBusy) return; // có lệnh khác đang chạy -> bỏ qua cú bấm này
+    yesBtn.disabled = true;
+    noBtn.disabled = true;
+    await withHandlingLock(() => runGroupApply(row, rowsPayload, isDuplicate));
+    dismissHandlingConfirm(row);
+  });
+  noBtn.focus(); // focus vào "Huỷ" (lựa chọn an toàn) -- muốn xoá phải chủ động bấm "Xác nhận xoá"
+}
+
+// Bấm "Áp dụng" trên 1 nhóm cụ thể -- CHỈ xử lý các dòng đang được tick trong
+// bảng chi tiết của CHÍNH nhóm đó (mở ra hộ nếu đang đóng), MỖI DÒNG dùng
+// đúng hành động dropdown RIÊNG của chính nó (không còn dùng chung 1 hành
+// động cho cả nhóm). Luồng an toàn (xem pickDefaultAction):
+//   1. mọi dòng tick phải ĐÃ chọn cách xử lý (validateRowActions), thiếu thì dừng;
+//   2. nếu có hành động XOÁ dòng (hoặc là nhóm trùng dòng) -> chạy thử (dry_run)
+//      để hiện "Sẽ xoá N dòng", chỉ chạy thật khi người dùng bấm "Xác nhận xoá";
+//   3. sửa giá trị thì chạy thật luôn.
+// Cả luồng chạy trong withHandlingLock() nên không bị lệnh khác chen vào giữa.
+async function handleGroupApply(row) {
+  await withHandlingLock(() => applyGroupFlow(row));
+}
+
+async function applyGroupFlow(row) {
+  const isDuplicate = row.dataset.duplicateRow === "true";
+  const statusEl = row.querySelector(".handling-row-status");
+  dismissHandlingConfirm(row);
+  setStatusMessage(statusEl, "", "");
+  if (row.querySelector(".handling-detail").hidden) openHandlingDetail(row);
+
+  const checkedTrs = getCheckedRows(row);
+  if (checkedTrs.length === 0) {
+    setStatusMessage(statusEl, "Hãy tick ít nhất 1 dòng để xử lý.", "error");
     return;
   }
 
-  const data = await response.json();
+  if (!isDuplicate) {
+    const check = validateRowActions(checkedTrs);
+    if (check.missingAction + check.missingValue > 0) {
+      const problems = [];
+      if (check.missingAction > 0) {
+        problems.push(
+          `còn ${check.missingAction} dòng chưa chọn cách xử lý (chọn ở cột "Tự điều chỉnh" hoặc dùng "Đặt hàng loạt")`
+        );
+      }
+      if (check.missingValue > 0) {
+        problems.push(`${check.missingValue} dòng chọn "Tự nhập tay" nhưng chưa nhập giá trị`);
+      }
+      setStatusMessage(statusEl, `⚠ Chưa thể áp dụng: ${problems.join("; ")}.`, "error");
+      check.firstInvalid.focus();
+      return;
+    }
+  }
+
+  const rowsPayload = buildRowsPayload(checkedTrs, isDuplicate);
+  const needsConfirm = isDuplicate || rowsPayload.some((r) => r.action === "remove_row");
+  if (!needsConfirm) {
+    await runGroupApply(row, rowsPayload, isDuplicate);
+    return;
+  }
+
+  // Có xoá dòng -> chạy thử trước. Lượt chạy thử KHÔNG ghi gì lên server.
+  const applyBtn = row.querySelector(".handling-apply-btn");
+  const normalLabel = applyBtn.textContent;
+  setButtonLoading(applyBtn, true, "Đang kiểm tra...", normalLabel);
+  const result = await postApplyHandling(buildApplyBody(row, rowsPayload, isDuplicate, true));
+  setButtonLoading(applyBtn, false, "Đang kiểm tra...", normalLabel);
+  if (result.error) {
+    setStatusMessage(statusEl, result.error, "error");
+    return;
+  }
+
+  // Trong lúc chờ chạy thử, người dùng vẫn có thể đổi tick/dropdown bằng bàn phím. Con số
+  // vừa tính là cho lựa chọn CŨ -> nếu lựa chọn đã khác thì bỏ, bắt bấm Áp dụng lại, để
+  // nút "Xác nhận xoá" không bao giờ xoá khác với điều người dùng đang thấy trên màn hình.
+  const nowPayload = buildRowsPayload(getCheckedRows(row), isDuplicate);
+  if (JSON.stringify(nowPayload) !== JSON.stringify(rowsPayload)) {
+    setStatusMessage(statusEl, 'Lựa chọn đã thay đổi trong lúc kiểm tra — hãy bấm "Áp dụng" lại.', "error");
+    return;
+  }
+
+  const preview = result.data;
+  if (preview.rows_removed === 0 && preview.cells_changed === 0) {
+    setStatusMessage(statusEl, "Không có thay đổi nào để áp dụng (các dòng đã chọn không còn trong dữ liệu).", "");
+    return;
+  }
+  if (preview.rows_removed === 0) {
+    // Có hành động "xoá" nhưng dòng đó đã bị xoá từ trước -> thực tế chỉ sửa ô, không mất dòng nào.
+    await runGroupApply(row, rowsPayload, isDuplicate);
+    return;
+  }
+  showHandlingConfirm(row, preview, rowsPayload, isDuplicate);
+}
+
+// Cập nhật chữ đếm ở đầu các nhóm CHƯA MỞ bảng chi tiết, dựa trên kết quả detect mới nhất
+// (state.lastFindings). Nhóm đã mở có đường cập nhật riêng (updateGroupSummaryAfterApply);
+// còn nhóm chưa mở sẽ hiện số cũ nếu không làm bước này (vd dòng của nó vừa bị xoá ở nhóm khác).
+function refreshUnopenedGroupSummaries() {
+  document.querySelectorAll("#handling-list > .handling-row").forEach((groupRow) => {
+    const detail = groupRow.querySelector(".handling-detail");
+    if (detail && detail.dataset.rendered === "true") return;
+    const isDuplicate = groupRow.dataset.duplicateRow === "true";
+    const count = state.lastFindings.filter((f) =>
+      isDuplicate
+        ? f.noise_type === "duplicate_row"
+        : f.column === groupRow.dataset.column && f.noise_type === groupRow.dataset.noiseType
+    ).length;
+    const summaryText = groupRow.querySelector(".handling-row-summary .status-text");
+    if (count === 0) {
+      summaryText.textContent = "(Đã xử lý xong toàn bộ ✓)";
+      groupRow.querySelector(".handling-apply-btn").disabled = true;
+      const bulkSelect = groupRow.querySelector(".handling-action");
+      if (bulkSelect) bulkSelect.disabled = true;
+    } else {
+      summaryText.textContent = isDuplicate
+        ? `(${count} dòng — mặc định tick sẵn các bản TRÙNG SAU, bỏ tick bản bạn muốn giữ)`
+        : `(${count} ô — bấm để xem/tick từng dòng)`;
+    }
+  });
+}
+
+// Gửi lệnh Áp dụng THẬT lên server rồi cập nhật giao diện tại chỗ. Luôn gọi bên trong
+// withHandlingLock().
+async function runGroupApply(row, rowsPayload, isDuplicate) {
+  const applyBtn = row.querySelector(".handling-apply-btn");
+  const statusEl = row.querySelector(".handling-row-status");
+  const normalLabel = applyBtn.textContent;
+  setButtonLoading(applyBtn, true, "Đang xử lý...", normalLabel);
+  setStatusMessage(statusEl, "", "");
+  setStatusMessage($("history-status"), "", ""); // thông báo "Đã hoàn tác..." cũ hết nghĩa khi có thao tác mới
+
+  const result = await postApplyHandling(buildApplyBody(row, rowsPayload, isDuplicate, false));
+  setButtonLoading(applyBtn, false, "Đang xử lý...", normalLabel);
+  if (result.error) {
+    setStatusMessage(statusEl, result.error, "error");
+    return;
+  }
+
+  const data = result.data;
+  // Server báo tác động THẬT của lần này. Nếu cả 2 đều bằng 0 (vd chọn "Giữ nguyên", hoặc
+  // các dòng đã được xử lý từ trước) thì KHÔNG được báo "✅ Đã xử lý" -- sai sự thật.
+  // Server cũ không có field này -> coi như có thay đổi để giữ hành vi cũ.
+  const applied = data.applied || { rows_removed: 1, cells_changed: 0 };
+  const changedAnything = applied.rows_removed > 0 || applied.cells_changed > 0;
+
   state.lastFindings = data.findings;
   state.lastFlaggedRows = data.flagged_rows;
   state.rowFindingsMap = buildRowFindingsMap(data.findings);
-  state.hasWorkingCopy = true;
-  state.appliedGroups.add(isDuplicate ? "duplicate_row" : `${row.dataset.column}|${row.dataset.noiseType}`);
+  if (data.history) state.history = data.history;
+  if (changedAnything) {
+    state.hasWorkingCopy = true;
+    state.appliedGroups.add(isDuplicate ? "duplicate_row" : `${row.dataset.column}|${row.dataset.noiseType}`);
+    dismissAllHandlingConfirms(); // dữ liệu đã đổi -> số liệu trong hộp xác nhận của nhóm khác đã cũ
+  }
+  renderHistoryBar();
 
   await refreshHandledRowsInPlace(row, rowsPayload.map((r) => r.row_number));
   updateGroupSummaryAfterApply(row);
+  refreshUnopenedGroupSummaries();
 
-  statusEl.textContent = `✅ Đã xử lý ${rowsPayload.length} dòng.`;
-  row.querySelector(".handling-preview-btn").hidden = false;
+  if (changedAnything) {
+    const effects = [];
+    if (applied.rows_removed > 0) effects.push(`xoá ${applied.rows_removed} dòng`);
+    if (applied.cells_changed > 0) effects.push(`sửa ${applied.cells_changed} ô`);
+    setStatusMessage(statusEl, `✅ Đã áp dụng: ${effects.join(", ")}.`, "ok");
+    row.querySelector(".handling-preview-btn").hidden = false;
+  } else {
+    setStatusMessage(
+      statusEl,
+      'Không có thay đổi nào được ghi (vd chọn "Giữ nguyên", hoặc các dòng đã chọn đã được xử lý trước đó).',
+      ""
+    );
+  }
 
   // Chỉ cập nhật số liệu Bước 4 (để xem lại vẫn đúng), KHÔNG rebuild lại
   // Bước 5 -- bảng chi tiết vừa cập nhật ở trên vẫn giữ nguyên, không "biến mất".
   renderStep4({ total_rows: data.total_rows, total_flagged_rows: data.total_flagged_rows, findings: data.findings });
 }
+
+// ---- Bước 5 AN TOÀN, lớp 3: thanh "Lịch sử" + Hoàn tác + Về dữ liệu gốc ----
+// Mô tả 1 bước trong nhật ký bằng chữ dễ đọc, vd "age (Thiếu giá trị): xoá 4 dòng".
+// Mọi chuỗi từ server đều đi qua escapeHtml() trước khi chèn vào HTML.
+function describeHistoryEntry(entry) {
+  const target = entry.column
+    ? `<strong>${escapeHtml(entry.column)}</strong> (${escapeHtml(noiseMeta(entry.noise_type).label)})`
+    : "<strong>Trùng dòng</strong>";
+  const effects = [];
+  if (entry.rows_removed > 0) effects.push(`xoá ${Number(entry.rows_removed)} dòng`);
+  if (entry.cells_changed > 0) effects.push(`sửa ${Number(entry.cells_changed)} ô`);
+  const actions = Object.entries(entry.actions || {})
+    .map(([action, count]) => `${escapeHtml(ACTION_LABELS[action] || action)} ×${Number(count)}`)
+    .join("; ");
+  return `${target}: ${effects.join(", ")} <span class="history-actions">— ${actions}</span>`;
+}
+
+function renderHistoryBar() {
+  // Lịch sử vừa đổi (áp dụng thêm, hoàn tác, upload file mới...) -> hộp xác nhận "Về dữ
+  // liệu gốc" đang mở (nếu có) đã ghi số bước cũ, đóng lại cho khỏi xác nhận nhầm số cũ.
+  dismissResetConfirm();
+  const entries = state.history.entries;
+  const list = $("history-log");
+  if (entries.length === 0) {
+    list.innerHTML = '<li class="history-log-empty">Chưa có thay đổi nào — dữ liệu đang là bản gốc.</li>';
+  } else {
+    // Mới nhất ở trên cùng; bước trên cùng chính là bước nút "Hoàn tác" sẽ lùi lại.
+    list.innerHTML = entries
+      .slice()
+      .reverse()
+      .map((entry, i) => {
+        const note = entry.undoable ? "" : ' <span class="history-actions">(không hoàn tác được)</span>';
+        return `<li class="history-log-item${i === 0 ? " is-latest" : ""}">${describeHistoryEntry(entry)}${note}</li>`;
+      })
+      .join("");
+  }
+  $("undo-btn").disabled = !state.history.can_undo;
+  $("reset-btn").disabled = entries.length === 0;
+  // Còn bước trong nhật ký mà hết hoàn tác được (quá 5 bước, hoặc bảng quá lớn) -> nói rõ
+  // lý do nút Hoàn tác bị tắt thay vì để người dùng tự đoán.
+  $("history-hint").textContent =
+    entries.length > 0 && !state.history.can_undo
+      ? 'Không hoàn tác thêm được (chỉ nhớ ' + state.history.undo_limit + ' bước gần nhất, hoặc bảng quá lớn) — dùng "Về dữ liệu gốc".'
+      : `Hoàn tác được ${state.history.undo_limit} bước gần nhất.`;
+}
+
+function dismissResetConfirm() {
+  $("history-confirm").hidden = true;
+  $("history-confirm").innerHTML = "";
+}
+
+// Gọi 1 trong 2 route lùi lại (/api/undo-handling hoặc /api/reset-working). Server
+// trả về kết quả detect trên dữ liệu SAU khi lùi lại + lịch sử mới -> dựng lại
+// toàn bộ danh sách nhóm ở Bước 5 và số liệu Bước 4 cho khớp (khác "Áp dụng" là
+// chỉ cập nhật tại chỗ, vì lùi lại có thể làm 1 nhóm đã "xong" có lỗi trở lại).
+// Chạy trong withHandlingLock() nên không bị Áp dụng/lệnh khác chen vào giữa.
+async function runHistoryAction(path, successMessage) {
+  await withHandlingLock(async () => {
+    const statusEl = $("history-status");
+    $("undo-btn").disabled = true;
+    $("reset-btn").disabled = true;
+    setStatusMessage(statusEl, "Đang xử lý...", "");
+
+    let response;
+    try {
+      response = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file_id: state.fileId,
+          column_configs: state.lastColumnConfigs,
+          cross_field_rules: [],
+          duplicate_row: state.lastDuplicateConfig,
+        }),
+      });
+    } catch (err) {
+      setStatusMessage(statusEl, "Không gọi được backend.", "error");
+      renderHistoryBar();
+      return;
+    }
+    if (!response.ok) {
+      let message = "Thao tác thất bại, kiểm tra console/backend log.";
+      try {
+        const errorData = await response.json();
+        if (errorData.error) message = errorData.error;
+      } catch (parseErr) {
+        /* giữ message mặc định */
+      }
+      setStatusMessage(statusEl, message, "error");
+      renderHistoryBar();
+      return;
+    }
+
+    const data = await response.json();
+    state.lastFindings = data.findings;
+    state.lastFlaggedRows = data.flagged_rows;
+    state.rowFindingsMap = buildRowFindingsMap(data.findings);
+    state.history = data.history;
+    state.hasWorkingCopy = data.history.entries.length > 0;
+    // Nhóm nào còn nằm trong lịch sử thì vẫn coi là "đã xử lý" (hiện nút "Xem sau xử lý").
+    state.appliedGroups = new Set(data.history.entries.map((e) => e.group_key));
+
+    renderStep4({ total_rows: data.total_rows, total_flagged_rows: data.total_flagged_rows, findings: data.findings });
+    renderHandlingSection();
+    renderHistoryBar();
+    setStatusMessage(statusEl, successMessage, "ok");
+  });
+}
+
+$("undo-btn").addEventListener("click", () => {
+  if (state.handlingBusy) return;
+  dismissResetConfirm();
+  runHistoryAction("/api/undo-handling", "✅ Đã hoàn tác 1 bước.");
+});
+$("reset-btn").addEventListener("click", () => {
+  if (state.handlingBusy) return;
+  const box = $("history-confirm");
+  const count = state.history.entries.length;
+  box.innerHTML = `
+    <span class="handling-confirm-text">⚠ Bỏ toàn bộ <strong>${count}</strong> bước xử lý và quay về dữ liệu gốc đã upload?</span>
+    <button type="button" class="btn btn-danger btn-small" id="reset-confirm-yes">Xác nhận</button>
+    <button type="button" class="btn btn-ghost btn-small" id="reset-confirm-no">Huỷ</button>
+  `;
+  box.hidden = false;
+  $("reset-confirm-no").addEventListener("click", dismissResetConfirm);
+  $("reset-confirm-yes").addEventListener("click", async () => {
+    if (state.handlingBusy) return;
+    dismissResetConfirm();
+    await runHistoryAction("/api/reset-working", "✅ Đã quay về dữ liệu gốc.");
+  });
+  $("reset-confirm-no").focus(); // focus vào "Huỷ" (lựa chọn an toàn)
+});
 
 // ====== Xem dữ liệu sau xử lý (panel riêng, không nằm trong 5 bước) ======
 state.previewRows = [];

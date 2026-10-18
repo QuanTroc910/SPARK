@@ -8,6 +8,8 @@ File này KHÔNG chứa logic detect noise gì cả -- nó chỉ làm 3 việc:
 Chạy thử: python3 app.py -> server chạy ở http://localhost:5000
 """
 
+import re
+import threading
 import uuid
 from io import StringIO
 from pathlib import Path
@@ -90,6 +92,172 @@ def _get_working_df(file_id: str):
             return None
         WORKING_FILES[file_id] = original.copy()
     return WORKING_FILES[file_id]
+
+
+def _peek_working_df(file_id: str):
+    """Giống _get_working_df() nhưng KHÔNG tạo bản "đang làm việc" nếu chưa có
+    (chỉ ĐỌC) -- dùng cho dry_run, vì chạy thử không được để lại bất kỳ dấu vết
+    nào, kể cả việc sinh ra 1 bản copy mới của cả file trong RAM."""
+    working = WORKING_FILES.get(file_id)
+    return working if working is not None else UPLOADED_FILES.get(file_id)
+
+
+# ---------------------------------------------------------------------------
+# Lịch sử xử lý ở Bước 5 -- phục vụ nút "Hoàn tác" + nhật ký thao tác.
+#
+# HANDLING_HISTORY[file_id] là danh sách (CŨ -> MỚI) các lần "Áp dụng" ĐÃ GHI
+# THẬT lên bản đang làm việc (dry_run KHÔNG bao giờ ghi vào đây). Mỗi phần tử
+# là 1 dict:
+#   group_key    -- "cột|loại noise" hoặc "duplicate_row" (để FE biết nhóm nào
+#                   đã xử lý, dựng lại nút "Xem sau xử lý" sau khi hoàn tác)
+#   column / noise_type -- nhóm lỗi vừa xử lý (column = None với duplicate_row)
+#   actions      -- {tên hành động: số dòng}, vd {"remove_row": 4}
+#   rows_removed / cells_changed -- tác động THẬT đo được (không phải số dòng
+#                   người dùng tick), vd 1 dòng đã bị xoá từ lần trước sẽ không
+#                   được tính lại
+#   rows_before / rows_after -- tổng số dòng trước/sau
+#   snapshot     -- DataFrame TRƯỚC khi áp dụng bước này (hoặc None nếu không
+#                   còn hoàn tác được bước này nữa). Không bao giờ gửi cho FE.
+#
+# Vì sao lưu snapshot bằng THAM CHIẾU mà không cần .copy(): mọi lần sửa đều
+# tạo ra DataFrame MỚI (apply_handling() bắt đầu bằng df.copy(), còn xoá trùng
+# dòng dùng df.drop() -- cả hai đều trả về object mới), không có chỗ nào sửa
+# tại chỗ lên DataFrame đang nằm trong WORKING_FILES. Nên DataFrame "trước khi
+# sửa" cứ giữ nguyên là được, không tốn thêm 1 bản copy riêng.
+#
+# Giới hạn bộ nhớ (3 lớp, vì file có thể lên tới hàng trăm nghìn dòng):
+#   - MAX_UNDO_STEPS: chỉ giữ snapshot của N bước GẦN NHẤT.
+#   - MAX_HISTORY_LOG: nhật ký chữ giữ tối đa N bước (rất nhẹ).
+#   - UNDO_MAX_CELLS: bảng quá lớn (số dòng x số cột vượt ngưỡng) thì KHÔNG lưu
+#     snapshot, chỉ còn nút "Về dữ liệu gốc" (luôn dùng được vì bản gốc
+#     UPLOADED_FILES không bao giờ bị sửa).
+# Giống UPLOADED_FILES/WORKING_FILES: nằm trong RAM, server restart là mất hết.
+# ---------------------------------------------------------------------------
+HANDLING_HISTORY: dict[str, list[dict]] = {}
+
+# Khoá chung cho MỌI thao tác đọc-rồi-ghi lên WORKING_FILES/HANDLING_HISTORY (áp
+# dụng thật, dry-run, hoàn tác, về dữ liệu gốc). Flask chạy threaded=True nên 2
+# request có thể chạy chồng nhau: nếu cả hai cùng đọc bản đang làm việc rồi cùng
+# ghi lại, bản ghi sau sẽ ĐÈ MẤT thay đổi của bản ghi trước (lost update). Có khoá
+# thì mỗi lần Áp dụng thấy đúng kết quả của lần trước. RLock để route gọi lồng
+# nhau không tự khoá chết mình. Chấp nhận được cho demo 1 người dùng.
+HANDLING_LOCK = threading.RLock()
+
+# Chỉ giữ lịch sử (kèm snapshot) của N file thao tác GẦN NHẤT -- mỗi lần upload
+# sinh 1 file_id mới và server không có chỗ nào xoá file_id cũ, nếu không giới hạn
+# thì snapshot của mọi file từng xử lý sẽ nằm mãi trong RAM.
+MAX_FILES_WITH_HISTORY = 3
+MAX_UNDO_STEPS = 5
+MAX_HISTORY_LOG = 20
+UNDO_MAX_CELLS = 5_000_000
+
+
+def _as_bool(value) -> bool:
+    """Đọc cờ true/false từ JSON một cách CHẶT: bool("false") trong Python là True
+    (chuỗi không rỗng), nên không dùng bool() thẳng -- gửi nhầm "false" dạng chuỗi
+    mà bị hiểu là "chạy thử" (hoặc ngược lại) sẽ làm sai hành vi xoá dữ liệu."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+    return bool(value)
+
+
+def _record_history(file_id: str, entry: dict, snapshot_df) -> None:
+    """Ghi 1 bước vừa áp dụng vào lịch sử, đồng thời dọn bớt snapshot cũ để
+    không phình RAM. `snapshot_df` là DataFrame TRƯỚC khi áp dụng bước này."""
+    # Chuyển file_id lên CUỐI dict (= "vừa dùng gần nhất"), rồi bỏ lịch sử của các
+    # file cũ nhất nếu đang giữ quá MAX_FILES_WITH_HISTORY file.
+    history = HANDLING_HISTORY.pop(file_id, [])
+    HANDLING_HISTORY[file_id] = history
+    while len(HANDLING_HISTORY) > MAX_FILES_WITH_HISTORY:
+        HANDLING_HISTORY.pop(next(iter(HANDLING_HISTORY)))
+
+    can_snapshot = snapshot_df.shape[0] * snapshot_df.shape[1] <= UNDO_MAX_CELLS
+    entry["snapshot"] = snapshot_df if can_snapshot else None
+    history.append(entry)
+
+    if not can_snapshot:
+        # Bước mới nhất không hoàn tác được -> các snapshot cũ hơn cũng không
+        # còn "với tới" được (hoàn tác luôn lùi từng bước từ mới nhất), giữ
+        # lại chỉ tốn RAM vô ích.
+        for older in history[:-1]:
+            older["snapshot"] = None
+
+    # Chỉ giữ snapshot của MAX_UNDO_STEPS bước gần nhất.
+    for older in history[:-MAX_UNDO_STEPS]:
+        older["snapshot"] = None
+
+    # Nhật ký chữ chỉ giữ MAX_HISTORY_LOG bước gần nhất.
+    del history[:-MAX_HISTORY_LOG]
+
+
+def _history_payload(file_id: str) -> dict:
+    """Phần lịch sử gửi cho FE: bỏ snapshot (DataFrame không JSON hoá được và
+    cũng không nên gửi), thêm cờ `undoable` cho từng bước và `can_undo` chung."""
+    entries = HANDLING_HISTORY.get(file_id, [])
+    return {
+        "entries": [
+            {**{k: v for k, v in e.items() if k != "snapshot"}, "undoable": e["snapshot"] is not None}
+            for e in entries
+        ],
+        "can_undo": bool(entries) and entries[-1]["snapshot"] is not None,
+        "undo_limit": MAX_UNDO_STEPS,
+    }
+
+
+def _summarize_change(before, after, column):
+    """Đo tác động THẬT của 1 lần xử lý: (số dòng bị xoá, số ô bị sửa giá trị).
+    Dùng chung cho dry_run (hiện "Sẽ xoá N dòng") lẫn nhật ký lịch sử, để 2 nơi
+    luôn cùng 1 con số. Ô "bị sửa" chỉ đếm trên cột `column` (None = xoá trùng
+    dòng, không sửa ô nào) và chỉ trên các dòng CÒN LẠI sau xử lý."""
+    rows_removed = len(before) - len(after)
+    cells_changed = 0
+    if column is not None and column in before.columns:
+        common = after.index.intersection(before.index)
+        before_values = before.loc[common, column].fillna("").astype(str)
+        after_values = after.loc[common, column].fillna("").astype(str)
+        cells_changed = int((before_values != after_values).sum())
+    return rows_removed, cells_changed
+
+
+def _detect_config_from_partial_payload(payload: dict):
+    """Đọc phần cấu hình detect (column_configs, cross_field_rules,
+    duplicate_row) trong payload của các route Bước 5 -- để chạy lại
+    detect_noise() trên bản mới sau khi sửa/hoàn tác/quay về gốc. Dùng chung cho
+    /api/apply-handling-partial, /api/undo-handling, /api/reset-working."""
+    column_configs = [_config_from_json(item) for item in payload.get("column_configs", [])]
+    cross_field_rules = [
+        _cross_field_rule_from_json(item) for item in payload.get("cross_field_rules", [])
+    ]
+    duplicate_payload = payload.get("duplicate_row")
+    duplicate_row_config = (
+        DuplicateRowConfig(subset_columns=duplicate_payload.get("subset_columns"))
+        if duplicate_payload
+        else None
+    )
+    return column_configs, cross_field_rules, duplicate_row_config
+
+
+def _build_detect_response(df, findings) -> dict:
+    """Đóng gói kết quả detect thành đúng dạng JSON như /api/detect-noise
+    (FE tái dùng thẳng renderStep4()). row_number = index + 1 (xem quyết định
+    thiết kế #5 trong CLAUDE.md)."""
+    flagged_rows_df = get_flagged_rows(df, findings)
+    flagged_rows_out = flagged_rows_df.copy()
+    flagged_rows_out.insert(0, "row_number", flagged_rows_out.index + 1)
+    return {
+        "total_rows": len(df),
+        "total_flagged_rows": len(flagged_rows_df),
+        "findings": [
+            {
+                "row_number": int(f.row_index) + 1,
+                "column": f.column,
+                "noise_type": f.noise_type,
+                "value": f.value,
+            }
+            for f in findings
+        ],
+        "flagged_rows": flagged_rows_out.to_dict(orient="records"),
+    }
 
 
 @app.route("/api/upload", methods=["POST"])
@@ -189,7 +357,13 @@ def detect_noise_api():
     """
     payload = request.get_json()
     file_id = payload.get("file_id")
-    df = UPLOADED_FILES.get(file_id)
+    # Detect trên bản ĐANG LÀM VIỆC nếu người dùng đã xử lý ở Bước 5 (còn chưa thì
+    # là bản gốc). Trước đây luôn detect trên bản GỐC, nên Detect lại từ Bước 3 sau
+    # khi đã xử lý sẽ hiện lại đúng những lỗi đã sửa/xoá, lệch với bản đang làm việc
+    # và lịch sử trên server (Bước 5 báo "đã xử lý" mà dữ liệu không đổi). Bản đang
+    # làm việc luôn khớp với những gì Bước 5 đang thao tác nên 2 bước nhất quán;
+    # muốn detect lại từ đầu thì bấm "Về dữ liệu gốc" ở Bước 5.
+    df = _peek_working_df(file_id)
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
 
@@ -218,7 +392,7 @@ def detect_noise_api():
             duplicate_row_config=duplicate_row_config,
             cross_field_rules=cross_field_rules,
         )
-    except (FormulaError, ValueError, KeyError, TypeError) as exc:
+    except (FormulaError, ValueError, KeyError, TypeError, re.error) as exc:
         return jsonify({"error": f"Cấu hình rule/noise không hợp lệ: {exc}"}), 400
 
     flagged_rows_df = get_flagged_rows(df, findings)
@@ -617,39 +791,58 @@ def apply_handling_partial_api():
         bảng chi tiết có 1 dropdown xử lý của chính nó. Với noise_type =
         "duplicate_row" thì field "action" của mỗi dòng bị bỏ qua (luôn hiểu
         là xoá dòng đó, không có hành động nào khác hợp lý).
+      - dry_run (tuỳ chọn, mặc định false): true = "CHẠY THỬ" -- tính đúng như
+        thật trên bản sao nhưng KHÔNG ghi gì (không đụng WORKING_FILES, không
+        ghi lịch sử, không tạo bản đang làm việc nếu chưa có), chỉ trả về
+        {dry_run, rows_before, rows_after, rows_removed, cells_changed} để FE
+        hiện "Sẽ xoá N dòng (a -> b)" cho người dùng xác nhận TRƯỚC khi áp dụng thật.
 
-    Sửa trực tiếp lên bản "đang làm việc" (WORKING_FILES[file_id]) rồi trả về
-    NGUYÊN VẸN response giống /api/detect-noise (để FE tái dùng renderStep4()
-    hiển thị luôn số lỗi CÒN LẠI sau khi xử lý xong nhóm này).
+    Chạy thật: sửa lên bản "đang làm việc" (WORKING_FILES[file_id]), ghi 1 bước
+    vào lịch sử (để hoàn tác được), rồi trả về NGUYÊN VẸN response giống
+    /api/detect-noise (để FE tái dùng renderStep4() hiển thị luôn số lỗi CÒN
+    LẠI sau khi xử lý xong nhóm này) cộng thêm field "history".
     """
     payload = request.get_json()
+    with HANDLING_LOCK:
+        return _apply_handling_partial(payload)
+
+
+def _apply_handling_partial(payload: dict):
+    """Phần ruột của /api/apply-handling-partial, tách riêng để route chạy TRỌN
+    nó trong HANDLING_LOCK (đọc bản đang làm việc -> sửa -> ghi lại là 1 khối,
+    không để request khác chen vào giữa)."""
     file_id = payload.get("file_id")
-    df = _get_working_df(file_id)
+    dry_run = _as_bool(payload.get("dry_run"))
+    # Chạy thử chỉ ĐỌC (không tạo bản đang làm việc); chạy thật mới tạo nếu chưa có.
+    df = _peek_working_df(file_id) if dry_run else _get_working_df(file_id)
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
 
     try:
-        column_configs = [_config_from_json(item) for item in payload.get("column_configs", [])]
-        cross_field_rules = [
-            _cross_field_rule_from_json(item) for item in payload.get("cross_field_rules", [])
-        ]
-        duplicate_payload = payload.get("duplicate_row")
-        duplicate_row_config = (
-            DuplicateRowConfig(subset_columns=duplicate_payload.get("subset_columns"))
-            if duplicate_payload
-            else None
+        column_configs, cross_field_rules, duplicate_row_config = _detect_config_from_partial_payload(
+            payload
         )
 
         noise_type = payload["noise_type"]
         rows_payload = payload.get("rows", [])
 
+        # `df` = bản TRƯỚC khi sửa (giữ nguyên, không bị đụng tới); `new_df` =
+        # kết quả sau khi sửa. Cả apply_handling() lẫn df.drop() đều trả về
+        # DataFrame MỚI nên `df` không bao giờ bị sửa tại chỗ -- đó là lý do
+        # dùng thẳng `df` làm snapshot hoàn tác được (xem HANDLING_HISTORY).
+        new_df = df
+        action_counts: dict[str, int] = {}
+
         if noise_type == "duplicate_row":
             # Trùng dòng: chỉ có 1 hành động hợp lý là XOÁ các dòng được tick
             # -- không đi qua apply_handling() vì đó là hàm xử lý theo CỘT,
             # còn đây là xoá thẳng theo row_index, không gắn với cột nào.
+            column = None
             row_indices = [int(item["row_number"]) - 1 for item in rows_payload]
             existing = [i for i in row_indices if i in df.index]
-            df = df.drop(index=existing)
+            new_df = df.drop(index=existing)
+            if existing:
+                action_counts["remove_row"] = len(existing)
         else:
             column = payload["column"]
             # Gom các dòng theo TỪNG hành động khác nhau -- mỗi dòng có thể tự
@@ -676,38 +869,163 @@ def apply_handling_partial_api():
                     action=HandlingAction(action_value),
                     fixed_value=fixed_value,
                 )
-                df, _stats = apply_handling(df, column_configs, fake_findings, [choice])
+                new_df, _stats = apply_handling(new_df, column_configs, fake_findings, [choice])
+                action_counts[action_value] = action_counts.get(action_value, 0) + len(fake_findings)
 
-        WORKING_FILES[file_id] = df
+        rows_removed, cells_changed = _summarize_change(df, new_df, column)
+
+        if dry_run:
+            return jsonify(
+                {
+                    "dry_run": True,
+                    "rows_before": len(df),
+                    "rows_after": len(new_df),
+                    "rows_removed": rows_removed,
+                    "cells_changed": cells_changed,
+                }
+            )
 
         # Detect lại trên bản MỚI để FE biết chính xác còn lỗi gì -- phần vừa
-        # xử lý xong sẽ tự biến mất khỏi kết quả.
+        # xử lý xong sẽ tự biến mất khỏi kết quả. PHẢI chạy TRƯỚC khi ghi bất cứ
+        # thứ gì: nếu detect lỗi (cấu hình sai...) thì route trả 400 mà dữ liệu và
+        # lịch sử vẫn nguyên vẹn, thay vì "báo lỗi nhưng dữ liệu đã bị sửa".
         findings = detect_noise(
-            df, column_configs, duplicate_row_config=duplicate_row_config, cross_field_rules=cross_field_rules
+            new_df,
+            column_configs,
+            duplicate_row_config=duplicate_row_config,
+            cross_field_rules=cross_field_rules,
         )
-    except (FormulaError, ValueError, KeyError, TypeError) as exc:
-        return jsonify({"error": f"Cấu hình xử lý không hợp lệ: {exc}"}), 400
 
-    flagged_rows_df = get_flagged_rows(df, findings)
-    flagged_rows_out = flagged_rows_df.copy()
-    flagged_rows_out.insert(0, "row_number", flagged_rows_out.index + 1)
+        # Chỉ ghi lịch sử khi bước này THẬT SỰ làm thay đổi dữ liệu -- vd chọn
+        # "Giữ nguyên" hoặc xử lý các dòng đã bị xoá từ lần trước thì không có gì
+        # để hoàn tác, đừng làm đầy nhật ký bằng các bước rỗng.
+        if rows_removed or cells_changed:
+            _record_history(
+                file_id,
+                {
+                    "group_key": "duplicate_row" if column is None else f"{column}|{noise_type}",
+                    "column": column,
+                    "noise_type": noise_type,
+                    "actions": action_counts,
+                    "rows_removed": rows_removed,
+                    "cells_changed": cells_changed,
+                    "rows_before": len(df),
+                    "rows_after": len(new_df),
+                },
+                snapshot_df=df,
+            )
+        WORKING_FILES[file_id] = new_df
+    except (FormulaError, ValueError, KeyError, TypeError, re.error) as exc:
+        return jsonify({"error": f"Cấu hình xử lý không hợp lệ: {exc}"}), 400
 
     return jsonify(
         {
-            "total_rows": len(df),
-            "total_flagged_rows": len(flagged_rows_df),
-            "findings": [
-                {
-                    "row_number": int(f.row_index) + 1,
-                    "column": f.column,
-                    "noise_type": f.noise_type,
-                    "value": f.value,
-                }
-                for f in findings
-            ],
-            "flagged_rows": flagged_rows_out.to_dict(orient="records"),
+            **_build_detect_response(new_df, findings),
+            "history": _history_payload(file_id),
+            "applied": {"rows_removed": rows_removed, "cells_changed": cells_changed},
         }
     )
+
+
+@app.route("/api/undo-handling", methods=["POST"])
+def undo_handling_api():
+    """Bước 5 (nút "Hoàn tác"): lùi lại 1 bước -- đặt bản đang làm việc về đúng
+    trạng thái TRƯỚC lần "Áp dụng" gần nhất (lấy từ snapshot đã lưu trong
+    HANDLING_HISTORY), gỡ bước đó khỏi lịch sử, rồi detect lại để FE dựng lại
+    danh sách nhóm lỗi cho khớp.
+
+    Payload: file_id + column_configs/cross_field_rules/duplicate_row (cùng
+    dạng với /api/apply-handling-partial, để chạy lại detect_noise()).
+    Trả về: response dạng /api/detect-noise + "history".
+
+    Lỗi 409 nếu không có gì để hoàn tác, hoặc bước gần nhất đã quá cũ/bảng quá
+    lớn nên không còn snapshot (khi đó chỉ còn cách "Về dữ liệu gốc").
+    """
+    payload = request.get_json()
+    with HANDLING_LOCK:
+        return _undo_handling(payload)
+
+
+def _undo_handling(payload: dict):
+    """Phần ruột của /api/undo-handling (chạy trong HANDLING_LOCK, xem route)."""
+    file_id = payload.get("file_id")
+    if file_id not in UPLOADED_FILES:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+
+    history = HANDLING_HISTORY.get(file_id, [])
+    if not history:
+        return jsonify({"error": "Chưa có bước xử lý nào để hoàn tác."}), 409
+    last = history[-1]
+    if last["snapshot"] is None:
+        return jsonify(
+            {
+                "error": (
+                    "Không hoàn tác được bước này (bảng quá lớn, hoặc đã vượt quá "
+                    f"{MAX_UNDO_STEPS} bước gần nhất). Hãy dùng \"Về dữ liệu gốc\"."
+                )
+            }
+        ), 409
+
+    try:
+        column_configs, cross_field_rules, duplicate_row_config = _detect_config_from_partial_payload(
+            payload
+        )
+        restored = last["snapshot"]
+        findings = detect_noise(
+            restored,
+            column_configs,
+            duplicate_row_config=duplicate_row_config,
+            cross_field_rules=cross_field_rules,
+        )
+    except (FormulaError, ValueError, KeyError, TypeError, re.error) as exc:
+        # Lỗi cấu hình -> chưa đụng gì vào dữ liệu/lịch sử, người dùng thử lại được.
+        return jsonify({"error": f"Cấu hình không hợp lệ: {exc}"}), 400
+
+    # Chỉ sau khi mọi thứ trên đã thành công mới thật sự ghi (tránh hoàn tác dở dang).
+    history.pop()
+    WORKING_FILES[file_id] = restored
+    return jsonify({**_build_detect_response(restored, findings), "history": _history_payload(file_id)})
+
+
+@app.route("/api/reset-working", methods=["POST"])
+def reset_working_api():
+    """Bước 5 (nút "Về dữ liệu gốc"): bỏ TOÀN BỘ các lần xử lý, quay về đúng bản
+    người dùng đã upload. Rất đơn giản vì UPLOADED_FILES không bao giờ bị sửa:
+    chỉ cần xoá bản đang làm việc + lịch sử, lần Áp dụng kế tiếp sẽ tự copy lại
+    từ bản gốc (xem _get_working_df()). Luôn dùng được, kể cả khi file quá lớn
+    để có snapshot hoàn tác.
+
+    Payload/response: giống /api/undo-handling (response dạng detect + "history",
+    lúc này history rỗng).
+    """
+    payload = request.get_json()
+    with HANDLING_LOCK:
+        return _reset_working(payload)
+
+
+def _reset_working(payload: dict):
+    """Phần ruột của /api/reset-working (chạy trong HANDLING_LOCK, xem route)."""
+    file_id = payload.get("file_id")
+    original = UPLOADED_FILES.get(file_id)
+    if original is None:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+
+    try:
+        column_configs, cross_field_rules, duplicate_row_config = _detect_config_from_partial_payload(
+            payload
+        )
+        findings = detect_noise(
+            original,
+            column_configs,
+            duplicate_row_config=duplicate_row_config,
+            cross_field_rules=cross_field_rules,
+        )
+    except (FormulaError, ValueError, KeyError, TypeError, re.error) as exc:
+        return jsonify({"error": f"Cấu hình không hợp lệ: {exc}"}), 400
+
+    WORKING_FILES.pop(file_id, None)
+    HANDLING_HISTORY.pop(file_id, None)
+    return jsonify({**_build_detect_response(original, findings), "history": _history_payload(file_id)})
 
 
 @app.route("/api/working-data/<file_id>", methods=["GET"])

@@ -347,10 +347,25 @@
       <!-- Nhánh ATTRIBUTE NOISE -->
       <div id="panel-5-attribute">
         <p class="panel-desc">
-          Bấm vào tên mỗi nhóm để xem chi tiết từng dòng, tick chọn dòng muốn xử lý rồi bấm "Áp dụng" —
-          không cần xử lý hết các nhóm cùng lúc. Rule liên cột chưa hỗ trợ xử lý tự động ở bước này. Xử lý
-          xong, bấm "Xuất file CSV" ở cuối trang để tải file về.
+          Bấm vào tên mỗi nhóm để xem chi tiết từng dòng, tick chọn dòng muốn xử lý, chọn cách xử lý cho từng
+          dòng rồi bấm "Áp dụng" — không cần xử lý hết các nhóm cùng lúc. Hành động xoá dòng luôn được cho xem
+          trước và hỏi xác nhận; mọi bước đều hoàn tác được hoặc quay về dữ liệu gốc. Rule liên cột chưa hỗ trợ
+          xử lý tự động ở bước này. Xử lý xong, bấm "Xuất file CSV" ở cuối trang để tải file về.
         </p>
+
+        <!-- Thanh lịch sử: nhật ký các bước đã Áp dụng + nút Hoàn tác / Về dữ liệu gốc.
+             Luôn hiện (kể cả khi chưa có bước nào) để người dùng biết tính năng này tồn tại. -->
+        <div class="history-bar" id="history-bar">
+          <div class="history-bar-top">
+            <strong class="history-bar-title">Lịch sử xử lý</strong>
+            <span class="status-text" id="history-hint"></span>
+            <button class="btn btn-ghost btn-small" id="undo-btn" type="button" disabled>↶ Hoàn tác</button>
+            <button class="btn btn-ghost btn-small" id="reset-btn" type="button" disabled>⟲ Về dữ liệu gốc</button>
+          </div>
+          <div class="handling-confirm" id="history-confirm" role="alert" hidden></div>
+          <p class="status-text history-status" id="history-status" aria-live="polite"></p>
+          <ol class="history-log" id="history-log"></ol>
+        </div>
 
         <div id="handling-list" class="handling-list"></div>
         <div class="panel-actions">
