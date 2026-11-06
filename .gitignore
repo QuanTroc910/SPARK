@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 output/
 uploads/
+spark_accounts.db

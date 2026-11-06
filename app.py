@@ -8,16 +8,20 @@ File này KHÔNG chứa logic detect noise gì cả -- nó chỉ làm 3 việc:
 Chạy thử: python3 app.py -> server chạy ở http://localhost:5000
 """
 
+import os
 import re
 import threading
 import uuid
+from functools import wraps
 from io import StringIO
 from pathlib import Path
 
 import pandas as pd
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, session
 from flask_cors import CORS
 
+from accounts.db import init_db
+from accounts.service import AccountError, authenticate, change_password, get_user, register
 from attribute_noise.attribute_handling import (
     DuplicateHandlingChoice,
     DuplicateKeep,
@@ -56,12 +60,36 @@ from class_noise.feature_selection import (
     select_by_elbow,
 )
 
-app = Flask(__name__)
+# MỚI (tài khoản đăng nhập): phục vụ luôn frontend/ từ ĐÚNG Flask này
+# (static_folder="frontend", static_url_path="" -- file frontend/style.css
+# tự có sẵn ở URL "/style.css", khớp đúng đường dẫn tương đối index.html
+# đang dùng, không cần sửa gì bên HTML/JS). LÝ DO bắt buộc phải làm vậy:
+# đăng nhập dùng session (cookie) -- cookie chỉ gửi kèm request đáng tin cậy
+# khi frontend VÀ backend nằm CÙNG 1 "origin" (cùng domain+port). Trước đây
+# frontend mở riêng (file:// hoặc 1 static server khác port) nên LÀ 2 origin
+# khác nhau với backend -- cookie đăng nhập sẽ không gửi kèm được 1 cách
+# đáng tin cậy (trình duyệt hiện đại chặn/giới hạn cookie "cross-site" khá
+# chặt). Gộp chung 1 origin giải quyết TẬN GỐC vấn đề này, không cần đụng
+# tới hàng chục chỗ gọi fetch() rải rác trong script.js.
+app = Flask(__name__, static_folder="frontend", static_url_path="")
 
-# CORS: cho phép trình duyệt gọi API này dù frontend chạy ở 1 origin khác
-# (vd mở file index.html trực tiếp, hoặc chạy ở port khác với backend).
-# Nếu không bật cái này, trình duyệt sẽ tự chặn request dù code đúng.
+# secret_key: Flask dùng để KÝ (sign) cookie session, chống giả mạo/sửa nội
+# dung cookie phía trình duyệt. Đọc từ biến môi trường SPARK_SECRET_KEY nếu
+# có (để cố định qua các lần restart), không có thì tự sinh ngẫu nhiên mỗi
+# lần khởi động -- GIỚI HẠN ĐÃ BIẾT (demo 1 người dùng): restart server là
+# mọi người đang đăng nhập bị đăng xuất (cookie cũ ký bằng key cũ không còn
+# hợp lệ) -- chấp nhận được cho quy mô khoá luận, giống tinh thần các giới
+# hạn đã ghi nhận ở Bước 5 an toàn (CLAUDE.md mục 13).
+app.secret_key = os.environ.get("SPARK_SECRET_KEY") or os.urandom(32)
+
+# CORS: cho phép trình duyệt gọi API này dù frontend chạy ở 1 origin khác.
+# Giờ frontend đã được phục vụ CÙNG origin (xem trên) nên về lý thuyết không
+# còn bắt buộc nữa, nhưng vẫn giữ lại -- không hại gì, và lỡ có ai mở
+# frontend/index.html kiểu cũ (vd đang phát triển dở, mở trực tiếp bằng
+# trình duyệt) thì các API KHÔNG CẦN đăng nhập (vd health check) vẫn gọi được.
 CORS(app)
+
+init_db()  # tạo bảng users trong SQLite nếu chưa có -- an toàn gọi nhiều lần
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -84,6 +112,16 @@ CLEANED_FILES: dict[str, "pd.DataFrame"] = {}
 # 1 lần bấm áp dụng hết như trước). Chỉ tạo (copy từ UPLOADED_FILES) khi lần
 # đầu người dùng bấm "Áp dụng" cho 1 nhóm nào đó -- xem _get_working_df().
 WORKING_FILES: dict[str, "pd.DataFrame"] = {}
+
+# MỚI (tài khoản đăng nhập, multi-user THẬT): ghi nhớ "file_id/download_id
+# này thuộc về tài khoản nào" -- cũng chỉ sống trong RAM (giống 3 dict trên,
+# KHÔNG cần lưu lâu dài vì bản thân file cũng chỉ sống trong RAM), nhưng
+# BẮT BUỘC phải có để kiểm tra quyền sở hữu (xem _require_file_owner() bên
+# dưới) -- trước đây KHÔNG có khái niệm "chủ sở hữu" nào, ai biết đúng
+# file_id cũng lấy/sửa được, đã giải thích rõ với người dùng đây là lỗ hổng
+# cần tài khoản thật mới vá được.
+FILE_OWNERS: dict[str, int] = {}
+DOWNLOAD_OWNERS: dict[str, int] = {}
 
 
 def _get_working_df(file_id: str):
@@ -261,7 +299,125 @@ def _build_detect_response(df, findings) -> dict:
     }
 
 
+@app.route("/")
+def serve_frontend():
+    """Trả về frontend/index.html -- Flask tự phục vụ các file tĩnh còn lại
+    (style.css, script.js) nhờ static_folder="frontend" đã khai báo ở trên,
+    không cần route riêng cho từng file."""
+    return app.send_static_file("index.html")
+
+
+def login_required(view_func):
+    """Decorator: route nào gắn @login_required sẽ trả lỗi 401 ngay nếu
+    chưa đăng nhập, không chạy logic thật của route. Dùng cho route KHÔNG
+    gắn với 1 file_id có sẵn (vd /api/upload -- lúc này CHƯA có file_id nào
+    để kiểm tra chủ sở hữu, vì chính request này mới TẠO ra file_id)."""
+
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if "user_id" not in session:
+            return jsonify({"error": "Cần đăng nhập trước"}), 401
+        return view_func(*args, **kwargs)
+
+    return wrapped
+
+
+def _require_file_owner(file_id):
+    """Kiểm tra người đang đăng nhập có đúng là chủ sở hữu file_id này
+    không. Trả về None nếu hợp lệ (route gọi tiếp bình thường); ngược lại
+    trả (response, status_code) để route `return` thẳng luôn.
+
+    Cố tình dùng CHUNG 1 thông báo lỗi cho CẢ 3 trường hợp (chưa đăng nhập /
+    file_id không tồn tại / file_id tồn tại nhưng của người khác) -- không
+    tiết lộ qua nội dung lỗi rằng 1 file_id "có tồn tại nhưng không phải
+    của bạn" (giống cách CYD mô tả: "requests for another account's
+    dataset are answered as if it did not exist", đã trao đổi với người dùng).
+    """
+    user_id = session.get("user_id")
+    owner_id = FILE_OWNERS.get(file_id)
+    if user_id is None or owner_id is None or owner_id != user_id:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+    return None
+
+
+def _require_download_owner(download_id):
+    """Giống _require_file_owner() nhưng cho download_id (CLEANED_FILES) --
+    tách riêng vì đây là 2 "không gian" file_id khác nhau, không dùng
+    chung FILE_OWNERS được."""
+    user_id = session.get("user_id")
+    owner_id = DOWNLOAD_OWNERS.get(download_id)
+    if user_id is None or owner_id is None or owner_id != user_id:
+        return jsonify({"error": "download_id không tồn tại hoặc đã hết hạn"}), 404
+    return None
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def auth_register():
+    """Đăng ký tài khoản mới -- đăng ký xong TỰ ĐỘNG đăng nhập luôn (đỡ phải
+    đăng ký xong lại đăng nhập lại ngay, trải nghiệm phổ biến ở hầu hết web)."""
+    payload = request.get_json() or {}
+    try:
+        user = register(payload.get("username", ""), payload.get("password", ""))
+    except AccountError as exc:
+        return jsonify({"error": str(exc)}), 400
+    session["user_id"] = user.id
+    # Trả lồng trong "user" (kèm created_at) giống /api/auth/me -- để frontend
+    # dùng CHUNG 1 shape response cho cả 3 route (đăng ký/đăng nhập/kiểm tra
+    # trạng thái), không phải nhớ 2 cách đọc response khác nhau.
+    return jsonify({"user": {"id": user.id, "username": user.username, "created_at": user.created_at}})
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    payload = request.get_json() or {}
+    try:
+        user = authenticate(payload.get("username", ""), payload.get("password", ""))
+    except AccountError as exc:
+        return jsonify({"error": str(exc)}), 400
+    session["user_id"] = user.id
+    return jsonify({"user": {"id": user.id, "username": user.username, "created_at": user.created_at}})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/auth/me", methods=["GET"])
+def auth_me():
+    """Frontend gọi route này lúc tải trang để biết "ai đang đăng nhập"
+    (hoặc chưa đăng nhập ai cả) -- quyết định hiện thẳng Bước 1 hay bắt
+    đăng nhập trước. Trả {"user": null} thay vì lỗi 401 vì đây là trạng
+    thái BÌNH THƯỜNG (chưa đăng nhập), không phải lỗi."""
+    user_id = session.get("user_id")
+    if user_id is None:
+        return jsonify({"user": None})
+    user = get_user(user_id)
+    if user is None:
+        # Tài khoản đã bị xoá khỏi DB (vd người dùng khác xoá CSDL thủ công)
+        # nhưng cookie session cũ vẫn còn hợp lệ -- dọn sạch session để
+        # tránh kẹt ở trạng thái "tưởng đã đăng nhập" nhưng không làm gì được.
+        session.clear()
+        return jsonify({"user": None})
+    return jsonify({"user": {"id": user.id, "username": user.username, "created_at": user.created_at}})
+
+
+@app.route("/api/auth/change-password", methods=["POST"])
+@login_required
+def auth_change_password():
+    payload = request.get_json() or {}
+    try:
+        change_password(
+            session["user_id"], payload.get("old_password", ""), payload.get("new_password", "")
+        )
+    except AccountError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"ok": True})
+
+
 @app.route("/api/upload", methods=["POST"])
+@login_required
 def upload_file():
     """Bước 1: Frontend gửi file CSV/Excel lên đây.
 
@@ -282,6 +438,7 @@ def upload_file():
 
     df = load_data(str(save_path))  # hàm có sẵn trong attribute_noise/pipeline.py
     UPLOADED_FILES[file_id] = df
+    FILE_OWNERS[file_id] = session["user_id"]
 
     return jsonify(
         {
@@ -358,6 +515,9 @@ def detect_noise_api():
     """
     payload = request.get_json()
     file_id = payload.get("file_id")
+    owner_error = _require_file_owner(file_id)
+    if owner_error:
+        return owner_error
     # Detect trên bản ĐANG LÀM VIỆC nếu người dùng đã xử lý ở Bước 5 (còn chưa thì
     # là bản gốc). Trước đây luôn detect trên bản GỐC, nên Detect lại từ Bước 3 sau
     # khi đã xử lý sẽ hiện lại đúng những lỗi đã sửa/xoá, lệch với bản đang làm việc
@@ -490,6 +650,9 @@ def class_noise_detect_api():
     """
     payload = request.get_json()
     file_id = payload.get("file_id")
+    owner_error = _require_file_owner(file_id)
+    if owner_error:
+        return owner_error
     df = UPLOADED_FILES.get(file_id)
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
@@ -689,6 +852,9 @@ def class_noise_reduce_features_api():
     """
     payload = request.get_json()
     file_id = payload.get("file_id")
+    owner_error = _require_file_owner(file_id)
+    if owner_error:
+        return owner_error
     df = UPLOADED_FILES.get(file_id)
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
@@ -746,6 +912,9 @@ def apply_handling_api():
     """
     payload = request.get_json()
     file_id = payload.get("file_id")
+    owner_error = _require_file_owner(file_id)
+    if owner_error:
+        return owner_error
     df = UPLOADED_FILES.get(file_id)
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
@@ -783,6 +952,7 @@ def apply_handling_api():
 
     download_id = str(uuid.uuid4())
     CLEANED_FILES[download_id] = cleaned_df
+    DOWNLOAD_OWNERS[download_id] = session["user_id"]
 
     return jsonify({**stats, "download_id": download_id})
 
@@ -816,6 +986,9 @@ def apply_handling_partial_api():
     LẠI sau khi xử lý xong nhóm này) cộng thêm field "history".
     """
     payload = request.get_json()
+    owner_error = _require_file_owner(payload.get("file_id"))
+    if owner_error:
+        return owner_error
     with HANDLING_LOCK:
         return _apply_handling_partial(payload)
 
@@ -955,6 +1128,9 @@ def undo_handling_api():
     lớn nên không còn snapshot (khi đó chỉ còn cách "Về dữ liệu gốc").
     """
     payload = request.get_json()
+    owner_error = _require_file_owner(payload.get("file_id"))
+    if owner_error:
+        return owner_error
     with HANDLING_LOCK:
         return _undo_handling(payload)
 
@@ -1012,6 +1188,9 @@ def reset_working_api():
     lúc này history rỗng).
     """
     payload = request.get_json()
+    owner_error = _require_file_owner(payload.get("file_id"))
+    if owner_error:
+        return owner_error
     with HANDLING_LOCK:
         return _reset_working(payload)
 
@@ -1047,6 +1226,9 @@ def working_data_api(file_id: str):
     thái hiện tại (đã áp dụng các lần xử lý từng phần trước đó, nếu có) --
     không chỉ các dòng còn lỗi như /api/detect-noise, để người dùng xem lại
     được cả các dòng đã sạch."""
+    owner_error = _require_file_owner(file_id)
+    if owner_error:
+        return owner_error
     df = WORKING_FILES.get(file_id, UPLOADED_FILES.get(file_id))
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
@@ -1062,12 +1244,16 @@ def export_working_api():
     chung cơ chế tải file với /api/download/<id> đã có."""
     payload = request.get_json()
     file_id = payload.get("file_id")
+    owner_error = _require_file_owner(file_id)
+    if owner_error:
+        return owner_error
     df = WORKING_FILES.get(file_id, UPLOADED_FILES.get(file_id))
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
 
     download_id = str(uuid.uuid4())
     CLEANED_FILES[download_id] = df
+    DOWNLOAD_OWNERS[download_id] = session["user_id"]
     return jsonify({"final_row_count": len(df), "download_id": download_id})
 
 
@@ -1075,6 +1261,9 @@ def export_working_api():
 def download_cleaned_file(download_id: str):
     """Bước 4 (tiếp): trả file CSV đã làm sạch cho trình duyệt tải về, dựa
     trên download_id nhận được từ /api/apply-handling."""
+    owner_error = _require_download_owner(download_id)
+    if owner_error:
+        return owner_error
     cleaned_df = CLEANED_FILES.get(download_id)
     if cleaned_df is None:
         return jsonify({"error": "download_id không tồn tại hoặc đã hết hạn"}), 404

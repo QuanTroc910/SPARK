@@ -89,6 +89,10 @@ code {
 .status-dot.is-online { background: var(--signal); }
 .status-dot.is-offline { background: var(--amber-border); }
 
+/* MỚI (tài khoản đăng nhập): badge tên tài khoản + nút Hồ sơ/Đăng xuất ở header */
+.account-area { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.account-username { color: var(--ink-dim); font-weight: 600; }
+
 /* ===== Layout ===== */
 .main-area { padding: 28px 24px 80px; }
 
@@ -97,6 +101,15 @@ code {
    tiên (author stylesheet > user-agent stylesheet). 1 rule chung !important
    ở đây đảm bảo MỌI phần tử "hidden" trong toàn trang chắc chắn bị ẩn. */
 [hidden] { display: none !important; }
+
+/* MỚI (tài khoản đăng nhập): che tạm #stepper + mọi panel TRỪ panel-auth
+   trong lúc checkAuthStatus() đang chờ phản hồi GET /api/auth/me lúc tải
+   trang lần đầu -- tránh nhoáng panel-1 (mặc định is-active trong HTML)
+   rồi mới bị đổi sang panel-auth 1 nhịp sau nếu chưa đăng nhập.
+   checkAuthStatus() thêm class "auth-ready" vào <body> SAU KHI đã quyết
+   định xong hiện panel nào, mới bỏ rule che này. */
+body:not(.auth-ready) #stepper,
+body:not(.auth-ready) .panel:not(#panel-auth) { display: none !important; }
 
 /* ===== Stepper (5 bước) ===== */
 .stepper { position: relative; display: flex; margin: 6px 0 36px; }
@@ -133,6 +146,15 @@ code {
 .sub-title-row .sub-title { margin-bottom: 0; }
 .feature-bulk-actions { display: flex; gap: 8px; }
 .empty-state { font-size: 13.5px; color: var(--ink-faint); padding: 22px; text-align: center; border: 1px dashed var(--line-strong); border-radius: var(--radius-md); }
+
+/* MỚI (tài khoản đăng nhập): panel-auth (đăng nhập/đăng ký) + panel-profile */
+.auth-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+.auth-tab.is-active { border-color: var(--signal); color: var(--signal-dark); background: var(--signal-soft); }
+.auth-form { display: flex; flex-direction: column; gap: 14px; max-width: 360px; }
+.form-error {
+  font-size: 12.5px; color: var(--danger); background: var(--danger-soft);
+  border: 1px solid var(--danger); border-radius: var(--radius-sm); padding: 8px 10px; margin: 0;
+}
 
 /* ===== Buttons ===== */
 .btn { appearance: none; border-radius: var(--radius-sm); padding: 10px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease; }

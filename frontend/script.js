@@ -14,7 +14,15 @@
    vì âm thầm tính sai bằng JS.
    ============================================================ */
 
-const API_BASE = "http://localhost:5000";
+// MỚI (tài khoản đăng nhập): Flask giờ tự phục vụ luôn file frontend này
+// (static_folder="frontend" trong app.py) nên trang và API CÙNG 1 origin
+// (cùng host:port) -- bắt buộc để cookie session (đăng nhập) hoạt động tin
+// cậy (cookie cross-origin cần thêm cấu hình SameSite=None + HTTPS, phức
+// tạp và dễ lỗi hơn nhiều so với việc chạy cùng origin). Đổi từ URL tuyệt
+// đối "http://localhost:5000" sang chuỗi rỗng "" -- mọi fetch(`${API_BASE}/api/...`)
+// bên dưới tự thành đường dẫn TƯƠNG ĐỐI ("/api/..."), trình duyệt tự hiểu là
+// "cùng origin với trang đang mở", không cần sửa gì khác ở hàng chục chỗ gọi fetch.
+const API_BASE = "";
 
 const $ = (id) => document.getElementById(id);
 
@@ -96,6 +104,7 @@ function defaultColumnConfig(dtype = "text") {
 
 // ====== State chung của trang (giống "state" trong React nhưng viết tay) ======
 const state = {
+  currentUser: null, // { id, username, created_at } -- null = chưa đăng nhập (checkAuthStatus())
   selectedFile: null,
   fileId: null,
   headers: [],
@@ -205,12 +214,12 @@ function renderBackendStatus() {
   if (state.backendAvailable) {
     dot.className = "status-dot is-online";
     text.textContent = "Backend: đã kết nối";
-    notice.textContent = `Đã kết nối backend Flask tại ${API_BASE}.`;
+    notice.textContent = "Đã kết nối backend Flask.";
   } else {
     dot.className = "status-dot is-offline";
     text.textContent = "Backend: chưa kết nối";
     notice.textContent =
-      `Không kết nối được backend tại ${API_BASE}. Hãy chạy "python3 app.py" ở 1 terminal riêng rồi thử lại ` +
+      `Không kết nối được backend. Hãy chạy "python3 app.py" ở 1 terminal riêng rồi thử lại ` +
       `-- trang này không có chế độ phân tích cục bộ, mọi phép detect/xử lý đều phải qua backend thật (attribute_noise/).`;
   }
 }
@@ -2509,6 +2518,182 @@ function toggleStep5Direction() {
 }
 $("class-back-to-results-btn").addEventListener("click", () => goStep(4));
 
+// ====== Tài khoản đăng nhập (MỚI) ======
+// Cổng xác thực: mọi panel số (1-5 + preview + hồ sơ) chỉ hiện SAU KHI xác
+// nhận đã đăng nhập. checkAuthStatus() gọi GET /api/auth/me -- chưa đăng
+// nhập KHÔNG phải lỗi, backend trả {"user": null} như 1 trạng thái bình
+// thường (không phải HTTP lỗi) -- rồi quyết định hiện panel-auth (đăng
+// nhập/đăng ký) hay hiện app thật + thanh 5 bước.
+function setFormError(el, message) {
+  el.textContent = message || "";
+  el.hidden = !message;
+}
+function switchAuthTab(tab) {
+  const isLogin = tab === "login";
+  $("auth-tab-login").classList.toggle("is-active", isLogin);
+  $("auth-tab-register").classList.toggle("is-active", !isLogin);
+  $("login-form").hidden = !isLogin;
+  $("register-form").hidden = isLogin;
+  $("auth-title").textContent = isLogin ? "Đăng nhập" : "Đăng ký tài khoản";
+  setFormError($("login-error"), "");
+  setFormError($("register-error"), "");
+}
+function showAuthPanel(tab) {
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
+  $("panel-auth").classList.add("is-active");
+  $("stepper").hidden = true;
+  $("account-area").hidden = true;
+  switchAuthTab(tab || "login");
+}
+function onLoggedIn(user) {
+  state.currentUser = user;
+  $("stepper").hidden = false;
+  $("account-area").hidden = false;
+  $("account-username-text").textContent = `👤 ${user.username}`;
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
+  $("panel-" + state.currentStep).classList.add("is-active");
+  renderStepper();
+}
+function onLoggedOut() {
+  state.currentUser = null;
+  showAuthPanel("login");
+}
+async function checkAuthStatus() {
+  let data = { user: null };
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/me`);
+    data = await res.json();
+  } catch (err) {
+    // Không gọi được backend thì coi như chưa đăng nhập -- checkBackendHealth()
+    // (gọi song song ở dưới) sẽ tự báo rõ "chưa kết nối backend" riêng.
+  }
+  if (data.user) onLoggedIn(data.user);
+  else onLoggedOut();
+  // Bỏ CSS che tạm panel lúc tải trang (xem style.css, tránh nhoáng panel-1
+  // trước khi biết đã đăng nhập hay chưa).
+  document.body.classList.add("auth-ready");
+}
+$("auth-tab-login").addEventListener("click", () => switchAuthTab("login"));
+$("auth-tab-register").addEventListener("click", () => switchAuthTab("register"));
+
+$("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setFormError($("login-error"), "");
+  const username = $("login-username").value;
+  const password = $("login-password").value;
+  setButtonLoading($("login-submit-btn"), true, "Đang đăng nhập...", "Đăng nhập");
+  let response, data;
+  try {
+    response = await fetch(`${API_BASE}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    data = await response.json();
+  } catch (err) {
+    setButtonLoading($("login-submit-btn"), false, "Đang đăng nhập...", "Đăng nhập");
+    setFormError($("login-error"), "Không gọi được backend.");
+    return;
+  }
+  setButtonLoading($("login-submit-btn"), false, "Đang đăng nhập...", "Đăng nhập");
+  if (!response.ok) {
+    setFormError($("login-error"), data.error || "Đăng nhập thất bại.");
+    return;
+  }
+  $("login-form").reset();
+  onLoggedIn(data.user);
+});
+
+$("register-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setFormError($("register-error"), "");
+  const username = $("register-username").value;
+  const password = $("register-password").value;
+  setButtonLoading($("register-submit-btn"), true, "Đang đăng ký...", "Đăng ký");
+  let response, data;
+  try {
+    response = await fetch(`${API_BASE}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    data = await response.json();
+  } catch (err) {
+    setButtonLoading($("register-submit-btn"), false, "Đang đăng ký...", "Đăng ký");
+    setFormError($("register-error"), "Không gọi được backend.");
+    return;
+  }
+  setButtonLoading($("register-submit-btn"), false, "Đang đăng ký...", "Đăng ký");
+  if (!response.ok) {
+    setFormError($("register-error"), data.error || "Đăng ký thất bại.");
+    return;
+  }
+  $("register-form").reset();
+  // Đăng ký xong backend đã tự đăng nhập luôn (session) -- xem /api/auth/register
+  // trong app.py -- không cần gọi thêm /api/auth/login.
+  onLoggedIn(data.user);
+});
+
+$("logout-btn").addEventListener("click", async () => {
+  try {
+    await fetch(`${API_BASE}/api/auth/logout`, { method: "POST" });
+  } catch (err) {
+    // Vẫn coi như đăng xuất ở phía trình duyệt dù gọi API lỗi -- không giữ
+    // người dùng kẹt lại trong trạng thái "tưởng đã đăng xuất mà chưa".
+  }
+  onLoggedOut();
+});
+
+// ---- Panel hồ sơ tài khoản (MỚI) -- mở từ nút "Hồ sơ" ở header, giống cách
+// panel-preview mở từ Bước 5 (không nằm trong 5 bước chính). ----
+function openProfilePanel() {
+  if (!state.currentUser) return;
+  $("profile-username").textContent = state.currentUser.username;
+  $("profile-created-at").textContent = new Date(state.currentUser.created_at).toLocaleString("vi-VN");
+  $("change-password-form").reset();
+  setFormError($("change-password-error"), "");
+  $("change-password-success").hidden = true;
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
+  $("panel-profile").classList.add("is-active");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function closeProfilePanel() {
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
+  $("panel-" + state.currentStep).classList.add("is-active");
+}
+$("open-profile-btn").addEventListener("click", openProfilePanel);
+$("profile-back-btn").addEventListener("click", closeProfilePanel);
+
+$("change-password-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setFormError($("change-password-error"), "");
+  $("change-password-success").hidden = true;
+  const old_password = $("old-password").value;
+  const new_password = $("new-password").value;
+  setButtonLoading($("change-password-btn"), true, "Đang đổi...", "Đổi mật khẩu");
+  let response, data;
+  try {
+    response = await fetch(`${API_BASE}/api/auth/change-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ old_password, new_password }),
+    });
+    data = await response.json();
+  } catch (err) {
+    setButtonLoading($("change-password-btn"), false, "Đang đổi...", "Đổi mật khẩu");
+    setFormError($("change-password-error"), "Không gọi được backend.");
+    return;
+  }
+  setButtonLoading($("change-password-btn"), false, "Đang đổi...", "Đổi mật khẩu");
+  if (!response.ok) {
+    setFormError($("change-password-error"), data.error || "Đổi mật khẩu thất bại.");
+    return;
+  }
+  $("change-password-form").reset();
+  $("change-password-success").hidden = false;
+});
+
 // ====== Khởi động ======
 renderStepper();
+checkAuthStatus();
 checkBackendHealth();

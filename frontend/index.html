@@ -21,6 +21,12 @@
         <span id="backend-dot" class="status-dot is-offline"></span>
         <span id="backend-status-text">Backend: đang kiểm tra…</span>
       </div>
+      <!-- MỚI (tài khoản đăng nhập): chỉ hiện khi đã đăng nhập (toggleAuthArea()) -->
+      <div class="account-area" id="account-area" hidden>
+        <span class="account-username mono" id="account-username-text"></span>
+        <button class="btn btn-ghost btn-small" id="open-profile-btn" type="button">Hồ sơ</button>
+        <button class="btn btn-ghost btn-small" id="logout-btn" type="button">Đăng xuất</button>
+      </div>
     </div>
   </header>
 
@@ -35,6 +41,87 @@
       <div class="step" data-step="4"><span class="step-circle">4</span><span class="step-label">Kết quả</span></div>
       <div class="step" data-step="5"><span class="step-circle">5</span><span class="step-label">Xử lý & xuất file</span></div>
     </nav>
+
+    <!-- Panel đăng nhập/đăng ký -- MỚI (tài khoản đăng nhập). KHÔNG nằm
+         trong thanh 5 bước, hiện trước TẤT CẢ panel khác khi chưa đăng nhập
+         (checkAuthStatus() ẩn #stepper + mọi panel số, chỉ hiện panel này). -->
+    <section class="panel panel--narrow" id="panel-auth">
+      <h2 class="panel-title" id="auth-title">Đăng nhập</h2>
+      <p class="panel-desc">Cần đăng nhập để dùng công cụ -- mỗi tài khoản chỉ thấy được file của chính mình.</p>
+
+      <div class="auth-tabs">
+        <button type="button" class="btn btn-ghost auth-tab is-active" id="auth-tab-login">Đăng nhập</button>
+        <button type="button" class="btn btn-ghost auth-tab" id="auth-tab-register">Đăng ký</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <div class="field field-grow">
+          <label for="login-username">Tên đăng nhập</label>
+          <input type="text" class="input" id="login-username" autocomplete="username" required />
+        </div>
+        <div class="field field-grow">
+          <label for="login-password">Mật khẩu</label>
+          <input type="password" class="input" id="login-password" autocomplete="current-password" required />
+        </div>
+        <p class="form-error" id="login-error" hidden></p>
+        <div class="panel-actions">
+          <button class="btn btn-primary" type="submit" id="login-submit-btn">Đăng nhập</button>
+        </div>
+      </form>
+
+      <form id="register-form" class="auth-form" hidden>
+        <div class="field field-grow">
+          <label for="register-username">Tên đăng nhập (ít nhất 3 ký tự)</label>
+          <input type="text" class="input" id="register-username" autocomplete="username" required />
+        </div>
+        <div class="field field-grow">
+          <label for="register-password">Mật khẩu (ít nhất 6 ký tự)</label>
+          <input type="password" class="input" id="register-password" autocomplete="new-password" required />
+        </div>
+        <p class="form-error" id="register-error" hidden></p>
+        <div class="panel-actions">
+          <button class="btn btn-primary" type="submit" id="register-submit-btn">Đăng ký</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Panel hồ sơ tài khoản -- MỚI. Mở từ nút "Hồ sơ" ở header, giống cách
+         panel-preview mở từ Bước 5 (không nằm trong 5 bước chính). -->
+    <section class="panel panel--narrow" id="panel-profile">
+      <h2 class="panel-title">Hồ sơ tài khoản</h2>
+
+      <div class="field field-grow">
+        <label>Tên đăng nhập</label>
+        <p class="mono" id="profile-username">—</p>
+      </div>
+      <div class="field field-grow">
+        <label>Tạo tài khoản lúc</label>
+        <p class="mono" id="profile-created-at">—</p>
+      </div>
+
+      <div class="sub-section">
+        <h3 class="sub-title">Đổi mật khẩu</h3>
+        <form id="change-password-form" class="auth-form">
+          <div class="field field-grow">
+            <label for="old-password">Mật khẩu hiện tại</label>
+            <input type="password" class="input" id="old-password" autocomplete="current-password" required />
+          </div>
+          <div class="field field-grow">
+            <label for="new-password">Mật khẩu mới (ít nhất 6 ký tự)</label>
+            <input type="password" class="input" id="new-password" autocomplete="new-password" required />
+          </div>
+          <p class="form-error" id="change-password-error" hidden></p>
+          <p class="status-text" id="change-password-success" hidden>Đổi mật khẩu thành công.</p>
+          <div class="panel-actions">
+            <button class="btn btn-primary" type="submit" id="change-password-btn">Đổi mật khẩu</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="panel-actions">
+        <button class="btn btn-ghost" id="profile-back-btn" type="button">← Quay lại</button>
+      </div>
+    </section>
 
     <!-- Panel 1: Upload -->
     <section class="panel panel--narrow is-active" id="panel-1">
