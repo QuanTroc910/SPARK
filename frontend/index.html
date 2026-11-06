@@ -45,44 +45,74 @@
     <!-- Panel đăng nhập/đăng ký -- MỚI (tài khoản đăng nhập). KHÔNG nằm
          trong thanh 5 bước, hiện trước TẤT CẢ panel khác khi chưa đăng nhập
          (checkAuthStatus() ẩn #stepper + mọi panel số, chỉ hiện panel này). -->
-    <section class="panel panel--narrow" id="panel-auth">
-      <h2 class="panel-title" id="auth-title">Đăng nhập</h2>
-      <p class="panel-desc">Cần đăng nhập để dùng công cụ -- mỗi tài khoản chỉ thấy được file của chính mình.</p>
+    <section class="panel auth-screen" id="panel-auth">
+      <div class="auth-screen-form">
+        <p class="auth-eyebrow">[ BẮT ĐẦU ]</p>
+        <h2 class="auth-headline" id="auth-title">Đăng nhập</h2>
+        <p class="panel-desc">Cần đăng nhập để dùng công cụ -- mỗi tài khoản chỉ thấy được file của chính mình.</p>
 
-      <div class="auth-tabs">
-        <button type="button" class="btn btn-ghost auth-tab is-active" id="auth-tab-login">Đăng nhập</button>
-        <button type="button" class="btn btn-ghost auth-tab" id="auth-tab-register">Đăng ký</button>
+        <div class="auth-tabs">
+          <button type="button" class="btn btn-ghost auth-tab is-active" id="auth-tab-login">Đăng nhập</button>
+          <button type="button" class="btn btn-ghost auth-tab" id="auth-tab-register">Đăng ký</button>
+        </div>
+
+        <form id="login-form" class="auth-form">
+          <div class="field">
+            <label for="login-username">Tên đăng nhập</label>
+            <input type="text" class="input" id="login-username" autocomplete="username" required />
+          </div>
+          <div class="field">
+            <label for="login-password">Mật khẩu</label>
+            <input type="password" class="input" id="login-password" autocomplete="current-password" required />
+          </div>
+          <p class="form-error" id="login-error" hidden></p>
+          <div class="panel-actions">
+            <button class="btn btn-primary" type="submit" id="login-submit-btn">Đăng nhập</button>
+          </div>
+        </form>
+
+        <form id="register-form" class="auth-form" hidden>
+          <div class="field">
+            <label for="register-username">Tên đăng nhập (ít nhất 3 ký tự)</label>
+            <input type="text" class="input" id="register-username" autocomplete="username" required />
+          </div>
+          <div class="field">
+            <label for="register-password">Mật khẩu (ít nhất 6 ký tự)</label>
+            <input type="password" class="input" id="register-password" autocomplete="new-password" required />
+          </div>
+          <p class="form-error" id="register-error" hidden></p>
+          <div class="panel-actions">
+            <button class="btn btn-primary" type="submit" id="register-submit-btn">Đăng ký</button>
+          </div>
+        </form>
       </div>
 
-      <form id="login-form" class="auth-form">
-        <div class="field field-grow">
-          <label for="login-username">Tên đăng nhập</label>
-          <input type="text" class="input" id="login-username" autocomplete="username" required />
-        </div>
-        <div class="field field-grow">
-          <label for="login-password">Mật khẩu</label>
-          <input type="password" class="input" id="login-password" autocomplete="current-password" required />
-        </div>
-        <p class="form-error" id="login-error" hidden></p>
-        <div class="panel-actions">
-          <button class="btn btn-primary" type="submit" id="login-submit-btn">Đăng nhập</button>
-        </div>
-      </form>
+      <!-- Nửa phải: không phải ảnh trang trí rời rạc -- dùng ĐÚNG bảng màu 11
+           family noise thật của app (.cell-flag-*, khớp NOISE_TYPE_META trong
+           script.js) để demo luôn tính năng cốt lõi ngay trên màn hình đầu tiên. -->
+      <div class="auth-screen-hero">
+        <p class="auth-hero-eyebrow">[ DÒ &amp; XỬ LÝ NHIỄU DỮ LIỆU ]</p>
+        <h3 class="auth-hero-headline">DỮ LIỆU NHIỄU VÀO.<br />DỮ LIỆU SẠCH RA.</h3>
 
-      <form id="register-form" class="auth-form" hidden>
-        <div class="field field-grow">
-          <label for="register-username">Tên đăng nhập (ít nhất 3 ký tự)</label>
-          <input type="text" class="input" id="register-username" autocomplete="username" required />
+        <div class="auth-demo-card">
+          <div class="auth-demo-head">
+            <span class="mono">noisy_employee.csv</span>
+            <span class="auth-demo-badge">3 lỗi</span>
+          </div>
+          <table class="auth-demo-table">
+            <tbody>
+              <tr><td class="mono">1</td><td>Lê Oanh</td><td class="cell-flag-slate">—</td></tr>
+              <tr><td class="mono">2</td><td class="cell-flag-rose"> Vũ Uyên </td><td>21.756.000</td></tr>
+              <tr><td class="mono">3</td><td>Chloé Martin</td><td class="cell-flag-crimson">150</td></tr>
+            </tbody>
+          </table>
+          <ul class="auth-demo-points">
+            <li>✓ Dò 7 loại lỗi thuộc tính + 4 rule mâu thuẫn liên cột</li>
+            <li>✓ Xử lý từng dòng, xem trước tác động, hoàn tác được</li>
+            <li>✓ Phát hiện nhãn sai bằng 3 thuật toán Class Noise</li>
+          </ul>
         </div>
-        <div class="field field-grow">
-          <label for="register-password">Mật khẩu (ít nhất 6 ký tự)</label>
-          <input type="password" class="input" id="register-password" autocomplete="new-password" required />
-        </div>
-        <p class="form-error" id="register-error" hidden></p>
-        <div class="panel-actions">
-          <button class="btn btn-primary" type="submit" id="register-submit-btn">Đăng ký</button>
-        </div>
-      </form>
+      </div>
     </section>
 
     <!-- Panel hồ sơ tài khoản -- MỚI. Mở từ nút "Hồ sơ" ở header, giống cách
@@ -90,11 +120,11 @@
     <section class="panel panel--narrow" id="panel-profile">
       <h2 class="panel-title">Hồ sơ tài khoản</h2>
 
-      <div class="field field-grow">
+      <div class="field">
         <label>Tên đăng nhập</label>
         <p class="mono" id="profile-username">—</p>
       </div>
-      <div class="field field-grow">
+      <div class="field">
         <label>Tạo tài khoản lúc</label>
         <p class="mono" id="profile-created-at">—</p>
       </div>
@@ -102,11 +132,11 @@
       <div class="sub-section">
         <h3 class="sub-title">Đổi mật khẩu</h3>
         <form id="change-password-form" class="auth-form">
-          <div class="field field-grow">
+          <div class="field">
             <label for="old-password">Mật khẩu hiện tại</label>
             <input type="password" class="input" id="old-password" autocomplete="current-password" required />
           </div>
-          <div class="field field-grow">
+          <div class="field">
             <label for="new-password">Mật khẩu mới (ít nhất 6 ký tự)</label>
             <input type="password" class="input" id="new-password" autocomplete="new-password" required />
           </div>
