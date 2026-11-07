@@ -202,6 +202,56 @@ body:not(.auth-ready) .panel:not(#panel-auth) { display: none !important; }
   .auth-screen-form { padding: 32px 28px; }
 }
 
+/* ===== Trang Convert File (convert.html) -- bố cục 2 cột lấy cảm hứng 1
+   trang tham khảo, giữ nguyên token màu/font của SPARK. Tái dùng .dropzone/
+   .results-table/.table-wrap/.auth-eyebrow/.auth-headline đã có thay vì viết
+   lại từ đầu. ===== */
+.convert-hero { max-width: 760px; margin-bottom: 22px; }
+.convert-badges { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 26px; }
+.convert-badge {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 600;
+  color: var(--ink-dim); background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 999px; padding: 6px 14px;
+}
+
+.convert-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.convert-tab {
+  appearance: none; background: var(--surface); border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-sm); padding: 10px 18px; font-size: 13.5px; font-weight: 600;
+  color: var(--ink-dim); cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.convert-tab:hover { border-color: var(--signal); color: var(--signal-dark); }
+.convert-tab.is-active { border-color: var(--signal); background: var(--signal-soft); color: var(--signal-dark); }
+
+.convert-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.convert-panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card); padding: 22px 24px 26px;
+}
+.convert-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.convert-panel-eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-faint); }
+
+.convert-input-toggle { display: flex; border: 1.5px solid var(--line-strong); border-radius: var(--radius-sm); overflow: hidden; }
+.convert-input-toggle button {
+  appearance: none; background: var(--surface); border: none; padding: 5px 14px;
+  font-size: 12px; font-weight: 600; color: var(--ink-dim); cursor: pointer;
+}
+.convert-input-toggle button + button { border-left: 1.5px solid var(--line-strong); }
+.convert-input-toggle button.is-active { background: var(--signal); color: #fff; }
+
+.dropzone--compact { padding: 32px 20px; min-height: 140px; }
+.convert-paste-input { width: 100%; resize: vertical; margin-bottom: 4px; }
+.convert-options { display: flex; flex-direction: column; gap: 14px; margin: 18px 0; }
+.convert-result-text {
+  max-height: 480px; overflow: auto; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius-md); padding: 14px 16px; font-size: 12.5px; white-space: pre-wrap; word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  .convert-grid { grid-template-columns: 1fr; }
+}
+
 /* ===== Buttons ===== */
 .btn { appearance: none; border-radius: var(--radius-sm); padding: 10px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }

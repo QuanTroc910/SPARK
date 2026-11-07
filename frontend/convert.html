@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Convert File — Dò &amp; Xử Lý Nhiễu Dữ Liệu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;650;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="auth-ready">
+  <!-- Trang ĐỘC LẬP với index.html (không phải 1 panel trong 5 bước chính) --
+       vẫn bắt đăng nhập (cookie session dùng CHUNG, cùng origin) nhưng form
+       đăng nhập thật CHỈ sống ở index.html -- chưa đăng nhập thì convert.js
+       tự chuyển hướng về đó (checkAuth()), không viết lại form đăng nhập lần
+       2 ở đây. class="auth-ready" đặt sẵn trên <body> (khác index.html) vì
+       trang này không có khối panel nào cần che tạm lúc chờ kiểm tra login. -->
+  <header class="app-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <a class="btn btn-ghost btn-small" href="index.html">← Trang chính</a>
+        <div class="brand-text">
+          <span class="brand-title">🔀 Convert File</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <span id="backend-dot" class="status-dot is-offline"></span>
+        <span id="backend-status-text">Backend: đang kiểm tra…</span>
+      </div>
+      <div class="account-area" id="account-area" hidden>
+        <span class="account-username mono" id="account-username-text"></span>
+        <button class="btn btn-ghost btn-small" id="open-profile-btn" type="button">Hồ sơ</button>
+        <button class="btn btn-ghost btn-small" id="logout-btn" type="button">Đăng xuất</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container main-area">
+    <div class="convert-hero">
+      <p class="auth-eyebrow">[ CÔNG CỤ ]</p>
+      <h1 class="auth-headline">Convert File</h1>
+      <p class="panel-desc">
+        Đổi định dạng nhanh gọn, không đi qua luồng Dò &amp; Xử Lý Nhiễu 5 bước ở trang chính -- 3 tool tách
+        riêng, dùng xong tải file ngay. File bạn convert ở đây KHÔNG liên quan gì tới các file đã upload ở
+        trang chính (2 luồng độc lập hoàn toàn).
+      </p>
+    </div>
+
+    <div class="convert-badges">
+      <span class="convert-badge">⚡ Kết quả tức thì</span>
+      <span class="convert-badge">🔒 Cần đăng nhập</span>
+      <span class="convert-badge">🧮 Luôn xử lý qua backend Flask thật</span>
+    </div>
+
+    <div class="convert-tabs" id="convert-tabs">
+      <button type="button" class="convert-tab is-active" data-tool="delimiter">↔ Đổi Delimiter CSV</button>
+      <button type="button" class="convert-tab" data-tool="csv-to-json">CSV → JSON</button>
+      <button type="button" class="convert-tab" data-tool="json-to-csv">JSON → CSV</button>
+    </div>
+
+    <div class="convert-grid">
+      <!-- 01 · ĐẦU VÀO -->
+      <section class="convert-panel">
+        <div class="convert-panel-head">
+          <span class="convert-panel-eyebrow">01 · ĐẦU VÀO</span>
+          <div class="convert-input-toggle" id="convert-input-toggle">
+            <button type="button" class="is-active" data-mode="file">File</button>
+            <button type="button" data-mode="paste">Dán text</button>
+          </div>
+        </div>
+
+        <label class="dropzone dropzone--compact" id="convert-dropzone">
+          <span class="dropzone-icon">📄</span>
+          <p>Kéo thả hoặc bấm để chọn file</p>
+          <p class="hint-note" id="convert-file-name">Chưa chọn file nào</p>
+        </label>
+        <input type="file" id="convert-file-input" accept=".csv,.json,.jsonl,.txt" hidden />
+        <textarea class="input mono convert-paste-input" id="convert-paste-input" rows="9" placeholder="Dán nội dung CSV/JSON vào đây…" hidden></textarea>
+
+        <!-- Tuỳ chọn riêng từng tool -- chỉ 1 khối hiện tại 1 thời điểm, khớp state.tool -->
+        <div class="convert-options" id="convert-options-delimiter">
+          <div class="field-row">
+            <div class="field">
+              <label>Delimiter gốc (FROM)</label>
+              <select class="select" id="opt-from-delim">
+                <option value="auto">Tự nhận diện</option>
+                <option value=",">Dấu phẩy (,)</option>
+                <option value=";">Dấu chấm phẩy (;)</option>
+                <option value="&#9;">Tab</option>
+                <option value="|">Dấu gạch đứng (|)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Delimiter mới (TO)</label>
+              <select class="select" id="opt-to-delim">
+                <option value=",">Dấu phẩy (,)</option>
+                <option value=";" selected>Dấu chấm phẩy (;)</option>
+                <option value="&#9;">Tab</option>
+                <option value="|">Dấu gạch đứng (|)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="convert-options" id="convert-options-csv-to-json" hidden>
+          <label class="switch-row"><input type="checkbox" id="opt-has-header-c2j" checked /> Dòng đầu là header</label>
+          <div class="field">
+            <label>Delimiter của CSV đầu vào</label>
+            <select class="select" id="opt-delim-c2j">
+              <option value="auto">Tự nhận diện</option>
+              <option value=",">Dấu phẩy (,)</option>
+              <option value=";">Dấu chấm phẩy (;)</option>
+              <option value="&#9;">Tab</option>
+              <option value="|">Dấu gạch đứng (|)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Dạng kết quả</label>
+            <select class="select" id="opt-shape-c2j">
+              <option value="objects">Mỗi dòng 1 object (khoá = tên cột)</option>
+              <option value="arrays">Mỗi dòng 1 mảng (không có tên cột)</option>
+            </select>
+          </div>
+          <label class="switch-row"><input type="checkbox" id="opt-convert-types" checked /> Tự ép kiểu số / true-false (giữ nguyên số có 0 ở đầu)</label>
+          <label class="switch-row"><input type="checkbox" id="opt-indent" checked /> Thụt lề JSON cho dễ đọc</label>
+        </div>
+
+        <div class="convert-options" id="convert-options-json-to-csv" hidden>
+          <div class="field">
+            <label>Delimiter đầu ra</label>
+            <select class="select" id="opt-out-delim">
+              <option value="," selected>Dấu phẩy (,)</option>
+              <option value=";">Dấu chấm phẩy (;)</option>
+              <option value="&#9;">Tab</option>
+              <option value="|">Dấu gạch đứng (|)</option>
+            </select>
+          </div>
+          <p class="panel-desc">
+            Nhận 1 mảng JSON object, hoặc JSON Lines (mỗi dòng 1 object riêng). Cột xuất ra = hợp mọi khoá có
+            trong bất kỳ object nào; object lồng nhau tự làm phẳng thành "cha.con".
+          </p>
+        </div>
+
+        <p class="form-error" id="convert-error" hidden></p>
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="convert-run-btn" type="button">Convert</button>
+          <span class="status-text" id="convert-status"></span>
+        </div>
+      </section>
+
+      <!-- 02 · KẾT QUẢ -->
+      <section class="convert-panel">
+        <div class="convert-panel-head">
+          <span class="convert-panel-eyebrow">02 · KẾT QUẢ</span>
+          <button class="btn btn-ghost btn-small" id="convert-download-btn" type="button" disabled>⬇ Tải xuống</button>
+        </div>
+        <p class="empty-state" id="convert-result-empty">Kết quả sẽ hiện ở đây ngay khi bạn bấm "Convert".</p>
+        <div class="table-wrap" id="convert-result-table-wrap" hidden>
+          <table class="results-table" id="convert-result-table"></table>
+        </div>
+        <pre class="convert-result-text mono" id="convert-result-text" hidden></pre>
+      </section>
+    </div>
+  </main>
+
+  <script src="convert.js"></script>
+</body>
+</html>

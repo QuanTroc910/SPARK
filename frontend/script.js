@@ -2553,6 +2553,13 @@ function onLoggedIn(user) {
   document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
   $("panel-" + state.currentStep).classList.add("is-active");
   renderStepper();
+  // convert.html điều hướng về đây kèm "?open=profile" khi bấm nút "Hồ sơ"
+  // (trang đó không có panel hồ sơ riêng, dùng chung panel này) -- tự mở
+  // luôn panel hồ sơ, đỡ người dùng phải bấm thêm 1 lần nữa.
+  if (new URLSearchParams(window.location.search).get("open") === "profile") {
+    openProfilePanel();
+    history.replaceState(null, "", window.location.pathname);
+  }
 }
 function onLoggedOut() {
   state.currentUser = null;

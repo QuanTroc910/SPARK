@@ -154,6 +154,45 @@ tới khi có nhu cầu đổi tên repo thật sự.
   THUẦN PHỤC VỤ GIẢI THÍCH/HỌC (viết tay lại Decision Tree/Random Forest
   không dùng sklearn, so sánh với dữ liệu Kaggle...), KHÔNG phải code sản
   phẩm, không bị import bởi `app.py`/`class_noise/`.
+- `accounts/` — module quản lý tài khoản (Multi-User THẬT, xem mục 14 dưới
+  đây), thuần Python + SQLite, không phụ thuộc Flask (giống triết lý
+  `attribute_noise/`).
+  - `db.py` — `get_connection()`/`init_db()`. 1 file SQLite DUY NHẤT
+    (`spark_accounts.db`, tự tạo ở gốc repo lúc `init_db()` chạy, KHÔNG
+    commit vào git — xem `.gitignore`), bảng `users` (id, username UNIQUE,
+    password_hash, created_at). SQLite đủ tải cho quy mô demo khoá luận
+    (tài liệu chính thức sqlite.org ghi nhận chịu được tới hàng trăm nghìn
+    lượt truy cập/ngày, thừa sức cho vài người dùng cùng lúc).
+  - `service.py` — `register()`/`authenticate()`/`get_user()`/
+    `change_password()` + `AccountError` (app.py bắt lỗi này trả HTTP 400,
+    cùng cách `FormulaError` được xử lý). Băm mật khẩu bằng
+    `werkzeug.security.generate_password_hash`/`check_password_hash` (có
+    sẵn trong Flask, không cài thêm) — KHÔNG tự viết công thức băm (khác
+    triết lý "tự viết tay" ở `attribute_handling.py::impute_knn` chẳng
+    hạn, vì bảo mật mật khẩu là lĩnh vực rủi ro cao nếu tự chế sai mà
+    không nhận ra). `authenticate()` cố tình trả CHUNG 1 message lỗi
+    ("Tên đăng nhập hoặc mật khẩu không đúng") cho cả 2 trường hợp "không
+    có tài khoản này" lẫn "có tài khoản nhưng sai mật khẩu" — không tiết
+    lộ username nào đã tồn tại qua nội dung lỗi.
+- `converters/` — logic 3 tool "Convert File" (đổi delimiter CSV, CSV ⇄
+  JSON — xem mục 15 dưới đây), thuần Python, không phụ thuộc Flask.
+  - `transform.py` — `convert_csv_delimiter()`, `csv_text_to_json()`,
+    `json_text_to_csv()` + `detect_delimiter()` (thử `csv.Sniffer` trước,
+    dự phòng bằng cách tự đếm ký tự nào xuất hiện ĐỀU nhất qua các dòng nếu
+    Sniffer bó tay) + `ConversionError`. CỐ TÌNH dùng module `csv`/`json`
+    chuẩn của Python thay vì pandas — khác `attribute_noise`/`class_noise`
+    (đọc dữ liệu BẢNG để tìm/sửa noise, cần hiểu dtype nên dùng pandas hợp
+    lý), 3 tool này chỉ đổi ĐỊNH DẠNG chứ không cần hiểu ý nghĩa cột, mà
+    pandas hay "giúp đỡ" quá tay lúc đọc/ghi (vd tự ép "007" thành số 7).
+    `csv_text_to_json()` tự ép kiểu số/true-false khi bật `convert_types`
+    nhưng GIỮ NGUYÊN DẠNG CHUỖI nếu giá trị có số 0 ở đầu (vd "007", số
+    điện thoại "0912...") — ép thành số sẽ xoá mất số 0 đó, đổi hẳn ý
+    nghĩa dữ liệu. `json_text_to_csv()` chấp nhận CẢ 2 dạng JSON array lẫn
+    JSON Lines (mỗi dòng 1 object riêng); cột xuất ra = HỢP (union) mọi
+    khoá có ở BẤT KỲ object nào (không chỉ object đầu tiên), object thiếu
+    khoá thì để ô trống; object lồng nhau tự làm phẳng thành "cha.con"
+    (vd `address.city`), list lồng bên trong KHÔNG làm phẳng tiếp (giữ
+    nguyên dạng chuỗi JSON khi ghi ra CSV).
 - `app.py` — Flask backend, CHỈ đóng vai trò "phiên dịch" JSON ⟷ Python object,
   KHÔNG chứa logic detect/handle (logic nằm hết ở `attribute_noise/`).
   Endpoints:
@@ -240,6 +279,48 @@ tới khi có nhu cầu đổi tên repo thật sự.
     checkbox đặc trưng sẵn có.
   Rule/config sai (formula lỗi cú pháp, cột không tồn tại...) trả HTTP 400
   kèm message rõ ràng, không crash 500.
+  - **Tài khoản đăng nhập (Multi-User THẬT, mục 14):** Flask app khởi tạo
+    với `static_folder="frontend", static_url_path=""` + route `GET /` trả
+    `frontend/index.html` — PHỤC VỤ LUÔN frontend từ chính Flask này (lý do
+    bắt buộc: cookie session chỉ đáng tin cậy khi frontend/backend CÙNG 1
+    origin, xem giải thích đầy đủ trong comment ở đầu app.py). `app.secret_key`
+    đọc từ biến môi trường `SPARK_SECRET_KEY` nếu có, không có thì tự sinh
+    ngẫu nhiên mỗi lần khởi động (giới hạn đã biết: restart server là mọi
+    người đăng nhập bị đăng xuất, chấp nhận được cho demo 1 người dùng).
+    5 route: `POST /api/auth/register` (tự đăng nhập luôn sau khi đăng ký
+    thành công), `POST /api/auth/login`, `POST /api/auth/logout`,
+    `GET /api/auth/me` (trả `{"user": null}` khi chưa đăng nhập — trạng
+    thái BÌNH THƯỜNG, không phải lỗi 401 — FE dùng route này lúc tải trang
+    để quyết định hiện thẳng app hay bắt đăng nhập trước), `POST
+    /api/auth/change-password` (`@login_required`). `register`/`login` trả
+    về CÙNG 1 shape `{"user": {id, username, created_at}}` như `/api/auth/me`
+    để FE đọc response theo đúng 1 cách cho cả 3 route. `login_required`
+    (decorator) chặn HTTP 401 ngay nếu `session` chưa có `user_id`, dùng
+    cho route không gắn với 1 `file_id`/`download_id` có sẵn (vd
+    `/api/upload`). `FILE_OWNERS`/`DOWNLOAD_OWNERS` (dict RAM, key = id,
+    value = `user_id`) ghi nhớ "file/download này của ai" — helper
+    `_require_file_owner(file_id)`/`_require_download_owner(download_id)`
+    gắn ở ĐẦU của TẤT CẢ route cũ có dùng `file_id`/`download_id` (detect-
+    noise, apply-handling-partial, undo/reset-working, working-data,
+    export-working, download, class-noise/detect, class-noise/reduce-
+    features — 9 route), trả CÙNG 1 lỗi "not found" chung chung dù file
+    thật sự không tồn tại HAY tồn tại nhưng thuộc người khác (không tiết lộ
+    sự tồn tại của file người khác, khớp pattern bảo mật phổ biến).
+  - **Convert File (mục 15):** 3 route `POST /api/convert/delimiter`,
+    `POST /api/convert/csv-to-json`, `POST /api/convert/json-to-csv`
+    (`@login_required` cả 3) — chỉ "phiên dịch" multipart/form-data ⟷ gọi
+    hàm ở `converters/transform.py`, KHÔNG dùng `file_id`/`UPLOADED_FILES`
+    gì cả vì xong trong ĐÚNG 1 request (đọc file hoặc text dán tay → convert
+    → trả kết quả luôn), khác hẳn luồng Attribute/Class Noise nhiều bước.
+    `_extract_convert_text()` chấp nhận field `file` (multipart) HOẶC field
+    `text` (dán tay) — FE luôn gửi multipart cho cả 2 tab để route chỉ cần
+    đọc 1 kiểu; tự decode `utf-8-sig` (bỏ BOM nếu Excel/Windows thêm vào).
+    `_delimiter_param()` validate CHẶT delimiter gửi lên phải nằm trong
+    `DELIMITER_LABELS` (`,`/`;`/tab/`|`) hoặc `"auto"` — converters/transform.py
+    tự nó không giới hạn gì, validate nằm ở RANH GIỚI API (route) theo đúng
+    nguyên tắc "chỉ validate ở biên hệ thống" của dự án. `_csv_preview_rows()`
+    đọc trước tối đa 21 dòng (1 header + 20 data) của CSV kết quả để FE hiện
+    bảng xem trước, tránh FE phải tự viết 1 bộ phân tích CSV bằng JS.
 - `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI dạng "panel theo
   bước" (chỉ 1 `.panel.is-active` hiện tại 1 thời điểm) với **5 bước**:
   1. Tải file lên → `POST /api/upload`.
@@ -391,6 +472,54 @@ tới khi có nhu cầu đổi tên repo thật sự.
   `--<family>-text/soft/border` trong `style.css`) dùng chung cho chip/badge/
   tag/tô màu ô — 1 màu riêng cho mỗi loại trong 7 attribute noise + 4 rule
   liên cột.
+
+  **Tài khoản đăng nhập (Multi-User THẬT, mục 14) — cổng xác thực trước TẤT
+  CẢ panel khác:** `index.html` có thêm `#panel-auth` (đăng nhập/đăng ký,
+  bố cục chia đôi màn hình — nửa trái form thật, nửa phải demo tĩnh dùng
+  ĐÚNG 11 màu `.cell-flag-*` nói trên thay vì ảnh trang trí rời rạc) và
+  `#panel-profile` (xem username/ngày tạo + đổi mật khẩu) — cả 2 KHÔNG nằm
+  trong thanh 5 bước, giống cách `#panel-preview` đã có từ trước.
+  `checkAuthStatus()` (`script.js`) gọi `GET /api/auth/me` NGAY LÚC TẢI
+  TRANG, trước `checkBackendHealth()`: chưa đăng nhập thì ẩn `#stepper` +
+  MỌI panel số, chỉ hiện `#panel-auth`; đã đăng nhập thì hiện app bình
+  thường + badge tài khoản ở header (`#account-area`, có nút "Hồ sơ"/"Đăng
+  xuất"). CSS `body:not(.auth-ready) .panel:not(#panel-auth) { display:
+  none !important }` che tạm mọi panel trong lúc chờ `checkAuthStatus()`
+  trả lời, tránh nhoáng `#panel-1` (mặc định `is-active` trong HTML) trước
+  khi kịp biết đã đăng nhập hay chưa — `checkAuthStatus()` thêm class
+  `auth-ready` vào `<body>` SAU KHI đã quyết định xong hiện panel nào mới
+  bỏ rule che này. `API_BASE` đổi từ URL tuyệt đối `"http://localhost:5000"`
+  sang chuỗi RỖNG `""` (cùng origin với Flask giờ tự phục vụ frontend) —
+  ĐÂY LÀ THAY ĐỔI HÀNH VI QUAN TRỌNG: phải mở `http://localhost:5000/` sau
+  khi chạy `python3 app.py`, KHÔNG mở trực tiếp file `frontend/index.html`
+  nữa (cookie session chỉ gửi kèm đáng tin cậy khi cùng origin — mở theo
+  kiểu `file://` cũ sẽ báo "chưa kết nối backend" dù server vẫn chạy bình
+  thường, vì `fetch("/api/...")` lúc đó bị hiểu là tìm file trên ổ cứng).
+
+  **Convert File (mục 15) — `convert.html` + `convert.js`, trang RIÊNG tách
+  khỏi `index.html`:** giống "Free Tools" của 1 trang tham khảo (CYD) —
+  KHÔNG thuộc luồng 5 bước Dò & Xử Lý Nhiễu, không có `file_id`, mỗi lần
+  Convert xong ngay trong 1 request. Khác CYD ở chỗ BẮT BUỘC đăng nhập
+  (quyết định có chủ đích của người dùng dự án, không phải mặc định kiến
+  trúc) — `checkAuth()` trong `convert.js` gọi `GET /api/auth/me`, chưa
+  đăng nhập thì CHUYỂN HƯỚNG thẳng về `index.html` (route `/` + `GET
+  /api/auth/me` DÙNG CHUNG session cookie, cùng origin) thay vì viết lại 1
+  form đăng nhập riêng ở đây — trang đăng nhập CHỈ sống ở `index.html`. Bố
+  cục 2 cột "01 · ĐẦU VÀO / 02 · KẾT QUẢ" + 3 tab chọn tool (Đổi delimiter/
+  CSV→JSON/JSON→CSV) lấy cảm hứng bố cục CYD nhưng GIỮ NGUYÊN token màu/
+  font của SPARK (`--signal` teal, `--bg` kem, IBM Plex — xem mục 13 câu
+  chuyện đã quyết định tương tự cho `#panel-auth`), tái dùng `.dropzone`/
+  `.results-table`/`.table-wrap` đã có thay vì viết lại. Mỗi tab tự chọn
+  `file`/`text` (toggle File/Dán text, luôn gửi multipart) + tham số riêng,
+  bấm "Convert" gọi đúng 1 trong 3 route `/api/convert/*`; kết quả
+  CSV (đổi delimiter, JSON→CSV) hiện dạng BẢNG (`preview_rows` từ backend),
+  kết quả JSON (CSV→JSON) hiện dạng text thô cuộn được. Nút "Tải xuống" xử
+  lý HOÀN TOÀN trên trình duyệt bằng `Blob`/`URL.createObjectURL` — không
+  gọi thêm API nào vì `result_text` server đã trả đủ ngay lúc Convert.
+  Link "🔀 Convert File" đặt trong `#account-area` ở header `index.html`
+  (chỉ hiện khi đã đăng nhập); nút "Hồ sơ" ở `convert.html` điều hướng về
+  `index.html?open=profile` — `onLoggedIn()` tự đọc query param này và mở
+  luôn `#panel-profile`, đỡ phải bấm "Hồ sơ" thêm 1 lần nữa.
 
   **QUAN TRỌNG — quyết định kiến trúc đã chốt:** trang KHÔNG có chế độ "phân
   tích cục bộ trong trình duyệt" (không viết lại IQR/regex/... bằng JS). Mọi
@@ -817,6 +946,108 @@ tới khi có nhu cầu đổi tên repo thật sự.
     - **Giới hạn đã biết** (chấp nhận cho demo 1 người dùng): lịch sử/snapshot nằm trong RAM nên mất khi
       server restart; không có "làm lại" (redo); `HANDLING_LOCK` là khoá toàn cục, không theo file_id.
 
+14. **Tài khoản đăng nhập — Multi-User THẬT (không phải demo-login) — ĐÃ CODE
+    XONG, ĐÃ KIỂM CHỨNG:**
+    - **Nguồn gốc**: trước đây MỌI request gọi đúng `file_id` đều đọc/sửa
+      được file đó, không phân biệt ai gửi request — người dùng yêu cầu
+      thiết kế hệ thống tài khoản thật (có trang hồ sơ + đăng ký/đăng nhập
+      riêng), kèm yêu cầu rõ ràng: phải kiểm tra kỹ các chức năng cũ KHÔNG
+      bị hồi quy sau khi sửa.
+    - **Vì sao SQLite, không phải PostgreSQL/MySQL**: quy mô demo khoá luận
+      (vài người dùng cùng lúc) không cần 1 server database riêng —
+      sqlite.org (nguồn chính thức) ghi nhận SQLite chịu được tới hàng trăm
+      nghìn lượt truy cập/ngày. Tài khoản là dữ liệu DUY NHẤT trong dự án
+      cần LƯU LÂU DÀI qua các lần restart server (khác `UPLOADED_FILES`/
+      `WORKING_FILES` chỉ sống trong RAM theo thiết kế, xem mục kiến trúc
+      `accounts/db.py`).
+    - **Vì sao Flask phải tự phục vụ luôn frontend** (`static_folder=
+      "frontend"`, route `GET /`): cookie session (cách lưu trạng thái đăng
+      nhập) chỉ gửi kèm đáng tin cậy khi frontend + backend CÙNG 1 origin
+      (cùng host:port) — trước đây frontend mở riêng (`file://` hoặc port
+      khác) là 2 origin khác nhau với backend, trình duyệt hiện đại chặn/
+      giới hạn khá chặt cookie "cross-site". Gộp chung origin giải quyết
+      TẬN GỐC, chỉ cần đổi 1 hằng số `API_BASE` (từ URL tuyệt đối sang
+      chuỗi rỗng) thay vì sửa hàng chục chỗ gọi `fetch()` rải rác trong
+      `script.js` để thêm `credentials: "include"`.
+    - **Mẫu kiểm tra quyền sở hữu dùng lại ĐƯỢC CHO MỌI route** (không viết
+      riêng logic kiểm tra cho từng route): `_require_file_owner(file_id)`/
+      `_require_download_owner(download_id)` trả về `None` (hợp lệ, route
+      chạy tiếp) hoặc 1 response lỗi sẵn sàng `return` luôn — gắn ở ĐẦU của
+      9 route cũ có dùng `file_id`/`download_id`. Lỗi trả về CỐ TÌNH giống
+      hệt nhau dù file thật sự không tồn tại HAY tồn tại nhưng thuộc người
+      khác (không tiết lộ sự tồn tại của file người khác) — khớp đúng
+      pattern bảo mật đã tham khảo từ 1 trang web tương tự (CYD, trang
+      Security: "requests for another account's dataset are answered as if
+      it did not exist").
+    - **Giao diện trang đăng nhập/đăng ký** (`#panel-auth`): lúc đầu dựng
+      giống mọi panel khác (card đơn giản), sau đổi sang bố cục CHIA ĐÔI
+      MÀN HÌNH lấy cảm hứng 1 trang landing tham khảo (CYD) theo yêu cầu
+      làm đẹp giao diện — nhưng GIỮ NGUYÊN token màu/font của chính SPARK
+      (kem/teal, IBM Plex) để không lệch tông với Bước 1-5, KHÔNG sao y hệt
+      màu đen/trắng/cam của trang tham khảo (đã hỏi ý kiến người dùng trước
+      khi chọn hướng này). Nửa phải demo tĩnh dùng ĐÚNG 11 màu `.cell-flag-*`
+      thật của app thay vì ảnh trang trí rời rạc — vừa đẹp vừa cho thấy
+      luôn tính năng cốt lõi ngay màn hình đầu tiên.
+    - **1 lỗi CSS thật đã gặp + đã fix lúc làm giao diện mới**: class
+      `field-grow` (vốn đặt `flex-basis: 220px` cho field nằm NGANG trong
+      `.field-row`) bị gắn nhầm vào các field nằm DỌC trong form đăng nhập/
+      hồ sơ — trong flex CỘT, `flex-basis` lại tính theo chiều CAO nên mỗi
+      ô input bị kéo cao 220px, đẩy nút submit ra ngoài màn hình nhìn thấy
+      được. Phát hiện qua `getBoundingClientRect()` debug bằng Playwright
+      (không phải nhìn mắt thường), đã fix bằng cách bỏ class đó khỏi 2
+      panel mới, giữ nguyên các chỗ dùng đúng mục đích khác trong file.
+    - **Cách kiểm chứng**: 43 test Flask test client (gồm xác nhận 1 user
+      KHÔNG đụng được file/download của user khác qua TẤT CẢ route liên
+      quan) + 23 kịch bản Playwright trình duyệt thật (đăng ký/đăng nhập/
+      đăng xuất/đổi mật khẩu + toàn bộ luồng Attribute Noise 5 bước cũ chạy
+      lại sau khi bắt buộc đăng nhập, xác nhận không hồi quy) — cả 2 bộ
+      PASS 100% trước khi commit.
+    - **Giới hạn đã biết** (chấp nhận cho demo khoá luận): `secret_key`
+      sinh ngẫu nhiên mỗi lần restart server (ai đang đăng nhập bị đăng
+      xuất hết) trừ khi đặt biến môi trường `SPARK_SECRET_KEY` cố định;
+      không có "quên mật khẩu"/email xác thực; dữ liệu file vẫn chỉ sống
+      trong RAM như trước (chỉ TÀI KHOẢN mới lưu lâu dài).
+
+15. **Convert File — 3 tool đổi định dạng (đổi delimiter CSV, CSV ⇄ JSON),
+    trang riêng `convert.html` — ĐÃ CODE XONG, ĐÃ KIỂM CHỨNG:**
+    - **Nguồn gốc**: sau khi xem trang "Free Tools" của 1 trang web tương tự
+      (CYD) — các tool convert định dạng nhỏ, độc lập với sản phẩm chính —
+      người dùng muốn SPARK có tương đương, nhưng CHỌN KHÁC CYD ở 2 điểm có
+      chủ đích: (1) bắt buộc đăng nhập (CYD để công khai, không cần tài
+      khoản), (2) gộp cả 3 tool vào 1 trang HTML duy nhất (CYD tách mỗi tool
+      1 trang riêng) — quyết định dựa trên sở thích/quy mô của chính dự án
+      này, không phải "đúng/sai" so với CYD.
+    - **Vì sao dùng `csv`/`json` chuẩn của Python, KHÔNG dùng pandas**: 3
+      tool này chỉ đổi ĐỊNH DẠNG, không cần hiểu ý nghĩa cột/dtype như
+      `attribute_noise`/`class_noise` — pandas hay "giúp đỡ" quá tay lúc
+      đọc/ghi (vd tự ép chuỗi "007" thành số 7, tự suy đoán ô rỗng là NaN),
+      đúng kiểu rủi ro mà `attribute_noise/pipeline.py::load_data()` đã
+      phải tắt bằng `dtype=str`/`keep_default_na=False` — ở đây đơn giản
+      hơn hẳn là dùng thẳng `csv`/`json` chuẩn, giữ NGUYÊN VĂN từng giá trị.
+    - **Copy giao diện KHÔNG sao y nguyên văn claim của CYD**: trang tham
+      khảo ghi "nothing uploaded"/"no account needed" (xử lý hoàn toàn
+      trong trình duyệt, không cần tài khoản) — SPARK CHỦ ĐỘNG chọn ngược
+      lại (luôn qua backend Flask thật + bắt đăng nhập, đúng quyết định
+      kiến trúc đã chốt từ đầu dự án), nên badge ở `convert.html` đổi thành
+      "🔒 Cần đăng nhập"/"🧮 Luôn xử lý qua backend Flask thật" — KHÔNG giữ
+      nguyên câu chữ cũ vì sẽ sai sự thật với chính cách SPARK hoạt động.
+    - **`convert.html` là trang ĐỘC LẬP, không phải 1 panel trong 5 bước
+      chính** — không có khái niệm `file_id`, mỗi lần Convert xong ngay
+      trong 1 request. Vẫn bắt đăng nhập bằng cách DÙNG CHUNG cookie session
+      với `index.html` (cùng origin) — `convert.js::checkAuth()` gọi `GET
+      /api/auth/me`, chưa đăng nhập thì chuyển hướng thẳng về `index.html`
+      thay vì viết lại 1 form đăng nhập lần 2. Nút "Hồ sơ" điều hướng về
+      `index.html?open=profile` (query param để tự mở `#panel-profile` ngay
+      khi tải xong, tránh phải bấm thêm 1 lần).
+    - **Cách kiểm chứng**: 29 test độc lập cho `converters/transform.py`
+      (không qua Flask) + 23 test Flask test client cho 3 route `/api/
+      convert/*` (gồm chặn chưa đăng nhập → 401) + 16 kịch bản Playwright
+      trình duyệt thật (cả 3 tool, cả 2 cách nhập file/dán text, tải file
+      kết quả về, lỗi JSON sai cú pháp hiện đúng chỗ không vỡ trang) — cả 3
+      bộ PASS 100% trước khi commit. Bộ test Playwright luồng Attribute
+      Noise 5 bước cũ (23 kịch bản ở mục 14) chạy lại SAU KHI thêm tính
+      năng này, xác nhận không hồi quy.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -879,6 +1110,15 @@ tới khi có nhu cầu đổi tên repo thật sự.
 - [x] Bước 5 AN TOÀN (mục 13): mặc định "— Chọn cách xử lý —", xem trước tác động (`dry_run`) +
       hộp xác nhận khi xoá, lịch sử + Hoàn tác (5 bước) + Về dữ liệu gốc, khoá chạy chồng, sửa 13 lỗi do
       workflow kiểm chứng tìm ra. Đã test bằng Playwright thật (11 kịch bản tái hiện lỗi + hồi quy).
+- [x] Tài khoản đăng nhập — Multi-User THẬT (mục 14): `accounts/` (SQLite + hash mật khẩu) + 5 route
+      `/api/auth/*` + kiểm tra quyền sở hữu (`_require_file_owner`/`_require_download_owner`) ở toàn bộ
+      9 route cũ dùng `file_id`/`download_id` + `#panel-auth`/`#panel-profile` (bố cục chia đôi màn hình,
+      giữ màu SPARK). Flask tự phục vụ frontend (cùng origin cho cookie session). Đã test 43 Flask test
+      client + 23 Playwright (không hồi quy luồng Attribute Noise 5 bước cũ).
+- [x] Convert File (mục 15): `converters/transform.py` (đổi delimiter CSV, CSV⇄JSON, thuần `csv`/`json`
+      chuẩn không dùng pandas) + 3 route `/api/convert/*` (`@login_required`) + trang riêng
+      `convert.html`/`convert.js` (bố cục 2 cột kiểu tham khảo, màu SPARK, gộp cả 3 tool 1 trang). Đã test
+      29 test độc lập + 23 Flask test client + 16 Playwright.
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá
       chậm trên 284.807 dòng, đã huỷ giữa chừng) — cần chạy lại với
       n_estimators thấp hơn hoặc lấy mẫu con nếu muốn có số liệu so sánh
@@ -913,8 +1153,12 @@ tới khi có nhu cầu đổi tên repo thật sự.
 - User có 2 bản clone trên máy: `~/SPARK` (dùng chính thức) và
   `~/PycharmProjects/SPARK` (bản cũ/dễ lệch code — tránh dùng để đỡ nhầm lẫn).
 - Chạy: `pip install -r requirements.txt` → `python3 app.py` (port 5000) →
-  mở `frontend/index.html` bằng trình duyệt. Backend cần chạy ở 1 terminal
-  riêng, để yên không gõ lệnh khác vào đó.
+  mở `http://localhost:5000/` bằng trình duyệt (**MỚI, mục 14**: KHÔNG còn
+  mở trực tiếp file `frontend/index.html` nữa — từ khi có tài khoản đăng
+  nhập, Flask tự phục vụ luôn frontend để cookie session hoạt động đúng,
+  mở theo kiểu `file://` cũ sẽ báo "chưa kết nối backend" dù server vẫn
+  chạy bình thường). Backend cần chạy ở 1 terminal riêng, để yên không gõ
+  lệnh khác vào đó.
 
 ## Ghi chú giao tiếp
 

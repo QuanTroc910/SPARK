@@ -8,6 +8,9 @@ File này KHÔNG chứa logic detect noise gì cả -- nó chỉ làm 3 việc:
 Chạy thử: python3 app.py -> server chạy ở http://localhost:5000
 """
 
+import csv
+import io
+import json
 import os
 import re
 import threading
@@ -58,6 +61,13 @@ from class_noise.feature_selection import (
     log_transform,
     rank_by_importance,
     select_by_elbow,
+)
+from converters.transform import (
+    DELIMITER_LABELS,
+    ConversionError,
+    convert_csv_delimiter,
+    csv_text_to_json,
+    json_text_to_csv,
 )
 
 # MỚI (tài khoản đăng nhập): phục vụ luôn frontend/ từ ĐÚNG Flask này
@@ -1274,6 +1284,139 @@ def download_cleaned_file(download_id: str):
         buffer.getvalue(),
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=spark_cleaned.csv"},
+    )
+
+
+# =============================================================================
+# "Convert" -- 3 tool đổi ĐỊNH DẠNG file (đổi delimiter CSV, CSV<->JSON), KHÔNG
+# liên quan gì tới detect/xử lý noise -- logic thật nằm ở converters/transform.py,
+# 3 route dưới đây chỉ "phiên dịch" multipart/form-data <-> gọi hàm, giống triết
+# lý app.py ở mọi route khác. CẢ 3 route đều @login_required (khác free tool
+# công khai của trang tham khảo) -- và KHÔNG cần file_id/UPLOADED_FILES gì cả:
+# xong trong ĐÚNG 1 request (đọc file/text -> convert -> trả kết quả luôn),
+# không có bước "xem rồi xử lý tiếp" nhiều lượt như luồng Attribute/Class Noise.
+# =============================================================================
+_VALID_DELIMITERS = set(DELIMITER_LABELS.keys())
+
+
+def _extract_convert_text(req) -> str:
+    """Lấy nội dung văn bản cần convert -- chấp nhận file tải lên (field
+    "file", tab FILE trên FE) HOẶC text dán tay (field "text", tab PASTE) --
+    FE luôn gửi multipart/form-data cho cả 2 tab để route chỉ cần đọc 1 kiểu.
+    utf-8-sig: tự bỏ BOM nếu Excel/Windows có thêm vào đầu file, không ảnh
+    hưởng gì nếu file vốn không có BOM."""
+    file = req.files.get("file")
+    if file is not None and file.filename:
+        try:
+            return file.read().decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise ConversionError("File không phải văn bản UTF-8 hợp lệ")
+    text = req.form.get("text", "")
+    if text.strip():
+        return text
+    raise ConversionError("Thiếu file hoặc nội dung dán tay")
+
+
+def _delimiter_param(form, field_name: str, allow_auto: bool) -> str:
+    """Đọc 1 tham số delimiter từ form, validate CHẶT ở ranh giới API (route) --
+    converters/transform.py không tự giới hạn delimiter là ký tự gì (nhận ký tự
+    bất kỳ cũng chạy được), nhưng FE chỉ nên gửi đúng 1 trong 4 lựa chọn đã định
+    nghĩa trước (xem DELIMITER_LABELS) -- validate ở đây để báo lỗi rõ ràng nếu
+    có gì đó gửi sai, thay vì convert ra kết quả khó hiểu."""
+    value = form.get(field_name, "auto" if allow_auto else ",")
+    if allow_auto and value == "auto":
+        return value
+    if value not in _VALID_DELIMITERS:
+        raise ConversionError(f"Giá trị '{field_name}' không hợp lệ")
+    return value
+
+
+def _csv_preview_rows(csv_text: str, delimiter: str, limit: int = 21) -> list:
+    """Đọc trước tối đa `limit` dòng đầu (mặc định 1 header + 20 dòng dữ liệu)
+    của 1 CSV text để trả cho FE hiện bảng xem trước -- tránh FE phải tự viết
+    1 bộ phân tích CSV bằng JS (đúng quyết định kiến trúc đã chốt: mọi phân
+    tích dữ liệu luôn làm ở backend thật, xem CLAUDE.md phần frontend/)."""
+    reader = csv.reader(io.StringIO(csv_text), delimiter=delimiter)
+    rows = []
+    for i, row in enumerate(reader):
+        if i >= limit:
+            break
+        rows.append(row)
+    return rows
+
+
+@app.route("/api/convert/delimiter", methods=["POST"])
+@login_required
+def convert_delimiter_api():
+    """Tool 1: đổi delimiter của 1 file/đoạn CSV (vd ; -> ,)."""
+    try:
+        text = _extract_convert_text(request)
+        from_delimiter = _delimiter_param(request.form, "from_delimiter", allow_auto=True)
+        to_delimiter = _delimiter_param(request.form, "to_delimiter", allow_auto=False)
+        result_text, used_from = convert_csv_delimiter(text, from_delimiter, to_delimiter)
+    except ConversionError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    preview = _csv_preview_rows(result_text, to_delimiter)
+    return jsonify(
+        {
+            "result_text": result_text,
+            "used_from_delimiter": used_from,
+            "row_count": result_text.count("\n") + (0 if result_text.endswith("\n") else 1),
+            "preview_rows": preview,
+        }
+    )
+
+
+@app.route("/api/convert/csv-to-json", methods=["POST"])
+@login_required
+def convert_csv_to_json_api():
+    """Tool 2: CSV -> JSON."""
+    try:
+        text = _extract_convert_text(request)
+        delimiter = _delimiter_param(request.form, "delimiter", allow_auto=True)
+        result_text, used_delimiter = csv_text_to_json(
+            text,
+            has_header=_as_bool(request.form.get("has_header", "true")),
+            delimiter=delimiter,
+            as_array_of_arrays=request.form.get("shape") == "arrays",
+            convert_types=_as_bool(request.form.get("convert_types", "true")),
+            indent=_as_bool(request.form.get("indent", "true")),
+        )
+    except ConversionError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    # result_text luôn là JSON hợp lệ do chính json.dumps() ở converters/transform.py
+    # sinh ra -- parse lại để đếm số record cho FE hiện số liệu, không phải đếm ký tự.
+    parsed = json.loads(result_text)
+    return jsonify(
+        {
+            "result_text": result_text,
+            "used_delimiter": used_delimiter,
+            "record_count": len(parsed) if isinstance(parsed, list) else 1,
+        }
+    )
+
+
+@app.route("/api/convert/json-to-csv", methods=["POST"])
+@login_required
+def convert_json_to_csv_api():
+    """Tool 3: JSON (array object hoặc JSON Lines) -> CSV."""
+    try:
+        text = _extract_convert_text(request)
+        output_delimiter = _delimiter_param(request.form, "output_delimiter", allow_auto=False)
+        result_text, columns = json_text_to_csv(text, output_delimiter)
+    except ConversionError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    preview = _csv_preview_rows(result_text, output_delimiter)
+    return jsonify(
+        {
+            "result_text": result_text,
+            "columns": columns,
+            "row_count": result_text.count("\n") + (0 if result_text.endswith("\n") else 1),
+            "preview_rows": preview,
+        }
     )
 
 
