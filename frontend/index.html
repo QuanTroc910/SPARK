@@ -119,6 +119,7 @@
     <!-- Panel hồ sơ tài khoản -- MỚI. Mở từ nút "Hồ sơ" ở header, giống cách
          panel-preview mở từ Bước 5 (không nằm trong 5 bước chính). -->
     <section class="panel panel--narrow" id="panel-profile">
+      <p class="eyebrow">[ TÀI KHOẢN ]</p>
       <h2 class="panel-title">Hồ sơ tài khoản</h2>
 
       <div class="field">
@@ -156,7 +157,13 @@
 
     <!-- Panel 1: Upload -->
     <section class="panel panel--narrow is-active" id="panel-1">
-      <h2 class="panel-title">Bước 1: Tải dữ liệu lên</h2>
+      <p class="eyebrow">[ BƯỚC 1 / 5 ]</p>
+      <h2 class="panel-title">Tải dữ liệu lên</h2>
+      <div class="badge-row">
+        <span class="badge-pill">🧮 Luôn xử lý qua backend Flask thật</span>
+        <span class="badge-pill">📊 7 loại lỗi thuộc tính + 4 rule liên cột</span>
+        <span class="badge-pill">🔒 File của bạn chỉ bạn thấy được</span>
+      </div>
 
       <label for="file-input" class="dropzone" id="dropzone">
         <div class="dropzone-idle" id="dropzone-idle">
@@ -183,7 +190,8 @@
 
     <!-- Panel 2: Hướng xử lý -->
     <section class="panel" id="panel-2">
-      <h2 class="panel-title">Bước 2: Chọn hướng xử lý</h2>
+      <p class="eyebrow">[ BƯỚC 2 / 5 ]</p>
+      <h2 class="panel-title">Chọn hướng xử lý</h2>
       <p class="panel-desc">Noise trong dữ liệu được chia theo 2 hướng, mỗi hướng có cách phát hiện và xử lý riêng.</p>
 
       <div class="direction-grid">
@@ -228,7 +236,8 @@
 
     <!-- Panel 3: Cấu hình noise -->
     <section class="panel" id="panel-3">
-      <h2 class="panel-title" id="panel-3-title">Bước 3: Cấu hình noise cho từng cột</h2>
+      <p class="eyebrow">[ BƯỚC 3 / 5 ]</p>
+      <h2 class="panel-title" id="panel-3-title">Cấu hình noise cho từng cột</h2>
 
       <!-- Nhánh ATTRIBUTE NOISE -->
       <div id="panel-3-attribute">
@@ -365,7 +374,8 @@
 
     <!-- Panel 4: Kết quả -->
     <section class="panel" id="panel-4">
-      <h2 class="panel-title" id="panel-4-title">Bước 4: Kết quả phát hiện</h2>
+      <p class="eyebrow">[ BƯỚC 4 / 5 ]</p>
+      <h2 class="panel-title" id="panel-4-title">Kết quả phát hiện</h2>
 
       <!-- Nhánh ATTRIBUTE NOISE -->
       <div id="panel-4-attribute">
@@ -460,7 +470,8 @@
 
     <!-- Panel 5: Xử lý & xuất file -->
     <section class="panel" id="panel-5">
-      <h2 class="panel-title">Bước 5: Xử lý &amp; xuất file</h2>
+      <p class="eyebrow">[ BƯỚC 5 / 5 ]</p>
+      <h2 class="panel-title">Xử lý &amp; xuất file</h2>
 
       <!-- Nhánh ATTRIBUTE NOISE -->
       <div id="panel-5-attribute">
@@ -507,6 +518,7 @@
     <!-- Panel "Xem sau xử lý" -- KHÔNG nằm trong 5 bước chính, chỉ là màn
          hình phụ mở ra từ Bước 5 để xem nhanh dữ liệu hiện tại rồi quay lại. -->
     <section class="panel" id="panel-preview">
+      <p class="eyebrow">[ XEM TRƯỚC ]</p>
       <h2 class="panel-title">Xem dữ liệu sau xử lý</h2>
       <p class="panel-desc">Toàn bộ dữ liệu ở trạng thái hiện tại — ô còn tô màu là còn lỗi chưa xử lý.</p>
       <div class="table-wrap">

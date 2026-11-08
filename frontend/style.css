@@ -136,7 +136,21 @@ body:not(.auth-ready) .panel:not(#panel-auth) { display: none !important; }
    dùng cho các bước có bảng dữ liệu (3, 4, 5) -- thu hẹp + canh giữa riêng
    cho các panel này để bố cục cân đối, đỡ trống trải bên phải. */
 .panel--narrow { max-width: 980px; margin-left: auto; margin-right: auto; }
-.panel-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 8px; }
+.panel-title { font-size: 24px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 8px; }
+/* Nhãn nhỏ phía trên tiêu đề panel -- mẫu "eyebrow" đã dùng ở #panel-auth/
+   convert.html, áp DÙNG CHUNG cho mọi panel (gộp vào .auth-eyebrow sẵn có
+   thay vì viết lại CSS) để đồng bộ phân cấp chữ xuyên suốt cả app. */
+.eyebrow, .auth-eyebrow {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 600;
+  letter-spacing: 0.08em; color: var(--signal-dark); margin-bottom: 10px;
+}
+/* Badge nhỏ (trust signal) -- mẫu đã dùng ở convert.html, áp dùng chung. */
+.badge-row, .convert-badges { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
+.badge-pill, .convert-badge {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 600;
+  color: var(--ink-dim); background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 999px; padding: 6px 14px;
+}
 .panel-desc { font-size: 13.5px; color: var(--ink-dim); max-width: 90ch; margin-bottom: 20px; }
 .panel-actions { display: flex; align-items: center; gap: 14px; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .hint-note { font-size: 12.5px; color: var(--ink-faint); margin-top: 12px; }
@@ -165,10 +179,6 @@ body:not(.auth-ready) .panel:not(#panel-auth) { display: none !important; }
   max-width: 1180px; margin: 32px auto; padding: 0; overflow: hidden;
 }
 .auth-screen-form { padding: 44px 48px; display: flex; flex-direction: column; justify-content: center; }
-.auth-eyebrow {
-  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 600;
-  letter-spacing: 0.08em; color: var(--signal-dark); margin-bottom: 10px;
-}
 .auth-headline { font-size: 30px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 10px; }
 .auth-screen .panel-desc { margin-bottom: 24px; }
 
@@ -204,15 +214,10 @@ body:not(.auth-ready) .panel:not(#panel-auth) { display: none !important; }
 
 /* ===== Trang Convert File (convert.html) -- bố cục 2 cột lấy cảm hứng 1
    trang tham khảo, giữ nguyên token màu/font của SPARK. Tái dùng .dropzone/
-   .results-table/.table-wrap/.auth-eyebrow/.auth-headline đã có thay vì viết
-   lại từ đầu. ===== */
+   .results-table/.table-wrap/.eyebrow/.auth-headline/.badge-row đã có thay
+   vì viết lại từ đầu (.convert-badges/.convert-badge gộp chung định nghĩa
+   với .badge-row/.badge-pill ở đầu file.css). ===== */
 .convert-hero { max-width: 760px; margin-bottom: 22px; }
-.convert-badges { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 26px; }
-.convert-badge {
-  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 600;
-  color: var(--ink-dim); background: var(--surface); border: 1px solid var(--line-strong);
-  border-radius: 999px; padding: 6px 14px;
-}
 
 .convert-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
 .convert-tab {
@@ -253,7 +258,11 @@ body:not(.auth-ready) .panel:not(#panel-auth) { display: none !important; }
 }
 
 /* ===== Buttons ===== */
-.btn { appearance: none; border-radius: var(--radius-sm); padding: 10px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease; }
+/* text-decoration/display: .btn được dùng cho CẢ <button> lẫn <a> (vd link
+   điều hướng "← Trang chính", "🔀 Convert File", các nút trên landing.html)
+   -- <a> có gạch chân mặc định của trình duyệt mà <button> không có, reset
+   ở đây 1 lần cho mọi nơi dùng .btn thay vì phải nhớ reset riêng từng chỗ. */
+.btn { appearance: none; display: inline-block; text-decoration: none; border-radius: var(--radius-sm); padding: 10px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary { background: var(--signal); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--signal-dark); }
@@ -510,6 +519,82 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
 .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; padding: 3px 8px; border-radius: 6px; margin: 2px 3px 2px 0; white-space: nowrap; border: 1px solid transparent; }
 .tag b { font-weight: 600; }
 
+/* ===== Trang giới thiệu (landing.html) -- "mặt tiền" công khai của web
+   (route "/"), lấy cảm hứng bố cục 1 trang landing tham khảo (hero to +
+   ticker chạy chữ + lưới tính năng + quy trình xử lý file) nhưng GIỮ
+   NGUYÊN token màu/font của SPARK -- tái dùng .eyebrow/.badge-row/
+   .badge-pill/.auth-demo-card/.cell-flag-* đã có thay vì viết lại. ===== */
+.landing-nav { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.landing-nav a:not(.btn) { font-size: 13.5px; font-weight: 600; color: var(--ink-dim); text-decoration: none; }
+.landing-nav a:not(.btn):hover { color: var(--signal-dark); }
+
+.landing-hero { padding: 56px 0 40px; }
+.landing-hero-inner { max-width: 820px; }
+.landing-hero-headline { font-size: 48px; font-weight: 700; line-height: 1.08; letter-spacing: -0.02em; margin-bottom: 20px; }
+.landing-hero-desc { font-size: 15.5px; color: var(--ink-dim); max-width: 70ch; margin-bottom: 26px; }
+.landing-hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 26px; }
+
+/* Ticker chạy chữ liên tục -- 2 bản sao y hệt nối liền nhau trong HTML,
+   animation chỉ cần trượt đúng 50% chiều rộng track là lặp liền mạch,
+   không bị giật ở điểm nối. */
+.landing-ticker { background: var(--signal-dark); color: #fff; overflow: hidden; padding: 12px 0; margin-bottom: 56px; }
+.landing-ticker-track {
+  display: flex; gap: 14px; white-space: nowrap; width: max-content;
+  font-family: "IBM Plex Mono", monospace; font-size: 12.5px; font-weight: 600;
+  letter-spacing: 0.04em; animation: landing-ticker-scroll 32s linear infinite;
+}
+.landing-ticker-track span { opacity: 0.9; }
+@keyframes landing-ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-ticker-track { animation: none; }
+}
+
+.landing-section { padding: 10px 0 64px; }
+.landing-section-title { font-size: 28px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 10px; }
+.landing-section-desc { max-width: 70ch; margin-bottom: 30px; }
+
+.landing-feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.landing-feature-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  padding: 22px 22px 24px; box-shadow: var(--shadow-card);
+}
+.landing-feature-num {
+  display: block; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600;
+  color: var(--signal-dark); margin-bottom: 10px;
+}
+.landing-feature-card h3 { font-size: 16px; font-weight: 650; margin-bottom: 8px; }
+.landing-feature-card p { font-size: 13.5px; color: var(--ink-dim); }
+
+.landing-demo-wrap { display: flex; justify-content: center; }
+.landing-demo-card { max-width: 640px; width: 100%; }
+
+.landing-process-grid { display: flex; align-items: stretch; gap: 16px; }
+.landing-process-step {
+  flex: 1 1 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  padding: 22px; box-shadow: var(--shadow-card);
+}
+.landing-process-step.is-dark { background: var(--signal-dark); border-color: var(--signal-dark); color: #fff; }
+.landing-process-step.is-dark p { color: rgba(255, 255, 255, 0.78); }
+.landing-process-num {
+  display: block; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.06em; color: var(--signal-dark); margin-bottom: 10px;
+}
+.landing-process-step.is-dark .landing-process-num { color: rgba(255, 255, 255, 0.75); }
+.landing-process-step h3 { font-size: 16px; font-weight: 650; margin-bottom: 8px; }
+.landing-process-step p { font-size: 13.5px; color: var(--ink-dim); }
+.landing-process-arrow { align-self: center; font-size: 20px; color: var(--ink-faint); }
+
+.landing-cta { text-align: center; padding-bottom: 80px; }
+.landing-cta .landing-section-desc { margin-left: auto; margin-right: auto; }
+.landing-cta .landing-section-title { font-size: 26px; }
+
+.landing-footer { border-top: 1px solid var(--line); padding: 24px 0; margin-top: 20px; }
+.landing-footer .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 13px; color: var(--ink-faint); }
+.landing-footer a { color: var(--signal-dark); text-decoration: none; font-weight: 600; }
+
 /* ===== Responsive ===== */
 @media (max-width: 760px) {
   .direction-grid { grid-template-columns: 1fr; }
@@ -517,6 +602,11 @@ input[type="checkbox"] { accent-color: var(--signal); width: 15px; height: 15px;
   .panel { padding: 22px 18px 24px; }
   .chart-row { grid-template-columns: 1fr; gap: 4px; }
   .chart-count { text-align: left; }
+  .landing-hero-headline { font-size: 32px; }
+  .landing-feature-grid { grid-template-columns: 1fr; }
+  .landing-process-grid { flex-direction: column; }
+  .landing-process-arrow { display: none; }
+  .landing-nav { gap: 10px; }
 }
 @media (max-width: 560px) {
   .step-label { display: none; }

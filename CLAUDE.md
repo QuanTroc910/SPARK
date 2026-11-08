@@ -280,10 +280,14 @@ tới khi có nhu cầu đổi tên repo thật sự.
   Rule/config sai (formula lỗi cú pháp, cột không tồn tại...) trả HTTP 400
   kèm message rõ ràng, không crash 500.
   - **Tài khoản đăng nhập (Multi-User THẬT, mục 14):** Flask app khởi tạo
-    với `static_folder="frontend", static_url_path=""` + route `GET /` trả
-    `frontend/index.html` — PHỤC VỤ LUÔN frontend từ chính Flask này (lý do
-    bắt buộc: cookie session chỉ đáng tin cậy khi frontend/backend CÙNG 1
-    origin, xem giải thích đầy đủ trong comment ở đầu app.py). `app.secret_key`
+    với `static_folder="frontend", static_url_path=""` + route `GET /`
+    PHỤC VỤ LUÔN frontend từ chính Flask này (lý do bắt buộc: cookie session
+    chỉ đáng tin cậy khi frontend/backend CÙNG 1 origin, xem giải thích đầy
+    đủ trong comment ở đầu app.py) -- **MỚI (mục 16)**: `GET /` giờ trả
+    `frontend/landing.html` (trang giới thiệu công khai) thay vì
+    `index.html` trực tiếp như lúc mới làm xong mục 14; `index.html`
+    (app thật) vẫn phục vụ bình thường tại `/index.html` nhờ
+    `static_folder`, không cần route riêng. `app.secret_key`
     đọc từ biến môi trường `SPARK_SECRET_KEY` nếu có, không có thì tự sinh
     ngẫu nhiên mỗi lần khởi động (giới hạn đã biết: restart server là mọi
     người đăng nhập bị đăng xuất, chấp nhận được cho demo 1 người dùng).
@@ -520,6 +524,67 @@ tới khi có nhu cầu đổi tên repo thật sự.
   (chỉ hiện khi đã đăng nhập); nút "Hồ sơ" ở `convert.html` điều hướng về
   `index.html?open=profile` — `onLoggedIn()` tự đọc query param này và mở
   luôn `#panel-profile`, đỡ phải bấm "Hồ sơ" thêm 1 lần nữa.
+
+  **Nâng cấp visual 5 bước chính (áp mẫu eyebrow/badge của `#panel-auth`/
+  `convert.html` lên toàn app)** — sau khi xem lại giao diện tham khảo
+  (CYD) 1 lần nữa, user thấy UI 5 bước (Bước 1-5) trông "dởm" so với trang
+  đăng nhập/Convert vừa làm đẹp lại, muốn đồng bộ CẢ APP theo cùng 1 phân
+  cấp chữ. Đã làm: class `.eyebrow` (gộp chung định nghĩa với `.auth-eyebrow`
+  cũ, 1 rule 2 selector, không tạo trùng lặp CSS) + `.badge-row`/`.badge-pill`
+  (gộp chung với `.convert-badges`/`.convert-badge` cũ theo cùng cách) —
+  dùng lại CHO MỌI panel thay vì viết CSS riêng mỗi nơi. Mỗi panel-N (1-5)
+  + `#panel-profile` + `#panel-preview` đều thêm `<p class="eyebrow">[ BƯỚC
+  N / 5 ]</p>` ngay trước `.panel-title`, đồng thời BỎ tiền tố "Bước N: "
+  khỏi chính `.panel-title` (cả HTML tĩnh lẫn chỗ `script.js` tự set
+  `textContent` cho `#panel-3-title` theo hướng Attribute/Class) vì eyebrow
+  đã thay thế vai trò đó. `.panel-title` tăng từ 20px/600 lên 24px/650 cho
+  "headline" hơn. Bước 1 thêm `.badge-row` 3 badge (qua backend thật/7+4
+  loại lỗi/bảo mật theo tài khoản) làm ấn tượng đầu tiên rõ ràng hơn — CHỈ
+  thêm ở Bước 1 (không rải đều cả 5 bước) để tránh lặp lại thông tin không
+  cần thiết. Thuần sửa CSS/HTML (+2 dòng JS đổi text), KHÔNG đổi cấu trúc/
+  logic nào — đã test lại đủ 39 kịch bản Playwright cũ (23 luồng chính +
+  16 Convert), không hồi quy.
+
+  **Trang giới thiệu (mục 16) — `landing.html` + `landing.js`, "mặt tiền"
+  công khai mới của web:** sau khi xem lại trang tham khảo (CYD) LẦN NỮA,
+  user KHÔNG muốn `http://localhost:5000/` vào thẳng "Bước 1: Tải dữ liệu
+  lên" nữa — muốn 1 trang giới thiệu đầy đủ trước (hero to, danh sách tính
+  năng, quy trình xử lý file...) rồi mới bấm "Bắt đầu" vào app thật, đồng ý
+  đổi cả giao diện cũ miễn chức năng vẫn đúng với SPARK (không copy máy móc
+  chức năng của trang tham khảo). `app.py::serve_frontend()` (route `GET /`)
+  đổi sang trả `landing.html` thay vì `index.html` — `index.html` (app thật,
+  bắt đăng nhập) lùi về phục vụ tại `/index.html` qua `static_folder`, mọi
+  CTA trên `landing.html` ("Bắt đầu", "Đăng nhập"...) chỉ là link `<a
+  href="index.html">` thuần, KHÔNG cần `landing.js` biết gì về trạng thái
+  đăng nhập — `index.html` tự quyết định hiện app hay hiện form đăng nhập
+  như cũ. Gồm: hero (tái dùng tagline "DỮ LIỆU NHIỄU VÀO. DỮ LIỆU SẠCH RA."
+  từ `#panel-auth`) + ticker chạy chữ liệt kê đủ 9 loại noise (CSS
+  `@keyframes`, 2 bản sao nội dung nối liền để cuộn không giật) + lưới 9
+  thẻ "Phát hiện được gì" (7 attribute noise + rule liên cột + class noise)
+  + demo TĨNH (tái dùng NGUYÊN `.auth-demo-card`/`.cell-flag-*`, theo đúng
+  lựa chọn user chọn khi được hỏi: demo minh hoạ nhanh thay vì demo tương
+  tác gọi backend thật không cần đăng nhập — tránh phải mở 1 route công
+  khai mới chỉ để phục vụ demo, giữ đúng nguyên tắc mọi route xử lý dữ liệu
+  đều bắt đăng nhập) + "Quy trình xử lý dữ liệu của bạn" (3 bước, bước giữa
+  tô đậm `--signal-dark`, nói đúng sự thật kiến trúc đã làm ở mục 14: mỗi
+  tài khoản 1 không gian riêng, không qua bên thứ 3 — không phải marketing
+  suông) + khối "Về dự án" (giới thiệu đây là sản phẩm khoá luận, THAY cho
+  phần "Ai nên dùng" kiểu persona Marketing/Sales của trang tham khảo vì
+  không hợp bối cảnh 1 công cụ khoá luận). CỐ TÌNH bỏ phần demo tương tác
+  thật (toggle rồi gọi `/api/detect-noise` trên file mẫu không cần đăng
+  nhập) dù đã cân nhắc — user chọn hướng đơn giản/an toàn hơn.
+  **1 lỗi CSS thật đã gặp + đã fix**: `.btn` (dùng chung cho cả `<button>`
+  lẫn `<a>`, vd link "Bắt đầu"/"← Trang chính") thiếu `text-decoration:
+  none` nên mọi nút dạng `<a>` bị gạch chân mặc định của trình duyệt — phát
+  hiện qua ảnh chụp Playwright, fix 1 chỗ DUY NHẤT ở rule `.btn` gốc (thêm
+  `display: inline-block; text-decoration: none;`) thay vì vá riêng từng
+  trang, nên cũng tự fix luôn cho `convert.html`/`index.html` (chưa ai để ý
+  trước đó vì gạch chân mờ, dễ bỏ sót khi chỉ nhìn lướt qua). Đã test lại
+  đủ 39 kịch bản Playwright cũ (sau khi sửa 2 chỗ `page.goto(BASE + "/")`
+  thành `BASE + "/index.html"` cho khớp route mới) + 6 kịch bản Playwright
+  mới cho `landing.html` (vào `/` ra đúng landing không bắt đăng nhập, bấm
+  "Bắt đầu" sang đúng `index.html`, đăng nhập xong quay lại `/` vẫn ra
+  landing chứ không tự nhảy vào app) — không hồi quy.
 
   **QUAN TRỌNG — quyết định kiến trúc đã chốt:** trang KHÔNG có chế độ "phân
   tích cục bộ trong trình duyệt" (không viết lại IQR/regex/... bằng JS). Mọi
@@ -1119,6 +1184,11 @@ tới khi có nhu cầu đổi tên repo thật sự.
       chuẩn không dùng pandas) + 3 route `/api/convert/*` (`@login_required`) + trang riêng
       `convert.html`/`convert.js` (bố cục 2 cột kiểu tham khảo, màu SPARK, gộp cả 3 tool 1 trang). Đã test
       29 test độc lập + 23 Flask test client + 16 Playwright.
+- [x] Trang giới thiệu (mục 16): `landing.html`/`landing.js` thành "mặt tiền" công khai mới tại `/`
+      (không bắt đăng nhập) — hero, ticker 9 loại noise, lưới 9 tính năng, demo tĩnh, quy trình xử lý
+      file 3 bước. `index.html` (app thật) lùi về `/index.html`. Nhân tiện fix 1 lỗi CSS (`.btn` trên
+      `<a>` bị gạch chân mặc định trình duyệt). Đã test 6 kịch bản Playwright mới + 39 kịch bản cũ không
+      hồi quy (sau khi cập nhật route trong chính script test).
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá
       chậm trên 284.807 dòng, đã huỷ giữa chừng) — cần chạy lại với
       n_estimators thấp hơn hoặc lấy mẫu con nếu muốn có số liệu so sánh
@@ -1157,8 +1227,11 @@ tới khi có nhu cầu đổi tên repo thật sự.
   mở trực tiếp file `frontend/index.html` nữa — từ khi có tài khoản đăng
   nhập, Flask tự phục vụ luôn frontend để cookie session hoạt động đúng,
   mở theo kiểu `file://` cũ sẽ báo "chưa kết nối backend" dù server vẫn
-  chạy bình thường). Backend cần chạy ở 1 terminal riêng, để yên không gõ
-  lệnh khác vào đó.
+  chạy bình thường). **MỚI (mục 16)**: `http://localhost:5000/` giờ ra
+  trang GIỚI THIỆU (`landing.html`, không bắt đăng nhập) — bấm "Bắt đầu"
+  mới sang app thật (`index.html`); muốn vào thẳng app lúc dev/test thì gõ
+  `http://localhost:5000/index.html`. Backend cần chạy ở 1 terminal riêng,
+  để yên không gõ lệnh khác vào đó.
 
 ## Ghi chú giao tiếp
 

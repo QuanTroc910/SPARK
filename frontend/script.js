@@ -1989,8 +1989,8 @@ function toggleStep3Direction() {
   $("panel-3-attribute").hidden = isClass;
   $("panel-3-class").hidden = !isClass;
   $("panel-3-title").textContent = isClass
-    ? `Bước 3: Chọn nhãn & đặc trưng — ${CLASS_METHOD_LABELS[state.classMethod] || ""}`
-    : "Bước 3: Cấu hình noise cho từng cột";
+    ? `Chọn nhãn & đặc trưng — ${CLASS_METHOD_LABELS[state.classMethod] || ""}`
+    : "Cấu hình noise cho từng cột";
   if (isClass) renderClassNoiseConfigForm();
 }
 

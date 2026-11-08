@@ -311,10 +311,14 @@ def _build_detect_response(df, findings) -> dict:
 
 @app.route("/")
 def serve_frontend():
-    """Trả về frontend/index.html -- Flask tự phục vụ các file tĩnh còn lại
-    (style.css, script.js) nhờ static_folder="frontend" đã khai báo ở trên,
-    không cần route riêng cho từng file."""
-    return app.send_static_file("index.html")
+    """Trả về frontend/landing.html -- trang giới thiệu CÔNG KHAI (không bắt
+    đăng nhập), là "mặt tiền" thật sự của web, KHÁC index.html (ứng dụng
+    5 bước, bắt đăng nhập). Nút "Bắt đầu" trên landing.html dẫn sang
+    index.html -- trang đó tự quyết định hiện app hay hiện form đăng nhập.
+    Flask tự phục vụ các file tĩnh còn lại (index.html, convert.html,
+    style.css, script.js...) nhờ static_folder="frontend" đã khai báo ở
+    trên, không cần route riêng cho từng file."""
+    return app.send_static_file("landing.html")
 
 
 def login_required(view_func):

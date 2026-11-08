@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dò &amp; Xử Lý Nhiễu Dữ Liệu</title>
+  <meta name="description" content="Công cụ web dò và xử lý noise trong dataset CSV/Excel -- 7 loại lỗi thuộc tính, rule liên cột, và phát hiện nhãn sai bằng 3 thuật toán Class Noise." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;650;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Trang GIỚI THIỆU công khai (không bắt đăng nhập) -- "mặt tiền" thật sự
+       của web, phục vụ ở route "/" (xem app.py::serve_frontend()). KHÁC
+       index.html (ứng dụng 5 bước, bắt đăng nhập) -- mọi CTA ở đây chỉ dẫn
+       sang index.html, trang đó tự quyết định hiện app hay hiện form đăng
+       nhập tuỳ trạng thái đăng nhập, nên landing.html không cần biết/kiểm
+       tra gì về auth cả. -->
+  <header class="app-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <div class="brand-text">
+          <span class="brand-title">🧹 Dò &amp; Xử Lý Nhiễu Dữ Liệu</span>
+        </div>
+      </div>
+      <nav class="landing-nav">
+        <a href="#features">Tính năng</a>
+        <a href="#process">Quy trình</a>
+        <div class="status-pill">
+          <span id="backend-dot" class="status-dot is-offline"></span>
+          <span id="backend-status-text">Backend: đang kiểm tra…</span>
+        </div>
+        <a href="index.html" class="btn btn-ghost btn-small">Đăng nhập</a>
+        <a href="index.html" class="btn btn-primary btn-small">Bắt đầu</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- ===== HERO ===== -->
+    <section class="landing-hero">
+      <div class="container landing-hero-inner">
+        <p class="eyebrow">[ DÒ &amp; XỬ LÝ NHIỄU DỮ LIỆU ]</p>
+        <h1 class="landing-hero-headline">DỮ LIỆU NHIỄU VÀO.<br />DỮ LIỆU SẠCH RA.</h1>
+        <p class="landing-hero-desc">
+          Upload file CSV/Excel, chọn Attribute Noise (7 loại lỗi thuộc tính + rule mâu thuẫn liên cột) hoặc
+          Class Noise (phát hiện nhãn sai bằng 3 thuật toán độc lập) — xem kết quả, xử lý từng dòng, xuất file
+          sạch. Mọi phép tính LUÔN chạy qua backend Flask thật, không có chế độ giả lập bằng JavaScript.
+        </p>
+        <div class="landing-hero-actions">
+          <a href="index.html" class="btn btn-primary">Bắt đầu miễn phí →</a>
+          <a href="#demo" class="btn btn-ghost">Xem minh hoạ</a>
+        </div>
+        <div class="badge-row">
+          <span class="badge-pill">🧮 Luôn qua backend Flask thật</span>
+          <span class="badge-pill">🔒 Mỗi tài khoản 1 không gian riêng</span>
+          <span class="badge-pill">↶ Mọi bước xử lý đều hoàn tác được</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== THANH CHẠY CHỮ ===== -->
+    <div class="landing-ticker" aria-hidden="true">
+      <div class="landing-ticker-track">
+        <span>THIẾU GIÁ TRỊ</span><span>·</span><span>SAI ĐỊNH DẠNG</span><span>·</span>
+        <span>NGOÀI KHOẢNG</span><span>·</span><span>GIÁ TRỊ BẤT THƯỜNG</span><span>·</span>
+        <span>KHÔNG NHẤT QUÁN</span><span>·</span><span>KHOẢNG TRẮNG THỪA</span><span>·</span>
+        <span>TRÙNG DÒNG</span><span>·</span><span>RULE LIÊN CỘT</span><span>·</span>
+        <span>CLASS NOISE</span><span>·</span>
+        <!-- Lặp lại y hệt 1 lần nữa để animation cuộn liền mạch, không giật -->
+        <span>THIẾU GIÁ TRỊ</span><span>·</span><span>SAI ĐỊNH DẠNG</span><span>·</span>
+        <span>NGOÀI KHOẢNG</span><span>·</span><span>GIÁ TRỊ BẤT THƯỜNG</span><span>·</span>
+        <span>KHÔNG NHẤT QUÁN</span><span>·</span><span>KHOẢNG TRẮNG THỪA</span><span>·</span>
+        <span>TRÙNG DÒNG</span><span>·</span><span>RULE LIÊN CỘT</span><span>·</span>
+        <span>CLASS NOISE</span><span>·</span>
+      </div>
+    </div>
+
+    <!-- ===== PHÁT HIỆN ĐƯỢC GÌ ===== -->
+    <section class="landing-section container" id="features">
+      <p class="eyebrow">[ PHÁT HIỆN ĐƯỢC GÌ ]</p>
+      <h2 class="landing-section-title">9 loại noise, 2 hướng xử lý</h2>
+      <p class="panel-desc landing-section-desc">
+        Attribute Noise xử lý lỗi ở TỪNG CỘT + mâu thuẫn LOGIC giữa 2 cột. Class Noise xử lý nhãn/lớp phân
+        loại bị gán sai, dùng 3 thuật toán độc lập để đối chứng kết quả.
+      </p>
+      <div class="landing-feature-grid">
+        <div class="landing-feature-card">
+          <span class="landing-feature-num">01</span>
+          <h3>Thiếu giá trị</h3>
+          <p>Ô rỗng hoặc placeholder (N/A, null...) — xử lý bằng impute mean/median/KNN/mode hoặc xoá dòng.</p>
+        </div>
+        <div class="landing-feature-card">
+          <span class="landing-feature-num">02</span>
+          <h3>Sai định dạng</h3>
+          <p>Email/số điện thoại/ngày tháng không đúng mẫu — chỉ xoá dòng hoặc nhập tay (không đoán bừa định danh cá nhân).</p>
+        </div>
+        <div class="landing-feature-card">
+          <span class="landing-feature-num">03</span>
+          <h3>Ngoài khoảng</h3>
+          <p>Giá trị số vượt min/max tự khai (vd tuổi &gt; 100) — cap về biên hoặc impute.</p>
+        </div>
+        <div class="landing-feature-card">
+          <span class="landing-feature-num">04</span>
+          <h3>Giá trị bất thường</h3>
+          <p>Outlier theo IQR hoặc Z-score — cap về biên, impute, hoặc giữ nguyên nếu chỉ muốn xem.</p>
+        </div>
+        <div class="landing-feature-card">
+          <span class="landing-feature-num">05</span>
+          <h3>Không nhất quán</h3>
+          <p>Cùng 1 ý nghĩa viết nhiều kiểu (vd "Nam"/"nam"/"NAM") — tự động chuẩn hoá về giá trị chuẩn đã khớp.</p>
+        </div>
+        <div class="landing-feature-card">
+          <span class="landing-feature-num">06</span>
+          <h3>Khoảng trắng thừa</h3>
+          <p>Dấu cách/ký tự lạ thừa ở đầu-cuối chuỗi — tự động làm sạch, an toàn nên luôn bật mặc định.</p>
+        </div>
+        <div class="landing-feature-card">
+          <span class="landing-feature-num">07</span>
+          <h3>Trùng dòng</h3>
+          <p>So cả dòng hoặc 1 nhóm cột chỉ định — giữ lại bản đầu/cuối, xoá các bản còn lại.</p>
+        </div>
+        <div class="landing-feature-card">
+          <span class="landing-feature-num">08</span>
+          <h3>Rule liên cột</h3>
+          <p>Mâu thuẫn logic giữa 2 cột do bạn tự khai — so sánh, điều kiện, công thức, phụ thuộc hàm.</p>
+        </div>
+        <div class="landing-feature-card">
+          <span class="landing-feature-num">09</span>
+          <h3>Class Noise</h3>
+          <p>Nhãn/lớp bị gán sai — 3 thuật toán độc lập (Confident Learning, Mutual k-NN, Ensemble) cùng đối chứng.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== MINH HOẠ (TĨNH) ===== -->
+    <section class="landing-section container" id="demo">
+      <p class="eyebrow">[ MINH HOẠ ]</p>
+      <h2 class="landing-section-title">Lỗi được tô màu ngay trên bảng dữ liệu</h2>
+      <p class="panel-desc landing-section-desc">
+        Mỗi loại noise 1 màu riêng (11 family màu, xuyên suốt cả app) — nhìn qua là biết ngay ô nào lỗi gì,
+        không cần đọc từng dòng log. Bảng dưới đây chỉ là ảnh chụp minh hoạ, dữ liệu thật của bạn luôn được
+        tính qua backend Flask ở Bước 4 sau khi đăng nhập.
+      </p>
+      <div class="landing-demo-wrap">
+        <div class="auth-demo-card landing-demo-card">
+          <div class="auth-demo-head">
+            <span class="mono">noisy_employee.csv</span>
+            <span class="auth-demo-badge">5 lỗi</span>
+          </div>
+          <table class="auth-demo-table">
+            <tbody>
+              <tr><td class="mono">1</td><td>Lê Oanh</td><td class="cell-flag-slate">—</td><td>Finance</td></tr>
+              <tr><td class="mono">2</td><td class="cell-flag-rose"> Vũ Uyên </td><td>21.756.000</td><td>IT</td></tr>
+              <tr><td class="mono">3</td><td>Chloé Martin</td><td class="cell-flag-crimson">150</td><td>Sales</td></tr>
+              <tr><td class="mono">4</td><td class="cell-flag-amber">2025-13-40</td><td>18.200.000</td><td>HR</td></tr>
+              <tr><td class="mono">5</td><td class="cell-flag-maroon">Lê Oanh</td><td>21.412.000</td><td>Finance</td></tr>
+            </tbody>
+          </table>
+          <ul class="auth-demo-points">
+            <li>✓ Dò 7 loại lỗi thuộc tính + 4 rule mâu thuẫn liên cột</li>
+            <li>✓ Xử lý từng dòng, xem trước tác động, hoàn tác được</li>
+            <li>✓ Phát hiện nhãn sai bằng 3 thuật toán Class Noise</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== QUY TRÌNH ===== -->
+    <section class="landing-section container" id="process">
+      <p class="eyebrow">[ QUY TRÌNH ]</p>
+      <h2 class="landing-section-title">Dữ liệu của bạn đi đâu</h2>
+      <div class="landing-process-grid">
+        <div class="landing-process-step">
+          <span class="landing-process-num">01 · MÁY CỦA BẠN</span>
+          <h3>Bạn tải file CSV/Excel lên</h3>
+          <p>Cần đăng nhập trước — mỗi file gắn với đúng tài khoản đã tải nó lên.</p>
+        </div>
+        <span class="landing-process-arrow">→</span>
+        <div class="landing-process-step is-dark">
+          <span class="landing-process-num">02 · BACKEND FLASK CỦA BẠN</span>
+          <h3>Dò &amp; xử lý qua thuật toán thật</h3>
+          <p>Không qua bên thứ 3, không giả lập bằng JS. Chỉ tài khoản của bạn đọc/sửa được file này — tài khoản khác gọi tới sẽ nhận lỗi "không tồn tại", không biết file có thật hay không.</p>
+        </div>
+        <span class="landing-process-arrow">→</span>
+        <div class="landing-process-step">
+          <span class="landing-process-num">03 · MÁY CỦA BẠN</span>
+          <h3>Tải file đã làm sạch về</h3>
+          <p>Mọi bước xử lý đều xem trước tác động + hoàn tác được trước khi xuất file cuối cùng.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== VỀ DỰ ÁN + CTA CUỐI ===== -->
+    <section class="landing-section container landing-cta">
+      <p class="eyebrow">[ VỀ DỰ ÁN ]</p>
+      <h2 class="landing-section-title">Sản phẩm khoá luận tốt nghiệp</h2>
+      <p class="panel-desc landing-section-desc">
+        SPARK là công cụ dò &amp; xử lý nhiễu dữ liệu được xây dựng cho khoá luận tốt nghiệp — áp dụng các
+        phương pháp đã công bố (Confident Learning, Mutual k-NN, Ensemble-based) trên dữ liệu thật, có đo
+        lường/đối chứng thực nghiệm rõ ràng thay vì chỉ chọn 1 thuật toán theo cảm tính.
+      </p>
+      <a href="index.html" class="btn btn-primary">Bắt đầu ngay →</a>
+    </section>
+  </main>
+
+  <footer class="landing-footer">
+    <div class="container">
+      <span>🧹 Dò &amp; Xử Lý Nhiễu Dữ Liệu</span>
+      <a href="index.html">Vào ứng dụng</a>
+    </div>
+  </footer>
+
+  <script src="landing.js"></script>
+</body>
+</html>
