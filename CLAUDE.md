@@ -46,6 +46,26 @@ tới khi có nhu cầu đổi tên repo thật sự.
     khác đã chuẩn hoá z-score. Mọi giá trị số tính ra đều được ép về CHUỖI
     trước khi gán lại (DataFrame gốc đọc bằng `dtype=str`, xem
     `_format_numeric_for_column()`).
+  - `quick_tools.py` — **MỚI (mục 17 dưới đây): logic 4 "Free Tools"** (Xoá
+    dòng trùng/Cắt khoảng trắng thừa/Điền-xoá ô trống đơn giản/Xoá dòng trống
+    hoàn toàn) -- KHÁC HẲN `apply_handling()` ở chỗ KHÔNG cần
+    `ColumnNoiseConfig`/`NoiseFinding` gì cả, chạy NGAY trên DataFrame trong
+    1 lần gọi (`quick_remove_duplicates()`, `quick_trim_whitespace()`,
+    `quick_fill_or_remove_blanks()`, `quick_remove_empty_rows()`, đều trả về
+    `(df đã xử lý, stats dict)`). TÁI DÙNG trực tiếp
+    `_clean_whitespace_value()`/`_is_missing_text()` đã có sẵn trong
+    `attribute_handling.py` (import thẳng dù có dấu `_` ở đầu -- quy ước
+    "riêng tư" của Python chỉ là quy ước, 2 module cùng nằm trong package
+    `attribute_noise` nên chia sẻ nội bộ là hợp lý) để Free Tools và
+    Workspace đầy đủ ra CÙNG 1 định nghĩa "thiếu"/"khoảng trắng thừa", không
+    lệch kết quả giữa 2 luồng. `is_row_fully_empty()` là detector HOÀN TOÀN
+    MỚI (dòng mà MỌI cột đều thiếu) -- cố tình KHÔNG đăng ký vào `NoiseType`
+    enum/`DETECTORS` registry của `detectors.py` để không ảnh hưởng gì tới
+    luồng detect chính/hệ thống chip UI Bước 3 (noise cấp dòng riêng của Free
+    Tools, khác `duplicate_row` ở chỗ xét 1 dòng tự nó trống hay không,
+    không so sánh GIỮA các dòng). `QuickToolError` là exception riêng
+    (app.py bắt để trả HTTP 400), cùng cách `AccountError`/`ConversionError`
+    đã làm cho các module khác.
 - `class_noise/` — core logic phát hiện CLASS NOISE, cũng thuần Python,
   không phụ thuộc Flask (giống triết lý `attribute_noise/`). Dùng thuật
   toán **Confident Learning** (Northcutt et al., JAIR 2021) với **Random
@@ -325,6 +345,19 @@ tới khi có nhu cầu đổi tên repo thật sự.
     nguyên tắc "chỉ validate ở biên hệ thống" của dự án. `_csv_preview_rows()`
     đọc trước tối đa 21 dòng (1 header + 20 data) của CSV kết quả để FE hiện
     bảng xem trước, tránh FE phải tự viết 1 bộ phân tích CSV bằng JS.
+  - **Free Tools (mục 17):** 4 route `POST /api/noise-tools/remove-duplicates`,
+    `/trim-whitespace`, `/fill-blanks`, `/remove-empty-rows` (`@login_required`
+    cả 4) — vận hành GIỐNG 3 route Convert File ở trên (không cần `file_id`/
+    `UPLOADED_FILES`, xong trong ĐÚNG 1 request) nhưng KHÁC ở chỗ cần hiểu
+    DỮ LIỆU DẠNG BẢNG nên đọc qua pandas (`_read_df_for_noise_tool()`: file
+    tải lên dùng `load_data()` giống Workspace rồi XOÁ NGAY file tạm sau khi
+    đọc; text dán tay dùng thẳng `pd.read_csv()` cùng tham số `load_data()`
+    dùng cho CSV) thay vì module `csv`/`json` chuẩn như `converters/transform.py`.
+    `_noise_tool_response()` đóng gói kết quả CÙNG SHAPE 3 route Convert
+    (`result_text` để tải về + `preview_rows` tái dùng `_csv_preview_rows()`),
+    cộng `stats` (từ `quick_tools.py`) để FE hiện số dòng/số ô đã đổi. Bắt
+    `QuickToolError` trả 400 kèm message rõ, bắt thêm `Exception` chung (file
+    hỏng/parse lỗi...) cũng trả 400 thay vì để lộ lỗi 500 thô.
 - `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI dạng "panel theo
   bước" (chỉ 1 `.panel.is-active` hiện tại 1 thời điểm) với **5 bước**:
   1. Tải file lên → `POST /api/upload`.
@@ -524,6 +557,27 @@ tới khi có nhu cầu đổi tên repo thật sự.
   (chỉ hiện khi đã đăng nhập); nút "Hồ sơ" ở `convert.html` điều hướng về
   `index.html?open=profile` — `onLoggedIn()` tự đọc query param này và mở
   luôn `#panel-profile`, đỡ phải bấm "Hồ sơ" thêm 1 lần nữa.
+
+  **Free Tools (mục 17) — `tools.html` + `tools.js`, trang riêng tách khỏi
+  `index.html`, dựng Y HỆT bố cục `convert.html` (01 ĐẦU VÀO/02 KẾT QUẢ, toggle
+  File/Dán text, tab chọn tool) + tái dùng NGUYÊN CSS `.convert-*` không đổi
+  tên class (giống cách `landing.html` tái dùng `.auth-demo-card` mà không
+  đổi tên) -- chỉ khác Ý NGHĨA 4 tab (xử lý NHIỄU dữ liệu, không phải đổi
+  định dạng) và luôn hiện bảng preview CSV (không có nhánh "kết quả là JSON
+  dạng text thô" như tool CSV→JSON của Convert, vì cả 4 Free Tools đều xuất
+  CSV).** `state.tool` khớp ĐÚNG hậu tố route (`remove-duplicates`/
+  `trim-whitespace`/`fill-blanks`/`remove-empty-rows`), bấm "Chạy" gọi thẳng
+  `/api/noise-tools/${state.tool}`. `statusFromStats()` gộp `stats` trả về
+  (xem `_noise_tool_response()` ở app.py) thành 1 câu dễ hiểu ưu tiên nói SỐ
+  DÒNG trước ("đã xoá N dòng (a → b)" hoặc "giữ nguyên N dòng"), chỉ thêm
+  "đã sửa N ô" nếu có (tool Cắt khoảng trắng/Điền giá trị không xoá dòng nào,
+  chỉ sửa ô). Tool "Điền/xoá ô trống" dùng Ô TEXT để gõ TÊN CỘT (không phải
+  dropdown chọn từ danh sách cột) -- quyết định có chủ đích để KHÔNG cần
+  thêm 1 API "xem trước danh sách cột" riêng (phá vỡ tính "1 request là
+  xong" của Free Tools): gõ sai tên cột thì backend trả lỗi 400 rõ ràng
+  ("Cột 'x' không tồn tại trong file"), chấp nhận được cho mức độ đơn giản
+  Free Tools hướng tới. Link "🧹 Free Tools" đặt CẠNH link "🔀 Convert File"
+  trong `#account-area` ở header `index.html`.
 
   **Nâng cấp visual 5 bước chính (áp mẫu eyebrow/badge của `#panel-auth`/
   `convert.html` lên toàn app)** — sau khi xem lại giao diện tham khảo
@@ -1113,6 +1167,74 @@ tới khi có nhu cầu đổi tên repo thật sự.
       Noise 5 bước cũ (23 kịch bản ở mục 14) chạy lại SAU KHI thêm tính
       năng này, xác nhận không hồi quy.
 
+17. **Free Tools — 4 công cụ xử lý nhiễu KHÔNG cần cấu hình (Xoá dòng trùng/
+    Cắt khoảng trắng thừa/Điền-xoá ô trống đơn giản/Xoá dòng trống hoàn
+    toàn), trang riêng `tools.html` — ĐÃ CODE XONG, ĐÃ KIỂM CHỨNG:**
+    - **Nguồn gốc**: sau khi xem lại trang tham khảo (CYD) có khối "Free
+      Tools" ở header (dropdown các tool nhỏ, mỗi tool 1 trang bố cục trái
+      upload/phải kết quả), user muốn SPARK có khối tương tự, nhưng nêu
+      đúng vấn đề thật: SPARK đang có 11 loại attribute noise + Class Noise,
+      TOÀN BỘ đều bắt cấu hình tay (chọn cột, chọn dtype, chọn tham số...) ở
+      Workspace 5 bước — không giống CYD có sẵn vài thao tác "bấm phát ăn
+      ngay". Hỏi "nên gộp cái nào với cái nào" → thống nhất chia 11 loại
+      thành 2 nhóm theo TIÊU CHÍ DUY NHẤT "có cần cấu hình tay hay không":
+      - **Free Tools (4 loại, KHÔNG cần khai gì)**: `duplicate_row` (xoá
+        dòng trùng — chỉ cần chọn cột so sánh TUỲ CHỌN, không bắt buộc),
+        `whitespace_noise` (cắt khoảng trắng — vốn đã "luôn an toàn, auto"
+        ở Workspace), `missing_value` RÚT GỌN (chỉ còn remove row/giá trị cố
+        định, bỏ impute mean/median/KNN/mode vì những lựa chọn đó CẦN hiểu
+        dtype/ý nghĩa cột), và 1 loại HOÀN TOÀN MỚI "xoá dòng trống hoàn
+        toàn" (tương đương "Remove empty rows" của CYD — SPARK trước đó
+        CHƯA có detector cấp dòng nào xét "cả dòng tự nó trống" ngoài
+        `duplicate_row`, vốn so sánh GIỮA các dòng chứ không xét 1 dòng).
+      - **Giữ nguyên ở Workspace (7 loại + Class Noise, CẦN khai dtype/tham
+        số/nhãn...)**: `format_noise`, `out_of_range`, `outlier`,
+        `inconsistent_category`, `missing_value` BẢN ĐẦY ĐỦ (còn nguyên 5
+        lựa chọn impute), 4 rule liên cột, Class Noise (3 thuật toán).
+      - Lưu ý: "Thiếu giá trị" xuất hiện ở CẢ 2 nhóm — KHÔNG phải 2 detector
+        khác nhau, mà CÙNG 1 khái niệm (`_is_missing_text`, giống định nghĩa
+        `missing_value` ở Workspace) nhưng Free Tools chỉ lộ ra 2/5 hành
+        động xử lý để giữ đúng tinh thần "không cấu hình".
+      - Go-ahead cuối cùng: **"OKe làm luôn đi t xem nào."**
+    - **Kiến trúc tái dùng tối đa, không viết lại logic đã có**:
+      `attribute_noise/quick_tools.py` (xem mục kiến trúc ở trên) import
+      trực tiếp `_clean_whitespace_value()`/`_is_missing_text()` từ
+      `attribute_handling.py` thay vì copy lại — đảm bảo Free Tools và
+      Workspace đầy đủ LUÔN ra cùng 1 kết quả cho cùng 1 dữ liệu, không bao
+      giờ lệch nhau do 2 nơi định nghĩa "thiếu"/"khoảng trắng thừa" trôi
+      dần theo thời gian. KHÔNG tái dùng `apply_handling()` (bản đầy đủ) vì
+      hàm đó bắt buộc phải có `findings`/`ColumnNoiseConfig` — tức là phải
+      chạy qua bước "detect" trước, đi ngược lại đúng tinh thần "1 request
+      là xong" của Free Tools; viết 4 hàm trực tiếp thao tác DataFrame thay
+      vào đó, ngắn gọn hơn hẳn so với dựng `findings` giả để gọi hàm cũ.
+    - **4 route `/api/noise-tools/*` vận hành giống hệt 3 route Convert File**
+      (mục 15) — KHÔNG có `file_id`, xong trong 1 request, `@login_required`
+      (đúng nguyên tắc "mọi route xử lý dữ liệu đều bắt đăng nhập" đã chốt
+      từ Convert File) — chỉ khác ở chỗ phải đọc dữ liệu bằng pandas
+      (`_read_df_for_noise_tool()`) vì đây là thao tác BẢNG, không phải đổi
+      định dạng văn bản thuần như converters/transform.py.
+    - **`tools.html`/`tools.js` dựng Y HỆT bố cục `convert.html`** (xem mục
+      kiến trúc frontend/ ở trên) — quyết định có chủ đích: người dùng vừa
+      mới quen mắt với bố cục Convert File, giữ nguyên bố cục cho Free Tools
+      giúp không phải học lại cách dùng trang mới; khác biệt DUY NHẤT về
+      hành vi là luôn hiện bảng CSV (Free Tools không có tool nào xuất JSON).
+    - **Quyết định riêng — ô TEXT gõ tên cột thay vì dropdown ở "Điền/xoá ô
+      trống"**: đã cân nhắc thêm 1 API "xem trước danh sách cột" (giống
+      `/api/upload` trả `columns`) để dựng dropdown, nhưng sẽ phá vỡ tính
+      "1 request duy nhất" mà cả Convert File lẫn 3 Free Tools còn lại đều
+      giữ được — chọn ô text đơn giản hơn, gõ sai tên cột thì backend trả
+      lỗi 400 rõ ràng ngay, chấp nhận được cho mức độ "free tool" hướng tới.
+    - **Cách kiểm chứng**: 23 test độc lập cho `quick_tools.py` (gọi thẳng
+      hàm Python, không qua Flask) + 26 test Flask test client cho 4 route
+      (gồm chặn chưa đăng nhập → 401, lỗi cột/giá trị → 400, upload file
+      thật lẫn dán text) + 18 kịch bản Playwright trình duyệt thật (bounce
+      về index.html khi chưa đăng nhập, điều hướng qua lại bằng link header,
+      cả 4 tool chạy với dữ liệu thật, tải file CSV kết quả về, lỗi cột sai
+      tên hiện đúng chỗ) — cả 3 bộ PASS 100% trước khi commit. Chạy lại bộ
+      test Flask (`test_accounts_flow.py` 43 + `test_convert_routes.py` 23)
+      và Playwright cũ (`playwright_test.js` 23 + `playwright_convert_test.js`
+      16) SAU KHI thêm tính năng này, xác nhận không hồi quy.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -1189,6 +1311,13 @@ tới khi có nhu cầu đổi tên repo thật sự.
       file 3 bước. `index.html` (app thật) lùi về `/index.html`. Nhân tiện fix 1 lỗi CSS (`.btn` trên
       `<a>` bị gạch chân mặc định trình duyệt). Đã test 6 kịch bản Playwright mới + 39 kịch bản cũ không
       hồi quy (sau khi cập nhật route trong chính script test).
+- [x] Free Tools (mục 17): `attribute_noise/quick_tools.py` (4 hàm, tái dùng logic có sẵn trong
+      `attribute_handling.py`, không qua `apply_handling()` đầy đủ) + 4 route `/api/noise-tools/*`
+      (`@login_required`, stateless giống Convert File) + trang riêng `tools.html`/`tools.js` (bố cục
+      y hệt `convert.html`) + link header "🧹 Free Tools". Gộp 11 loại attribute noise thành 4 "không
+      cần cấu hình" (xoá dòng trùng/cắt khoảng trắng/điền-xoá ô trống đơn giản/xoá dòng trống hoàn
+      toàn — loại cuối HOÀN TOÀN MỚI) vs 7+Class Noise vẫn ở Workspace (cần khai dtype/tham số/nhãn).
+      Đã test 23 test độc lập + 26 Flask test client + 18 Playwright, không hồi quy bộ test cũ.
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá
       chậm trên 284.807 dòng, đã huỷ giữa chừng) — cần chạy lại với
       n_estimators thấp hơn hoặc lấy mẫu con nếu muốn có số liệu so sánh

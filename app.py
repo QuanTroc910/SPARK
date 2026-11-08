@@ -50,6 +50,13 @@ from attribute_noise.pipeline import (
     guess_column_dtype,
     load_data,
 )
+from attribute_noise.quick_tools import (
+    QuickToolError,
+    quick_fill_or_remove_blanks,
+    quick_remove_duplicates,
+    quick_remove_empty_rows,
+    quick_trim_whitespace,
+)
 from class_noise.categorical_encoding import one_hot_encode_columns
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
@@ -1422,6 +1429,126 @@ def convert_json_to_csv_api():
             "preview_rows": preview,
         }
     )
+
+
+# =============================================================================
+# "Free Tools" (noise-tools) -- 4 công cụ xử lý nhiễu KHÔNG cần cấu hình tay,
+# đối lập với 7 loại Attribute Noise + Class Noise ở Workspace (5 bước chính,
+# luôn cần chọn cột/tham số trước khi detect). Vận hành GIỐNG Convert File
+# (@login_required, KHÔNG cần file_id/UPLOADED_FILES, xong trong ĐÚNG 1
+# request) nhưng KHÁC ở chỗ cần hiểu DỮ LIỆU DẠNG BẢNG (trùng dòng, ô nào
+# trống...) nên đọc bằng pandas qua load_data()/pd.read_csv() (giống
+# Workspace) thay vì module csv/json chuẩn như converters/transform.py.
+# =============================================================================
+
+
+def _read_df_for_noise_tool(req) -> pd.DataFrame:
+    """Đọc DataFrame từ request -- chấp nhận file tải lên (CSV/Excel, field
+    "file") HOẶC CSV text dán tay (field "text"), giống 2 tab FILE/PASTE của
+    convert.html. File tải lên được lưu TẠM rồi XOÁ NGAY sau khi đọc xong
+    (khác /api/upload giữ nguyên file trong UPLOAD_DIR để dùng lại ở các
+    bước sau) -- free tool chạy xong 1 lần là kết thúc, không cần giữ gì lại."""
+    file = req.files.get("file")
+    if file is not None and file.filename:
+        temp_path = UPLOAD_DIR / f"_quicktool_{uuid.uuid4()}_{file.filename}"
+        file.save(temp_path)
+        try:
+            return load_data(str(temp_path))
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    text = req.form.get("text", "")
+    if text.strip():
+        # Đọc CSV text dán tay bằng ĐÚNG tham số load_data() dùng cho CSV
+        # (dtype=str, keep_default_na=False, na_filter=False) -- giữ nguyên
+        # văn mọi giá trị, không để pandas tự suy đoán kiểu/NaN (xem lý do
+        # gốc ở pipeline.py::load_data()).
+        return pd.read_csv(StringIO(text), dtype=str, keep_default_na=False, na_filter=False)
+
+    raise QuickToolError("Thiếu file hoặc nội dung dán tay")
+
+
+def _noise_tool_response(result_df: pd.DataFrame, stats: dict) -> Response:
+    """Đóng gói kết quả giống các route /api/convert/* (result_text để tải
+    về + preview_rows để FE hiện bảng), tái dùng _csv_preview_rows() đã có."""
+    buffer = StringIO()
+    result_df.to_csv(buffer, index=False)
+    result_text = buffer.getvalue()
+    return jsonify(
+        {
+            "result_text": result_text,
+            "stats": stats,
+            "preview_rows": _csv_preview_rows(result_text, ","),
+        }
+    )
+
+
+@app.route("/api/noise-tools/remove-duplicates", methods=["POST"])
+@login_required
+def noise_tool_remove_duplicates():
+    """Free Tool 1: Xoá dòng trùng -- subset_columns để trống = so trùng
+    trên TOÀN BỘ cột."""
+    try:
+        df = _read_df_for_noise_tool(request)
+        subset_raw = request.form.get("subset_columns", "").strip()
+        subset_columns = [c.strip() for c in subset_raw.split(",") if c.strip()] or None
+        keep = DuplicateKeep(request.form.get("keep", "first"))
+        result_df, stats = quick_remove_duplicates(df, subset_columns, keep)
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
+    return _noise_tool_response(result_df, stats)
+
+
+@app.route("/api/noise-tools/trim-whitespace", methods=["POST"])
+@login_required
+def noise_tool_trim_whitespace():
+    """Free Tool 2: Cắt khoảng trắng thừa trên MỌI ô -- không có tham số nào."""
+    try:
+        df = _read_df_for_noise_tool(request)
+        result_df, stats = quick_trim_whitespace(df)
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
+    return _noise_tool_response(result_df, stats)
+
+
+@app.route("/api/noise-tools/fill-blanks", methods=["POST"])
+@login_required
+def noise_tool_fill_blanks():
+    """Free Tool 3: Điền/xoá ô trống ở ĐÚNG 1 cột người dùng tự gõ tên."""
+    try:
+        df = _read_df_for_noise_tool(request)
+        column = request.form.get("column", "").strip()
+        if not column:
+            raise QuickToolError("Thiếu tên cột cần xử lý")
+        action = request.form.get("action", "")
+        fixed_value = request.form.get("fixed_value")
+        result_df, stats = quick_fill_or_remove_blanks(df, column, action, fixed_value)
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
+    return _noise_tool_response(result_df, stats)
+
+
+@app.route("/api/noise-tools/remove-empty-rows", methods=["POST"])
+@login_required
+def noise_tool_remove_empty_rows():
+    """Free Tool 4: Xoá dòng trống hoàn toàn (MỌI cột đều thiếu) -- loại
+    noise cấp dòng MỚI, chưa có detector riêng ở luồng Attribute Noise đầy
+    đủ (khác duplicate_row, cũng cấp dòng nhưng so sánh GIỮA các dòng chứ
+    không xét 1 dòng tự nó trống hay không)."""
+    try:
+        df = _read_df_for_noise_tool(request)
+        result_df, stats = quick_remove_empty_rows(df)
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
+    return _noise_tool_response(result_df, stats)
 
 
 if __name__ == "__main__":

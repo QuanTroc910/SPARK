@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Free Tools — Dò &amp; Xử Lý Nhiễu Dữ Liệu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;650;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="auth-ready">
+  <!-- Trang ĐỘC LẬP với index.html, giống convert.html -- vẫn bắt đăng nhập
+       (cookie session dùng CHUNG, cùng origin) nhưng form đăng nhập thật CHỈ
+       sống ở index.html -- chưa đăng nhập thì tools.js tự chuyển hướng về đó
+       (checkAuth()), không viết lại form đăng nhập lần 2 ở đây. KHÁC
+       convert.html ở Ý NGHĨA (4 tool này xử lý NHIỄU dữ liệu, không phải đổi
+       định dạng), nhưng TÁI DÙNG nguyên bố cục/CSS .convert-* đã có (giống
+       cách landing.html tái dùng .auth-demo-card mà không đổi tên class). -->
+  <header class="app-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <a class="btn btn-ghost btn-small" href="index.html">← Trang chính</a>
+        <div class="brand-text">
+          <span class="brand-title">🧹 Free Tools</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <span id="backend-dot" class="status-dot is-offline"></span>
+        <span id="backend-status-text">Backend: đang kiểm tra…</span>
+      </div>
+      <div class="account-area" id="account-area" hidden>
+        <span class="account-username mono" id="account-username-text"></span>
+        <button class="btn btn-ghost btn-small" id="open-profile-btn" type="button">Hồ sơ</button>
+        <button class="btn btn-ghost btn-small" id="logout-btn" type="button">Đăng xuất</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container main-area">
+    <div class="convert-hero">
+      <p class="auth-eyebrow">[ FREE TOOLS ]</p>
+      <h1 class="auth-headline">Free Tools</h1>
+      <p class="panel-desc">
+        4 lỗi dữ liệu phổ biến, hay gặp nhất, xử lý ĐƯỢC NGAY mà không cần khai báo kiểu cột/tham số như ở
+        Workspace (Bước 3-5 trang chính) -- upload hoặc dán dữ liệu, bấm 1 nút là ra file sạch, tải về luôn.
+        Muốn xử lý sâu hơn (vd điền giá trị trung bình/KNN, phát hiện outlier, rule liên cột, Class Noise…)
+        thì quay lại <a href="index.html">trang chính</a>, nơi có đủ cấu hình chi tiết cho từng cột.
+      </p>
+    </div>
+
+    <div class="convert-badges">
+      <span class="convert-badge">⚡ Không cần cấu hình tay</span>
+      <span class="convert-badge">🔒 Cần đăng nhập</span>
+      <span class="convert-badge">🧮 Luôn xử lý qua backend Flask thật</span>
+    </div>
+
+    <div class="convert-tabs" id="convert-tabs">
+      <button type="button" class="convert-tab is-active" data-tool="remove-duplicates">🧬 Xoá dòng trùng</button>
+      <button type="button" class="convert-tab" data-tool="trim-whitespace">✂️ Cắt khoảng trắng thừa</button>
+      <button type="button" class="convert-tab" data-tool="fill-blanks">🩹 Điền/xoá ô trống</button>
+      <button type="button" class="convert-tab" data-tool="remove-empty-rows">🗑️ Xoá dòng trống</button>
+    </div>
+
+    <div class="convert-grid">
+      <!-- 01 · ĐẦU VÀO -->
+      <section class="convert-panel">
+        <div class="convert-panel-head">
+          <span class="convert-panel-eyebrow">01 · ĐẦU VÀO</span>
+          <div class="convert-input-toggle" id="convert-input-toggle">
+            <button type="button" class="is-active" data-mode="file">File</button>
+            <button type="button" data-mode="paste">Dán text</button>
+          </div>
+        </div>
+
+        <label class="dropzone dropzone--compact" id="convert-dropzone">
+          <span class="dropzone-icon">📄</span>
+          <p>Kéo thả hoặc bấm để chọn file (CSV/Excel)</p>
+          <p class="hint-note" id="convert-file-name">Chưa chọn file nào</p>
+        </label>
+        <input type="file" id="convert-file-input" accept=".csv,.xlsx,.xls" hidden />
+        <textarea class="input mono convert-paste-input" id="convert-paste-input" rows="9" placeholder="Dán nội dung CSV vào đây (dòng đầu là tên cột)…" hidden></textarea>
+
+        <!-- Tuỳ chọn riêng từng tool -- chỉ 1 khối hiện tại 1 thời điểm, khớp state.tool -->
+        <div class="convert-options" id="convert-options-remove-duplicates">
+          <div class="field-row">
+            <div class="field field-grow">
+              <label>Chỉ so theo các cột này (để trống = so toàn bộ)</label>
+              <input class="input" id="opt-subset-columns" placeholder="vd: email, so_dien_thoai" />
+            </div>
+            <div class="field">
+              <label>Giữ lại bản nào</label>
+              <select class="select" id="opt-keep">
+                <option value="first">Đầu tiên</option>
+                <option value="last">Cuối cùng</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="convert-options" id="convert-options-trim-whitespace" hidden>
+          <p class="panel-desc">
+            Cắt khoảng trắng dư ở đầu/cuối MỌI ô của MỌI cột (vd "&nbsp;&nbsp;An&nbsp;&nbsp;" → "An") -- không có
+            tham số nào để chọn, luôn an toàn vì chỉ sửa cách hiển thị chuỗi, không đổi ý nghĩa dữ liệu.
+          </p>
+        </div>
+
+        <div class="convert-options" id="convert-options-fill-blanks" hidden>
+          <div class="field-row">
+            <div class="field field-grow">
+              <label>Tên cột cần xử lý (gõ đúng tên cột)</label>
+              <input class="input" id="opt-column" placeholder="vd: age" />
+            </div>
+            <div class="field">
+              <label>Cách xử lý</label>
+              <select class="select" id="opt-action">
+                <option value="remove_row">Xoá cả dòng thiếu</option>
+                <option value="fixed_value">Điền giá trị cố định</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" id="opt-fixed-value-wrap" hidden>
+            <label>Giá trị điền vào</label>
+            <input class="input" id="opt-fixed-value" placeholder="vd: 0, hoặc Không rõ" />
+          </div>
+        </div>
+
+        <div class="convert-options" id="convert-options-remove-empty-rows" hidden>
+          <p class="panel-desc">
+            Xoá những DÒNG mà TẤT CẢ các cột đều trống (khác "Điền/xoá ô trống" ở trên -- tool đó xét 1 cột
+            riêng, tool này xét CẢ DÒNG cùng lúc) -- không có tham số nào để chọn.
+          </p>
+        </div>
+
+        <p class="form-error" id="convert-error" hidden></p>
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="convert-run-btn" type="button">Chạy</button>
+          <span class="status-text" id="convert-status"></span>
+        </div>
+      </section>
+
+      <!-- 02 · KẾT QUẢ -->
+      <section class="convert-panel">
+        <div class="convert-panel-head">
+          <span class="convert-panel-eyebrow">02 · KẾT QUẢ</span>
+          <button class="btn btn-ghost btn-small" id="convert-download-btn" type="button" disabled>⬇ Tải xuống CSV</button>
+        </div>
+        <p class="empty-state" id="convert-result-empty">Kết quả sẽ hiện ở đây ngay khi bạn bấm "Chạy".</p>
+        <div class="table-wrap" id="convert-result-table-wrap" hidden>
+          <table class="results-table" id="convert-result-table"></table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="tools.js"></script>
+</body>
+</html>
