@@ -8,15 +8,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;650;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="tools.css" />
 </head>
 <body class="auth-ready">
   <!-- Trang ĐỘC LẬP với index.html, giống convert.html -- vẫn bắt đăng nhập
        (cookie session dùng CHUNG, cùng origin) nhưng form đăng nhập thật CHỈ
-       sống ở index.html -- chưa đăng nhập thì tools.js tự chuyển hướng về đó
-       (checkAuth()), không viết lại form đăng nhập lần 2 ở đây. KHÁC
-       convert.html ở Ý NGHĨA (4 tool này xử lý NHIỄU dữ liệu, không phải đổi
-       định dạng), nhưng TÁI DÙNG nguyên bố cục/CSS .convert-* đã có (giống
-       cách landing.html tái dùng .auth-demo-card mà không đổi tên class). -->
+       sống ở index.html. Bản MỚI (sau khi so với trang tham khảo CYD): mỗi
+       tool có hero/before-after/cách hoạt động/giải thích RIÊNG (đổi theo
+       tab, render bằng JS từ TOOL_INFO trong tools.js, xem tools.css) +
+       thêm cơ chế "nối tiếp" (pipeline) để xử lý NHIỀU tool liên tiếp mà
+       không phải tải file về/tải lên lại giữa chừng. -->
   <header class="app-header">
     <div class="container header-inner">
       <div class="brand">
@@ -38,16 +39,9 @@
   </header>
 
   <main class="container main-area">
-    <div class="convert-hero">
-      <p class="auth-eyebrow">[ FREE TOOLS ]</p>
-      <h1 class="auth-headline">Free Tools</h1>
-      <p class="panel-desc">
-        4 lỗi dữ liệu phổ biến, hay gặp nhất, xử lý ĐƯỢC NGAY mà không cần khai báo kiểu cột/tham số như ở
-        Workspace (Bước 3-5 trang chính) -- upload hoặc dán dữ liệu, bấm 1 nút là ra file sạch, tải về luôn.
-        Muốn xử lý sâu hơn (vd điền giá trị trung bình/KNN, phát hiện outlier, rule liên cột, Class Noise…)
-        thì quay lại <a href="index.html">trang chính</a>, nơi có đủ cấu hình chi tiết cho từng cột.
-      </p>
-    </div>
+    <!-- Hero RIÊNG từng tool -- nội dung đổ vào bằng JS (renderToolHero()),
+         đổi theo tab đang chọn, xem TOOL_INFO trong tools.js. -->
+    <div id="tool-hero"></div>
 
     <div class="convert-badges">
       <span class="convert-badge">⚡ Không cần cấu hình tay</span>
@@ -60,6 +54,17 @@
       <button type="button" class="convert-tab" data-tool="trim-whitespace">✂️ Cắt khoảng trắng thừa</button>
       <button type="button" class="convert-tab" data-tool="fill-blanks">🩹 Điền/xoá ô trống</button>
       <button type="button" class="convert-tab" data-tool="remove-empty-rows">🗑️ Xoá dòng trống</button>
+    </div>
+
+    <!-- Thanh "đang nối tiếp" -- CHỈ hiện khi đã có 1 pipeline đang chạy
+         (xem state.pipeline trong tools.js). Ẩn khung chọn file/dán text
+         bên dưới khi thanh này hiện, trừ khi bấm "Tải file khác". -->
+    <div class="pipeline-strip" id="pipeline-strip" hidden>
+      <span class="pipeline-strip-text" id="pipeline-strip-text"></span>
+      <span class="pipeline-strip-actions">
+        <button class="btn btn-ghost btn-small" id="pipeline-new-file-btn" type="button">⬆ Tải file khác</button>
+        <button class="btn btn-ghost btn-small" id="pipeline-reset-btn" type="button">↺ Bắt đầu lại từ gốc</button>
+      </span>
     </div>
 
     <div class="convert-grid">
@@ -96,13 +101,14 @@
               </select>
             </div>
           </div>
+          <label class="switch-row"><input type="checkbox" id="opt-ignore-case" /> Bỏ qua hoa/thường (vd "An" và "AN" tính là trùng)</label>
+          <label class="switch-row"><input type="checkbox" id="opt-ignore-whitespace" /> Bỏ qua khoảng trắng thừa khi so sánh</label>
         </div>
 
         <div class="convert-options" id="convert-options-trim-whitespace" hidden>
-          <p class="panel-desc">
-            Cắt khoảng trắng dư ở đầu/cuối MỌI ô của MỌI cột (vd "&nbsp;&nbsp;An&nbsp;&nbsp;" → "An") -- không có
-            tham số nào để chọn, luôn an toàn vì chỉ sửa cách hiển thị chuỗi, không đổi ý nghĩa dữ liệu.
-          </p>
+          <label class="switch-row"><input type="checkbox" id="opt-collapse-repeated" /> Gộp khoảng trắng lặp lại ("a␣␣b" → "a␣b")</label>
+          <label class="switch-row"><input type="checkbox" id="opt-remove-zero-width" checked /> Xoá ký tự vô hình (zero-width)</label>
+          <p class="hint-note">Luôn cắt khoảng trắng đầu/cuối và đổi non-breaking space thành dấu cách thường, dù tick hay không.</p>
         </div>
 
         <div class="convert-options" id="convert-options-fill-blanks" hidden>
@@ -114,8 +120,9 @@
             <div class="field">
               <label>Cách xử lý</label>
               <select class="select" id="opt-action">
-                <option value="remove_row">Xoá cả dòng thiếu</option>
+                <option value="fill_down">Điền theo giá trị phía trên</option>
                 <option value="fixed_value">Điền giá trị cố định</option>
+                <option value="remove_row">Xoá cả dòng thiếu</option>
               </select>
             </div>
           </div>
@@ -126,10 +133,7 @@
         </div>
 
         <div class="convert-options" id="convert-options-remove-empty-rows" hidden>
-          <p class="panel-desc">
-            Xoá những DÒNG mà TẤT CẢ các cột đều trống (khác "Điền/xoá ô trống" ở trên -- tool đó xét 1 cột
-            riêng, tool này xét CẢ DÒNG cùng lúc) -- không có tham số nào để chọn.
-          </p>
+          <label class="switch-row"><input type="checkbox" id="opt-remove-empty-columns" /> Xoá luôn cột nào trống hoàn toàn (mọi dòng đều thiếu)</label>
         </div>
 
         <p class="form-error" id="convert-error" hidden></p>
@@ -149,8 +153,26 @@
         <div class="table-wrap" id="convert-result-table-wrap" hidden>
           <table class="results-table" id="convert-result-table"></table>
         </div>
+
+        <!-- "Xử lý tiếp" -- CHỈ hiện sau khi có ít nhất 1 kết quả, xem
+             renderContinuePanel() trong tools.js. 3 danh mục y hệt dropdown
+             "Product" ở header Workspace (Cần cấu hình/Convert/Tự động). -->
+        <div class="continue-panel" id="continue-panel" hidden>
+          <p class="continue-title">✅ Xong -- xử lý tiếp bằng:</p>
+          <div class="continue-pills" id="continue-pills">
+            <button type="button" class="continue-pill" data-category="configure">Cần cấu hình</button>
+            <button type="button" class="continue-pill" data-category="convert">Convert</button>
+            <button type="button" class="continue-pill" data-category="auto">Tự động</button>
+          </div>
+          <div class="continue-list" id="continue-list"></div>
+        </div>
       </section>
     </div>
+
+    <!-- "Cách hoạt động" (3 bước) + giải thích 3 cột -- RIÊNG từng tool,
+         render bằng JS, đổi theo tab đang chọn (giống #tool-hero ở trên). -->
+    <div class="tool-steps" id="tool-steps"></div>
+    <div class="tool-explainer" id="tool-explainer"></div>
   </main>
 
   <script src="tools.js"></script>

@@ -7,25 +7,29 @@ apply_handling()`) ở chỗ:
   - Mỗi hàm nhận `df` vào, trả về (df đã xử lý, stats) LUÔN trong 1 lần gọi
     -- đúng tinh thần "Free Tools" của 1 trang tham khảo (CYD): bấm 1 phát
     là xong, không cấu hình nhiều bước như Workspace (5 bước chính).
-  - TÁI DÙNG logic "thế nào là ô thiếu"/"thế nào là khoảng trắng thừa" đã
-    có sẵn trong `attribute_handling.py` (không viết lại lần 2) -- để người
-    dùng dùng Free Tools hay Workspace đều ra CÙNG 1 định nghĩa, không lệch
-    kết quả giữa 2 luồng.
-  - `_is_missing_text`/`_clean_whitespace_value` import trực tiếp (kể cả có
-    dấu `_` ở đầu, quy ước "riêng tư" của Python chỉ là quy ước, không bị
-    chặn) thay vì copy lại: 2 module cùng nằm trong package `attribute_noise`,
-    chia sẻ logic nội bộ như vậy là hợp lý, tránh 2 nơi định nghĩa "thiếu"
-    khác nhau rồi lệch nhau theo thời gian. KHÔNG dùng `detectors._is_missing`
+  - TÁI DÙNG logic "thế nào là ô thiếu" đã có sẵn trong `attribute_handling.py`
+    (không viết lại lần 2) -- để Free Tools và Workspace ra CÙNG 1 định nghĩa.
+  - `_is_missing_text` import trực tiếp (kể cả có dấu `_` ở đầu, quy ước
+    "riêng tư" của Python chỉ là quy ước) thay vì copy lại -- 2 module cùng
+    nằm trong package `attribute_noise`. KHÔNG dùng `detectors._is_missing`
     (bản có `cfg: ColumnNoiseConfig` tuỳ biến theo cột) vì Free Tools không
-    thu thập cấu hình riêng từng cột -- `_is_missing_text` (dùng thẳng
-    `DEFAULT_MISSING_PLACEHOLDERS`) mới đúng tinh thần "không cấu hình gì".
+    thu thập cấu hình riêng từng cột.
+  - **MỚI**: 4 tuỳ chọn thêm cho đúng bằng tool tham khảo (CYD) -- xem từng
+    hàm bên dưới. Việc cắt khoảng trắng ở đây dùng hàm RIÊNG
+    `_clean_whitespace_advanced()` (KHÔNG tái dùng `_clean_whitespace_value()`
+    của attribute_handling.py nữa) vì hàm cũ LUÔN gộp khoảng trắng lặp lại,
+    không có cờ bật/tắt -- tool tham khảo cần "Gộp khoảng trắng lặp lại" là
+    tuỳ chọn RIÊNG (mặc định TẮT), còn Workspace đầy đủ vẫn giữ nguyên hành
+    vi cũ của `_clean_whitespace_value()` (không đổi, để không ảnh hưởng
+    tính năng đã test kỹ).
 """
 
+import re
 from typing import Optional
 
 import pandas as pd
 
-from .attribute_handling import DuplicateKeep, _clean_whitespace_value, _is_missing_text
+from .attribute_handling import DuplicateKeep, _is_missing_text
 
 
 class QuickToolError(Exception):
@@ -48,27 +52,94 @@ def _stats(df_before: pd.DataFrame, df_after: pd.DataFrame, cells_changed: int =
     }
 
 
+# U+200B..200D (zero-width space/non-joiner/joiner) + U+FEFF (BOM, cũng gọi là
+# "zero width no-break space") -- đúng 4 ký tự tool tham khảo (CYD) ghi rõ
+# trong mô tả "zero-width characters". U+00A0 (non-breaking space) KHÔNG nằm
+# trong nhóm này -- xử lý riêng ở dưới (đổi thành dấu cách thường, không XOÁ
+# hẳn, vì nó vẫn là 1 dấu cách "nhìn thấy được", chỉ sai loại ký tự).
+_ZERO_WIDTH_PATTERN = re.compile("[​‌‍﻿]")
+
+
+def _clean_whitespace_advanced(value, collapse_repeated: bool, remove_zero_width: bool) -> str:
+    """Cắt khoảng trắng cho tool "Cắt khoảng trắng thừa" -- LUÔN đổi
+    non-breaking space (U+00A0) thành dấu cách thường rồi cắt đầu/cuối
+    (hành vi CƠ BẢN, không tắt được, vì đây chính là lý do tool này tồn tại);
+    2 THAM SỐ còn lại là tuỳ chọn BẬT/TẮT riêng, khớp đúng 2 checkbox của
+    tool tham khảo (CYD): `collapse_repeated` (gộp nhiều dấu cách liên tiếp
+    thành 1, mặc định TẮT) và `remove_zero_width` (xoá ký tự vô hình, mặc
+    định BẬT)."""
+    text = str(value).replace(" ", " ")
+    text = re.sub(r"[\t\n\r]", " ", text)
+    if remove_zero_width:
+        text = _ZERO_WIDTH_PATTERN.sub("", text)
+    text = text.strip()
+    if collapse_repeated:
+        text = re.sub(r" {2,}", " ", text)
+    return text
+
+
+def _normalize_for_compare(value, ignore_case: bool, ignore_whitespace: bool) -> str:
+    """Chuẩn hoá 1 giá trị CHỈ ĐỂ SO SÁNH xem có trùng không -- KHÔNG dùng để
+    ghi lại vào dữ liệu (dữ liệu gốc giữ nguyên, xem `quick_remove_duplicates`)."""
+    text = str(value)
+    if ignore_whitespace:
+        text = re.sub(r"\s+", " ", text.strip())
+    if ignore_case:
+        text = text.lower()
+    return text
+
+
 def quick_remove_duplicates(
-    df: pd.DataFrame, subset_columns: Optional[list[str]], keep: DuplicateKeep
+    df: pd.DataFrame,
+    subset_columns: Optional[list[str]],
+    keep: DuplicateKeep,
+    ignore_case: bool = False,
+    ignore_whitespace: bool = False,
 ) -> tuple[pd.DataFrame, dict]:
     """Xoá dòng trùng -- `subset_columns=None` nghĩa là so trùng trên TOÀN
-    BỘ cột (giống `DuplicateRowConfig.subset_columns` ở luồng đầy đủ)."""
-    if subset_columns:
-        missing = [c for c in subset_columns if c not in df.columns]
-        if missing:
-            raise QuickToolError(f"Cột không tồn tại: {', '.join(missing)}")
-    result = df.drop_duplicates(subset=subset_columns, keep=keep.value).reset_index(drop=True)
+    BỘ cột (giống `DuplicateRowConfig.subset_columns` ở luồng đầy đủ).
+
+    `ignore_case`/`ignore_whitespace` (MỚI, khớp 2 checkbox "Ignore case"/
+    "Ignore extra spaces" của tool tham khảo): chỉ ảnh hưởng tới việc SO
+    SÁNH 2 dòng có được coi là trùng hay không (vd "An" và "AN" tính là
+    trùng nếu bật `ignore_case`) -- GIÁ TRỊ THẬT được giữ lại (bản được giữ)
+    vẫn y nguyên, không bị hạ về chữ thường hay cắt khoảng trắng."""
+    compare_columns = subset_columns if subset_columns else list(df.columns)
+    missing = [c for c in compare_columns if c not in df.columns]
+    if missing:
+        raise QuickToolError(f"Cột không tồn tại: {', '.join(missing)}")
+
+    if not (ignore_case or ignore_whitespace):
+        result = df.drop_duplicates(subset=subset_columns, keep=keep.value).reset_index(drop=True)
+        return result, _stats(df, result)
+
+    # Dựng 1 bảng CHUẨN HOÁ riêng chỉ để tìm dòng trùng -- áp dụng
+    # _normalize_for_compare() lên đúng các cột đang so sánh, rồi lấy mask
+    # "dòng nào bị coi là bản trùng" từ bảng chuẩn hoá đó, áp NGƯỢC lại lên
+    # DataFrame GỐC (để không làm hỏng giá trị thật khi xoá).
+    # DataFrame.map() (KHÔNG phải .applymap() -- đã bị XOÁ hẳn ở pandas 3.0,
+    # project này dùng pandas>=2.0 nên phải dùng tên mới để chạy được trên
+    # cả 2 phiên bản mới/cũ).
+    compare_df = df[compare_columns].map(
+        lambda v: _normalize_for_compare(v, ignore_case, ignore_whitespace)
+    )
+    is_dup = compare_df.duplicated(keep=keep.value)
+    result = df[~is_dup].reset_index(drop=True)
     return result, _stats(df, result)
 
 
-def quick_trim_whitespace(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+def quick_trim_whitespace(
+    df: pd.DataFrame, collapse_repeated: bool = False, remove_zero_width: bool = True
+) -> tuple[pd.DataFrame, dict]:
     """Cắt khoảng trắng thừa trên MỌI Ô của bảng -- không cần chọn cột, vì
-    đây vốn là hành động "an toàn, luôn bật mặc định" ở luồng đầy đủ
-    (`AUTO_CLEAN_WHITESPACE`), áp dụng sẵn cho tất cả các cột ở đây."""
+    đây vốn là hành động "an toàn" áp dụng sẵn cho tất cả các cột. 2 tham số
+    MỚI khớp đúng 2 checkbox của tool tham khảo -- xem `_clean_whitespace_advanced()`."""
     result = df.copy()
     cells_changed = 0
     for col in result.columns:
-        cleaned = result[col].apply(lambda v: _clean_whitespace_value(v, None))
+        cleaned = result[col].apply(
+            lambda v: _clean_whitespace_advanced(v, collapse_repeated, remove_zero_width)
+        )
         cells_changed += int((cleaned != result[col]).sum())
         result[col] = cleaned
     return result, _stats(df, result, cells_changed)
@@ -78,10 +149,11 @@ def quick_fill_or_remove_blanks(
     df: pd.DataFrame, column: str, action: str, fixed_value: Optional[str] = None
 ) -> tuple[pd.DataFrame, dict]:
     """Điền/xoá ô trống Ở ĐÚNG 1 CỘT người dùng tự gõ tên -- `action`:
-    "remove_row" hoặc "fixed_value", đúng 2 trong số các lựa chọn
-    `get_available_actions()` đã có cho MISSING_VALUE ở luồng đầy đủ, bớt
-    đi impute mean/median/KNN/mode cho đúng tinh thần "không cấu hình" của
-    Free Tools (ai cần impute thông minh hơn thì dùng Workspace)."""
+    "fill_down" (điền theo giá trị Ở DÒNG GẦN NHẤT PHÍA TRÊN, không có thì
+    giữ nguyên trống -- khớp "Fill with value above" của tool tham khảo,
+    **MỚI**), "fixed_value" (điền 1 giá trị cố định tự gõ), hoặc "remove_row"
+    (xoá cả dòng -- SPARK giữ thêm lựa chọn này so với tool tham khảo, vì
+    đây vốn đã là hành động có sẵn/đã test kỹ, không có lý do gì bỏ đi)."""
     if column not in df.columns:
         raise QuickToolError(f"Cột '{column}' không tồn tại trong file")
     is_blank = df[column].astype(str).apply(_is_missing_text)
@@ -97,6 +169,20 @@ def quick_fill_or_remove_blanks(
         result.loc[is_blank, column] = fixed_value
         return result, _stats(df, result, cells_changed=int(is_blank.sum()))
 
+    if action == "fill_down":
+        result = df.copy()
+        # Đổi ô trống thành None rồi forward-fill (ffill): mỗi None được thay
+        # bằng giá trị KHÔNG-None GẦN NHẤT phía TRÊN nó. Dòng trống mà phía
+        # trên cũng toàn trống (hoặc là dòng đầu tiên) thì GIỮ NGUYÊN trống
+        # -- không có gì "ở trên" để điền vào, đúng hành vi tool tham khảo.
+        as_none = result[column].where(~is_blank, None)
+        filled = as_none.ffill()
+        still_blank = filled.isna()
+        filled = filled.where(~still_blank, result[column])
+        cells_changed = int((is_blank & ~still_blank).sum())
+        result[column] = filled
+        return result, _stats(df, result, cells_changed=cells_changed)
+
     raise QuickToolError(f"action không hợp lệ: {action}")
 
 
@@ -111,7 +197,25 @@ def is_row_fully_empty(df: pd.DataFrame) -> pd.Series:
     return df.apply(lambda row: all(_is_missing_text(v) for v in row), axis=1)
 
 
-def quick_remove_empty_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+def is_column_fully_empty(series: pd.Series) -> bool:
+    """Cột mà MỌI dòng đều "thiếu" -- dùng cho tuỳ chọn "Xoá luôn cột trống
+    hoàn toàn" (MỚI, khớp "Also remove empty columns" của tool tham khảo)."""
+    if series.empty:
+        return False
+    return bool(series.apply(_is_missing_text).all())
+
+
+def quick_remove_empty_rows(
+    df: pd.DataFrame, also_remove_empty_columns: bool = False
+) -> tuple[pd.DataFrame, dict]:
     mask = is_row_fully_empty(df)
     result = df[~mask].reset_index(drop=True)
-    return result, _stats(df, result)
+    columns_removed = 0
+    if also_remove_empty_columns:
+        empty_cols = [c for c in result.columns if is_column_fully_empty(result[c])]
+        if empty_cols:
+            result = result.drop(columns=empty_cols)
+            columns_removed = len(empty_cols)
+    stats = _stats(df, result)
+    stats["columns_removed"] = columns_removed
+    return result, stats

@@ -43,10 +43,39 @@ async function checkAuth() {
   }
   if (!data.user) {
     window.location.href = "index.html";
-    return;
+    return false;
   }
   $("account-area").hidden = false;
   $("account-username-text").textContent = `👤 ${data.user.username}`;
+  return true;
+}
+
+// ====== Nhận "nối tiếp" (handoff) từ Free Tools -- tools.html gửi kết quả
+// đang xử lý dở sang đây qua sessionStorage (2 trang KHÁC NHAU, không còn
+// chung bộ nhớ JS, không dùng được state.pipeline như trong tools.js nữa)
+// để người dùng không phải tải file về/tải lên lại. CHỈ áp dụng 1 LẦN DUY
+// NHẤT (xoá khỏi sessionStorage ngay sau khi đọc) -- F5 lại trang không bị
+// áp lại, không bị "dính" dữ liệu cũ nếu người dùng muốn bắt đầu việc mới. ======
+function applyHandoffIfAny() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("handoff") !== "1") return;
+  const handoffText = sessionStorage.getItem("spark_handoff_csv");
+  sessionStorage.removeItem("spark_handoff_csv");
+  if (!handoffText) return;
+
+  const tool = params.get("tool");
+  if (tool) {
+    const tabBtn = document.querySelector(`.convert-tab[data-tool="${tool}"]`);
+    if (tabBtn) tabBtn.click();
+  }
+  document.querySelector('.convert-input-toggle button[data-mode="paste"]').click();
+  $("convert-paste-input").value = handoffText;
+  setStatus("📥 Đang dùng kết quả từ Free Tools trước đó -- bấm \"Convert\" để tiếp tục.", "is-ok");
+
+  // Xoá query string khỏi URL -- F5 lại trang sẽ không cố áp dụng lần nữa
+  // (dù sessionStorage đã xoá nên có cố cũng không còn gì để đọc, chỉ là
+  // dọn URL cho sạch).
+  window.history.replaceState({}, "", window.location.pathname);
 }
 $("logout-btn").addEventListener("click", async () => {
   try {
@@ -253,5 +282,7 @@ $("convert-download-btn").addEventListener("click", () => {
 });
 
 // ====== Khởi động ======
-checkAuth();
+checkAuth().then((loggedIn) => {
+  if (loggedIn) applyHandoffIfAny();
+});
 checkBackendHealth();

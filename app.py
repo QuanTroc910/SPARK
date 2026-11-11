@@ -1487,13 +1487,18 @@ def _noise_tool_response(result_df: pd.DataFrame, stats: dict) -> Response:
 @login_required
 def noise_tool_remove_duplicates():
     """Free Tool 1: Xoá dòng trùng -- subset_columns để trống = so trùng
-    trên TOÀN BỘ cột."""
+    trên TOÀN BỘ cột. `ignore_case`/`ignore_whitespace` (MỚI) chỉ ảnh hưởng
+    cách SO SÁNH 2 dòng, không đổi giá trị thật -- xem quick_tools.py."""
     try:
         df = _read_df_for_noise_tool(request)
         subset_raw = request.form.get("subset_columns", "").strip()
         subset_columns = [c.strip() for c in subset_raw.split(",") if c.strip()] or None
         keep = DuplicateKeep(request.form.get("keep", "first"))
-        result_df, stats = quick_remove_duplicates(df, subset_columns, keep)
+        ignore_case = _as_bool(request.form.get("ignore_case", "false"))
+        ignore_whitespace = _as_bool(request.form.get("ignore_whitespace", "false"))
+        result_df, stats = quick_remove_duplicates(
+            df, subset_columns, keep, ignore_case=ignore_case, ignore_whitespace=ignore_whitespace
+        )
     except QuickToolError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
@@ -1504,10 +1509,16 @@ def noise_tool_remove_duplicates():
 @app.route("/api/noise-tools/trim-whitespace", methods=["POST"])
 @login_required
 def noise_tool_trim_whitespace():
-    """Free Tool 2: Cắt khoảng trắng thừa trên MỌI ô -- không có tham số nào."""
+    """Free Tool 2: Cắt khoảng trắng thừa trên MỌI ô. `collapse_repeated`/
+    `remove_zero_width` (MỚI) -- xem `_clean_whitespace_advanced()` trong
+    quick_tools.py để biết mặc định bật/tắt của từng cái."""
     try:
         df = _read_df_for_noise_tool(request)
-        result_df, stats = quick_trim_whitespace(df)
+        collapse_repeated = _as_bool(request.form.get("collapse_repeated", "false"))
+        remove_zero_width = _as_bool(request.form.get("remove_zero_width", "true"))
+        result_df, stats = quick_trim_whitespace(
+            df, collapse_repeated=collapse_repeated, remove_zero_width=remove_zero_width
+        )
     except QuickToolError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
@@ -1518,7 +1529,10 @@ def noise_tool_trim_whitespace():
 @app.route("/api/noise-tools/fill-blanks", methods=["POST"])
 @login_required
 def noise_tool_fill_blanks():
-    """Free Tool 3: Điền/xoá ô trống ở ĐÚNG 1 cột người dùng tự gõ tên."""
+    """Free Tool 3: Điền/xoá ô trống ở ĐÚNG 1 cột người dùng tự gõ tên.
+    `action`: "fill_down" (MỚI, điền theo giá trị phía trên) / "fixed_value" /
+    "remove_row" -- không cần đọc tham số nào thêm ở đây, quick_tools.py tự
+    dispatch theo đúng chuỗi action gửi lên."""
     try:
         df = _read_df_for_noise_tool(request)
         column = request.form.get("column", "").strip()
@@ -1540,10 +1554,14 @@ def noise_tool_remove_empty_rows():
     """Free Tool 4: Xoá dòng trống hoàn toàn (MỌI cột đều thiếu) -- loại
     noise cấp dòng MỚI, chưa có detector riêng ở luồng Attribute Noise đầy
     đủ (khác duplicate_row, cũng cấp dòng nhưng so sánh GIỮA các dòng chứ
-    không xét 1 dòng tự nó trống hay không)."""
+    không xét 1 dòng tự nó trống hay không). `also_remove_empty_columns`
+    (MỚI) xoá thêm cột nào CÓ MỌI DÒNG đều thiếu, sau khi đã xoá dòng."""
     try:
         df = _read_df_for_noise_tool(request)
-        result_df, stats = quick_remove_empty_rows(df)
+        also_remove_empty_columns = _as_bool(request.form.get("also_remove_empty_columns", "false"))
+        result_df, stats = quick_remove_empty_rows(
+            df, also_remove_empty_columns=also_remove_empty_columns
+        )
     except QuickToolError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
