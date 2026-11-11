@@ -88,6 +88,9 @@ const state = {
     tool: "remove-duplicates", // khớp ĐÚNG hậu tố route /api/noise-tools/<tool>
     inputMode: "file",
     selectedFile: null,
+    // true khi đang hiện bảng xem trước dữ liệu GỐC (thay cho ô kéo-thả) --
+    // xem showFtRawPreview()/hideFtRawPreview()/renderFtInputArea().
+    rawPreviewActive: false,
     activeContinueCategory: null,
     // "Nối tiếp" trong CHÍNH khối Free Tools (chạy nhiều tool liên tiếp mà
     // không cần tải file về/tải lên lại) -- xem showFtResult() bên dưới.
@@ -384,8 +387,85 @@ wireInputToggle($("ft-input-toggle"), $("ft-dropzone"), $("ft-paste-input"), (mo
 // ====== Dropzone chọn file (kéo-thả + bấm chọn) ======
 wireDropzone($("ft-dropzone"), $("ft-file-input"), (file) => {
   state.ft.selectedFile = file;
-  $("ft-file-name").textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
+  handleFtFileSelected(file);
 });
+
+/* ====== Bảng xem trước dữ liệu GỐC (chưa xử lý) -- MỚI: đọc nhanh nội dung
+   file NGAY LÚC CHỌN để hiện bảng xem trước trong khung "01 ĐẦU VÀO", THAY
+   cho ô kéo-thả (xem ảnh mẫu CYD người dùng gửi). Đọc bằng FileReader thuần
+   JS -- CHỈ ĐỂ HIỂN THỊ, không tính toán/phát hiện noise gì ở đây cả, xử lý
+   THẬT vẫn luôn gửi file/text lên backend Flask như từ trước giờ (đúng
+   nguyên tắc "không có bộ máy JS riêng" của dự án, xem CLAUDE.md). Bộ tách
+   CSV ở đây CỐ TÌNH đơn giản (chỉ split theo dấu phẩy, không xử lý dấu
+   ngoặc kép bao quanh giá trị có dấu phẩy) vì chỉ phục vụ XEM TRƯỚC, không
+   phải bộ phân tích CSV thật (đó là việc của backend). ====== */
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+function naiveParseCsvPreview(text, maxRows) {
+  const lines = text.split(/\r\n|\r|\n/).filter((l) => l.length > 0);
+  const rows = lines.slice(0, maxRows + 1).map((line) => line.split(","));
+  return { rows, totalDataRows: Math.max(0, lines.length - 1) };
+}
+async function handleFtFileSelected(file) {
+  const isCsv = /\.csv$/i.test(file.name);
+  if (!isCsv) {
+    // File Excel (.xlsx/.xls) -- không đọc được dạng văn bản thuần trong
+    // trình duyệt (cần thư viện riêng mới giải mã được định dạng nhị phân
+    // này), nên chỉ hiện dòng xác nhận đã chọn, KHÔNG có bảng xem trước.
+    showFtRawPreview(`${file.name} · ${(file.size / 1024).toFixed(1)} KB`, null, "Không xem trước được file Excel trong trình duyệt -- bấm \"Chạy\" để xem kết quả.");
+    return;
+  }
+  let text;
+  try {
+    text = await readFileAsText(file);
+  } catch (err) {
+    showFtRawPreview(`${file.name} · ${(file.size / 1024).toFixed(1)} KB`, null, "Không đọc được file để xem trước -- vẫn bấm \"Chạy\" được bình thường.");
+    return;
+  }
+  const { rows, totalDataRows } = naiveParseCsvPreview(text, 20);
+  showFtRawPreview(`${file.name} · ${totalDataRows} dòng dữ liệu`, rows, totalDataRows > 20 ? `Xem trước 20/${totalDataRows} dòng đầu.` : "");
+}
+function showFtRawPreview(label, rows, note) {
+  state.ft.rawPreviewActive = true;
+  $("ft-raw-preview-label").textContent = `📄 ${label}`;
+  if (rows && rows.length) {
+    $("ft-raw-preview-table-wrap").hidden = false;
+    renderPreviewTable($("ft-raw-preview-table"), rows);
+  } else {
+    $("ft-raw-preview-table-wrap").hidden = true;
+  }
+  $("ft-raw-preview-note").hidden = !note;
+  $("ft-raw-preview-note").textContent = note || "";
+  renderFtInputArea();
+}
+function hideFtRawPreview() {
+  state.ft.rawPreviewActive = false;
+  state.ft.selectedFile = null;
+  $("ft-file-input").value = "";
+  renderFtInputArea();
+}
+$("ft-change-file-btn").addEventListener("click", hideFtRawPreview);
+
+// ====== Khu vực nhập liệu (toggle File/Dán text, ô kéo-thả, ô dán text,
+// bảng xem trước) -- gom hiển thị/ẩn vào 1 hàm DUY NHẤT để không rải logic
+// if/else lặp lại ở nhiều nơi (renderFtPipelineStrip() gọi hàm này mỗi khi
+// trạng thái pipeline đổi, showFtRawPreview()/hideFtRawPreview() cũng gọi). ======
+function renderFtInputArea() {
+  const p = state.ft.pipeline;
+  const showUpload = !p.active || p.forceNewUpload; // false = đang dùng pipeline nối tiếp, ẩn hết khu nhập liệu gốc
+  const showRawPreview = showUpload && state.ft.rawPreviewActive;
+  const showPickers = showUpload && !state.ft.rawPreviewActive;
+  $("ft-input-toggle").hidden = !showPickers;
+  $("ft-dropzone").hidden = !showPickers || state.ft.inputMode !== "file";
+  $("ft-paste-input").hidden = !showPickers || state.ft.inputMode !== "paste";
+  $("ft-raw-preview").hidden = !showRawPreview;
+}
 
 // ====== Tuỳ chọn riêng tool "Điền/xoá ô trống": ô "Giá trị điền vào" chỉ
 // hiện khi chọn "Điền giá trị cố định" ======
@@ -397,10 +477,7 @@ $("opt-action").addEventListener("change", () => {
 function renderFtPipelineStrip() {
   const p = state.ft.pipeline;
   const strip = $("pipeline-strip");
-  const showUpload = !p.active || p.forceNewUpload;
-  $("ft-input-toggle").hidden = !showUpload;
-  $("ft-dropzone").hidden = !showUpload || state.ft.inputMode !== "file";
-  $("ft-paste-input").hidden = !showUpload || state.ft.inputMode !== "paste";
+  renderFtInputArea();
 
   if (!p.active) {
     strip.hidden = true;
@@ -412,6 +489,7 @@ function renderFtPipelineStrip() {
 }
 $("pipeline-new-file-btn").addEventListener("click", () => {
   state.ft.pipeline.forceNewUpload = true;
+  state.ft.rawPreviewActive = false; // bỏ bảng xem trước CŨ, bắt chọn file MỚI
   renderFtPipelineStrip();
 });
 $("pipeline-reset-btn").addEventListener("click", () => {

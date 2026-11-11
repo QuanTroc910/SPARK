@@ -233,22 +233,50 @@
 
       <div class="convert-grid">
         <!-- 01 · ĐẦU VÀO -->
-        <section class="convert-panel">
-          <div class="convert-panel-head">
-            <span class="convert-panel-eyebrow">01 · ĐẦU VÀO</span>
+        <section class="convert-panel ft-panel">
+          <div class="ft-panel-head">
+            <span class="ft-eyebrow-tag">01 · ĐẦU VÀO</span>
             <div class="convert-input-toggle" id="ft-input-toggle">
               <button type="button" class="is-active" data-mode="file">File</button>
               <button type="button" data-mode="paste">Dán text</button>
             </div>
           </div>
 
-          <label class="dropzone dropzone--compact" id="ft-dropzone">
-            <span class="dropzone-icon">📄</span>
-            <p>Kéo thả hoặc bấm để chọn file (CSV/Excel)</p>
-            <p class="hint-note" id="ft-file-name">Chưa chọn file nào</p>
-          </label>
-          <input type="file" id="ft-file-input" accept=".csv,.xlsx,.xls" hidden />
-          <textarea class="input mono convert-paste-input" id="ft-paste-input" rows="9" placeholder="Dán nội dung CSV vào đây (dòng đầu là tên cột)…" hidden></textarea>
+          <div class="ft-panel-body">
+          <!-- MỚI: bọc riêng phần "hiện dữ liệu" (ô kéo-thả HOẶC bảng xem
+               trước) vào 1 khung CHIỀU CAO CỐ ĐỊNH (.ft-input-zone, xem
+               workspace.css) -- không đổi dù đang trống/đã chọn file/đang
+               dán text, để khung không bị co giãn qua lại giữa các trạng
+               thái, và khi CÓ dữ liệu thì có đủ chỗ xem rõ (bảng cuộn BÊN
+               TRONG khung thay vì khung tự phình to). -->
+          <div class="ft-input-zone">
+            <label class="dropzone dropzone--compact" id="ft-dropzone">
+              <span class="dropzone-icon">⬆</span>
+              <p class="ft-dropzone-title">Kéo thả file CSV/Excel vào đây</p>
+              <p class="hint-note">Tối đa 10MB · xử lý qua backend thật, không lưu lại file gốc</p>
+              <span class="btn btn-primary btn-small ft-choose-file-btn">Chọn file</span>
+            </label>
+            <input type="file" id="ft-file-input" accept=".csv,.xlsx,.xls" hidden />
+            <textarea class="input mono convert-paste-input" id="ft-paste-input" rows="9" placeholder="Dán nội dung CSV vào đây (dòng đầu là tên cột)…" hidden></textarea>
+
+            <!-- MỚI: bảng xem trước dữ liệu GỐC (chưa xử lý) -- hiện THAY cho
+                 ô kéo-thả ngay sau khi chọn xong 1 file CSV (xem
+                 showFtRawPreview() trong workspace.js). CHỈ áp dụng cho chế độ
+                 chọn FILE -- chế độ "Dán text" giữ nguyên hành vi cũ (ô dán text
+                 không biến mất khi đang gõ dở). File Excel (.xlsx/.xls) không
+                 đọc được dạng văn bản thuần trong trình duyệt nên chỉ hiện
+                 dòng xác nhận đã chọn, không có bảng xem trước. -->
+            <div class="ft-raw-preview" id="ft-raw-preview" hidden>
+              <div class="ft-raw-preview-head">
+                <span id="ft-raw-preview-label" class="mono"></span>
+                <button class="btn btn-ghost btn-small" id="ft-change-file-btn" type="button">↺ Đổi file khác</button>
+              </div>
+              <div class="table-wrap ft-raw-preview-table-wrap" id="ft-raw-preview-table-wrap">
+                <table class="results-table" id="ft-raw-preview-table"></table>
+              </div>
+              <p class="hint-note" id="ft-raw-preview-note" hidden></p>
+            </div>
+          </div>
 
           <!-- Tuỳ chọn riêng từng tool -- chỉ 1 khối hiện tại 1 thời điểm, khớp state.ft.tool -->
           <div class="convert-options" id="convert-options-remove-duplicates">
@@ -305,17 +333,38 @@
             <button class="btn btn-primary" id="ft-run-btn" type="button">Chạy</button>
             <span class="status-text" id="ft-status"></span>
           </div>
+          </div>
         </section>
 
         <!-- 02 · KẾT QUẢ -->
-        <section class="convert-panel">
-          <div class="convert-panel-head">
-            <span class="convert-panel-eyebrow">02 · KẾT QUẢ</span>
+        <section class="convert-panel ft-panel">
+          <div class="ft-panel-head">
+            <span class="ft-eyebrow-tag">02 · KẾT QUẢ</span>
             <button class="btn btn-ghost btn-small" id="ft-download-btn" type="button" disabled>⬇ Tải xuống CSV</button>
           </div>
-          <p class="empty-state" id="ft-result-empty">Kết quả sẽ hiện ở đây ngay khi bạn bấm "Chạy".</p>
-          <div class="table-wrap" id="ft-result-table-wrap" hidden>
-            <table class="results-table" id="ft-result-table"></table>
+          <div class="ft-panel-body">
+          <!-- MỚI: bọc riêng khung "ĐANG CHỜ DỮ LIỆU" / bảng kết quả vào 1
+               khung CHIỀU CAO CỐ ĐỊNH (.ft-result-zone, khớp CHIỀU CAO với
+               .ft-input-zone ở khung 01 -- xem workspace.css) -- không đổi
+               dù đang trống/đã có kết quả, bảng cuộn BÊN TRONG khung khi dữ
+               liệu dài hơn thay vì khung tự phình to. -->
+          <div class="ft-result-zone">
+            <!-- Khung "ĐANG CHỜ DỮ LIỆU" kiểu khung xương (skeleton) -- CHỈ
+                 hiện khi CHƯA có kết quả nào, xem resetFtResult() trong
+                 workspace.js (vẫn cùng 1 id ft-result-empty như trước, chỉ đổi
+                 nội dung HTML bên trong). -->
+            <div class="ft-result-skeleton" id="ft-result-empty">
+              <div class="ft-result-skeleton-box">
+                <span class="ft-result-skeleton-tag">ĐANG CHỜ DỮ LIỆU</span>
+                <div class="ft-result-skeleton-rows">
+                  <div></div><div></div><div></div><div></div>
+                </div>
+              </div>
+              <p class="ft-result-skeleton-caption">Kết quả sẽ hiện ở đây ngay khi bạn bấm "Chạy".</p>
+            </div>
+            <div class="table-wrap" id="ft-result-table-wrap" hidden>
+              <table class="results-table" id="ft-result-table"></table>
+            </div>
           </div>
 
           <!-- "Xử lý tiếp" -- CHỈ hiện sau khi có ít nhất 1 kết quả, xem
@@ -329,6 +378,7 @@
               <button type="button" class="continue-pill" data-category="auto">Tự động</button>
             </div>
             <div class="continue-list" id="continue-list"></div>
+          </div>
           </div>
         </section>
       </div>

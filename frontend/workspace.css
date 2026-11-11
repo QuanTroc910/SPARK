@@ -253,3 +253,110 @@ a.continue-item:hover { background: var(--surface-2); }
   .tool-hero-grid { grid-template-columns: 1fr; }
   .tool-steps, .tool-explainer { grid-template-columns: 1fr; }
 }
+
+/* ==========================================================================
+   Free Tools -- nhãn "01/02" dạng thẻ nhỏ nền đen sát góc trên-trái, 2 khung
+   tỉ lệ 5:7 (khung KẾT QUẢ rộng hơn khung ĐẦU VÀO). BỎ giới hạn bề ngang hẹp
+   (~640px) đã thử trước đó -- lúc thu hẹp để khớp pixel ảnh mẫu thì khung
+   nhìn bé/chật khi đã có dữ liệu thật, người dùng phản hồi muốn RỘNG lại,
+   nên để khối này dùng chung bề ngang với cả trang (.container/.main-area)
+   như mọi khối khác, không tự giới hạn riêng nữa. MỌI rule dưới đây vẫn
+   SCOPE trong #section-free-tools -- KHÔNG đụng .convert-panel-head/
+   .convert-panel-eyebrow/.convert-grid gốc (dùng chung với khối Convert bên
+   dưới, người dùng chỉ yêu cầu đổi riêng 4 Free Tools).
+   ========================================================================== */
+#section-free-tools .convert-grid { grid-template-columns: 5fr 7fr; gap: 14px; }
+
+/* .convert-panel gốc có padding riêng (22px 24px 26px) -- bỏ hết ở đây vì
+   nhãn "01/02" giờ phải nằm SÁT mép trong cùng (flush), padding thật chuyển
+   xuống .ft-panel-body bên dưới nhãn. overflow:hidden để góc trên-trái thẻ
+   nhãn tự bị bo tròn theo đúng border-radius của .convert-panel, không cần
+   khai border-radius riêng cho thẻ nhãn. */
+#section-free-tools .convert-panel { padding: 0; overflow: hidden; }
+#section-free-tools .ft-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 38px; border-bottom: 1px solid var(--line); padding-right: 14px;
+}
+#section-free-tools .ft-eyebrow-tag {
+  align-self: stretch; display: flex; align-items: center;
+  background: var(--ink); color: #fff; font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; white-space: nowrap;
+  padding: 0 14px;
+}
+#section-free-tools .ft-panel-body { padding: 16px; }
+
+/* ===== MỚI: khung CHIỀU CAO CỐ ĐỊNH cho phần "hiện dữ liệu" (sau phản hồi
+   thật từ người dùng: bản đo pixel-exact theo ảnh CYD khiến khung quá bé,
+   upload/xử lý xong dữ liệu bị bóp chật) -- .ft-input-zone (khung 01) và
+   .ft-result-zone (khung 02) LUÔN giữ NGUYÊN 1 chiều cao, DÙ đang ở trạng
+   thái nào (trống/đã chọn file/đã có kết quả): nội dung bên trong (ô kéo-
+   thả, bảng xem trước, khung chờ, bảng kết quả) đều CO GIÃN LẤP ĐẦY khung
+   này (flex:1) thay vì tự quyết định chiều cao của khung -- bảng dài hơn
+   khung thì CUỘN BÊN TRONG (overflow:auto, kế thừa từ .table-wrap gốc),
+   khung không bao giờ phình to/co nhỏ qua lại giữa các bước. */
+#section-free-tools .ft-input-zone,
+#section-free-tools .ft-result-zone {
+  height: 440px; display: flex; flex-direction: column; margin-bottom: 16px;
+}
+
+/* Ô kéo-thả: GỌN về padding/icon (không to lênh khênh như bản
+   .dropzone--compact dùng chung), nhưng LẤP ĐẦY chiều cao .ft-input-zone và
+   TỰ CANH GIỮA nội dung theo chiều dọc (flex:1 + justify-content:center)
+   thay vì dồn hết lên đầu rồi để trống phía dưới. */
+#section-free-tools .ft-input-zone .dropzone--compact {
+  flex: 1 1 auto; min-height: 0; padding: 18px 16px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+#section-free-tools .dropzone-icon { font-size: 22px; }
+#section-free-tools .ft-dropzone-title { font-size: 14px; font-weight: 650; margin: 8px 0 2px; }
+/* pointer-events:none -- cả ô .dropzone (thẻ <label>) đã bắt click để mở
+   hộp thoại chọn file rồi (xem wireDropzone() trong workspace.js), nút này
+   chỉ để NHÌN giống nút thật theo đúng ảnh mẫu, bấm vào đâu trong ô cũng ra
+   cùng 1 hành động, không cần tự nó bắt sự kiện riêng. */
+#section-free-tools .ft-choose-file-btn { margin-top: 10px; pointer-events: none; }
+
+/* Bảng xem trước dữ liệu GỐC (chưa xử lý) -- hiện THAY ô kéo-thả sau khi đã
+   chọn xong 1 file CSV, xem showFtRawPreview()/hideFtRawPreview() trong
+   workspace.js. Bản thân .ft-raw-preview LẤP ĐẦY .ft-input-zone (flex:1),
+   còn bảng BÊN TRONG nó (.ft-raw-preview-table-wrap) lấy hết phần còn lại
+   sau dòng tiêu đề (flex:1 + min-height:0 để overflow:auto hoạt động đúng
+   trong flex container) -- khác bản trước (max-height: 220px cố định, quá
+   bé khi khung đã to ra theo .ft-input-zone). */
+#section-free-tools .ft-raw-preview {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+}
+#section-free-tools .ft-raw-preview-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 8px; font-size: 12.5px; color: var(--ink-dim); flex: 0 0 auto;
+}
+#section-free-tools .ft-raw-preview-table-wrap { flex: 1 1 auto; min-height: 0; max-height: none; }
+
+/* Khung "ĐANG CHỜ DỮ LIỆU" kiểu khung xương (skeleton: viền đứt + vài dòng
+   xám mờ giả bảng) thay cho 1 dòng chữ canh giữa đơn giản trước đây --
+   CHỈ hiện khi CHƯA có kết quả nào (xem resetFtResult() trong workspace.js,
+   vẫn cùng 1 id #ft-result-empty như trước, chỉ đổi nội dung HTML bên trong).
+   LẤP ĐẦY + CANH GIỮA theo chiều dọc trong .ft-result-zone (giống cách
+   .dropzone--compact làm ở khung 01, để 2 khung trống nhìn cân đối nhau). */
+#section-free-tools .ft-result-skeleton {
+  flex: 1 1 auto; min-height: 0; padding: 0; text-align: center;
+  display: flex; flex-direction: column; justify-content: center;
+}
+#section-free-tools .ft-result-skeleton-box {
+  position: relative; border: 1px dashed var(--line-strong); border-radius: var(--radius-md);
+  background: var(--surface-2); padding: 26px 18px 18px; margin-bottom: 12px;
+}
+/* Bảng kết quả THẬT -- LẤP ĐẦY .ft-result-zone (flex:1), cuộn bên trong khi
+   dữ liệu dài hơn khung (khác bản trước dùng max-height: 640px của
+   .table-wrap gốc, không khớp với chiều cao 440px cố định ở đây). */
+#section-free-tools .ft-result-zone .table-wrap { flex: 1 1 auto; min-height: 0; max-height: none; }
+#section-free-tools .ft-result-skeleton-tag {
+  position: absolute; top: 0; left: 14px; transform: translateY(-50%);
+  background: var(--ink); color: #fff; font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; padding: 4px 9px; border-radius: 3px;
+}
+#section-free-tools .ft-result-skeleton-rows { display: flex; flex-direction: column; gap: 9px; padding: 6px 10px 0; }
+#section-free-tools .ft-result-skeleton-rows div { height: 7px; border-radius: 2px; background: var(--line-strong); opacity: 0.55; }
+#section-free-tools .ft-result-skeleton-rows div:nth-child(2) { width: 72%; }
+#section-free-tools .ft-result-skeleton-rows div:nth-child(3) { width: 88%; }
+#section-free-tools .ft-result-skeleton-rows div:nth-child(4) { width: 58%; }
+#section-free-tools .ft-result-skeleton-caption { font-size: 12px; color: var(--ink-faint); margin: 0; }
