@@ -322,7 +322,7 @@ def serve_frontend():
     đăng nhập), là "mặt tiền" thật sự của web, KHÁC index.html (ứng dụng
     5 bước, bắt đăng nhập). Nút "Bắt đầu" trên landing.html dẫn sang
     index.html -- trang đó tự quyết định hiện app hay hiện form đăng nhập.
-    Flask tự phục vụ các file tĩnh còn lại (index.html, convert.html,
+    Flask tự phục vụ các file tĩnh còn lại (index.html, workspace.html,
     style.css, script.js...) nhờ static_folder="frontend" đã khai báo ở
     trên, không cần route riêng cho từng file."""
     return app.send_static_file("landing.html")
@@ -1445,7 +1445,7 @@ def convert_json_to_csv_api():
 def _read_df_for_noise_tool(req) -> pd.DataFrame:
     """Đọc DataFrame từ request -- chấp nhận file tải lên (CSV/Excel, field
     "file") HOẶC CSV text dán tay (field "text"), giống 2 tab FILE/PASTE của
-    convert.html. File tải lên được lưu TẠM rồi XOÁ NGAY sau khi đọc xong
+    khối Convert/Free Tools trong workspace.html. File tải lên được lưu TẠM rồi XOÁ NGAY sau khi đọc xong
     (khác /api/upload giữ nguyên file trong UPLOAD_DIR để dùng lại ở các
     bước sau) -- free tool chạy xong 1 lần là kết thúc, không cần giữ gì lại."""
     file = req.files.get("file")
