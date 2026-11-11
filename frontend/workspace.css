@@ -1,0 +1,184 @@
+/* ==========================================================================
+   workspace.css -- CSS RIÊNG cho trang workspace.html (bản thiết kế lại,
+   thay thế dần index.html/luồng 5 bước cũ). CHỈ chứa rule MỚI (header kiểu
+   mega-menu, sidebar, tab... của giao diện mới) -- KHÔNG định nghĩa lại bất
+   kỳ token màu/nút/chip nào đã có trong style.css (file đó được nạp TRƯỚC
+   file này trong workspace.html, nên mọi biến --signal/--bg/--ink... và class
+   .btn/.chip/.results-table... vẫn dùng lại y nguyên, không cần viết lại).
+   ========================================================================== */
+
+/* ===== Header ===== */
+.ws-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: relative; /* để .ws-megamenu (position: absolute) định vị theo header */
+  z-index: 20;
+}
+.ws-header-inner {
+  display: flex;
+  align-items: center;
+  /* justify-content: space-between + CHỈ 3 nhóm con trực tiếp (brand/nav/
+     header-right) -- để nav (Product/Class Noise/Guide) tự "dạt" ra xa
+     logo, về phía giữa-phải, giống đúng khoảng cách của trang tham khảo,
+     thay vì dính sát ngay cạnh logo như bản đầu. */
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+}
+
+.ws-brand { display: flex; align-items: center; }
+.ws-logo { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
+.ws-logo-accent { color: var(--signal); }
+
+.ws-nav { display: flex; align-items: center; gap: 8px; }
+
+/* Nút pill dùng chung cho mọi mục trên nav (Product/Class Noise/Guide) --
+   bo tròn hẳn (999px) giống đúng kiểu pill của trang tham khảo. */
+.ws-nav-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.ws-nav-pill:hover { border-color: var(--signal); color: var(--signal-dark); }
+
+/* Khi mở dropdown "Product", pill đổi sang nền đậm (giống PRODUCT màu đen
+   lúc đang mở của trang tham khảo) -- toggle bằng class .is-open gắn vào
+   .ws-has-dropdown (workspace.js). */
+/* CỐ TÌNH không đặt position:relative ở đây -- để .ws-megamenu (bên trong)
+   định vị theo .ws-header (đã position:relative) thay vì theo chính nút
+   "Product" nhỏ xíu này. Lý do: nếu định vị theo nút, menu rộng 1180px sẽ
+   bị "left: 50%" tính theo TÂM CỦA CÁI NÚT (nằm sát mép trái màn hình), làm
+   menu tràn ra ngoài màn hình bên trái -- lỗi thật đã gặp lúc chụp ảnh thử. */
+.ws-has-dropdown.is-open .ws-nav-pill {
+  background: var(--signal-dark);
+  border-color: var(--signal-dark);
+  color: #fff;
+}
+.ws-caret { font-size: 11px; transition: transform 0.15s ease; }
+.ws-has-dropdown.is-open .ws-caret { transform: rotate(180deg); }
+
+/* Không còn margin-left:auto -- justify-content:space-between ở
+   .ws-header-inner đã lo việc đẩy nhóm này ra sát phải. */
+.ws-header-right { display: flex; align-items: center; gap: 14px; }
+
+/* .ws-cta-btn ("Open Workspace" rời, đặt ở header-right) đã BỎ theo yêu cầu
+   -- khối CTA "MỞ WORKSPACE" thật chỉ còn nằm TRONG dropdown Product
+   (.ws-megamenu-cta bên dưới), không lặp lại ở ngoài header nữa. */
+
+/* ===== Mega menu (dropdown "Product") ===== */
+.ws-megamenu {
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 24px; /* khớp padding trái của .ws-header-inner -- menu bắt đầu thẳng
+                 hàng với logo, giống đúng cách trang tham khảo (CYD) làm,
+                 không "canh giữa theo nút Product" */
+  width: min(1180px, calc(100vw - 48px));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: none;
+  box-shadow: var(--shadow-card), 0 16px 32px rgba(20, 20, 15, 0.08);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 260px;
+}
+
+.ws-megamenu-col {
+  padding: 20px 22px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ws-megamenu-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.ws-megamenu-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 9px 8px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+a.ws-megamenu-item:hover { background: var(--surface-2); }
+
+/* Mục KHÔNG bấm được (cột "Cần cấu hình") -- chưa có trang đích, chỉ để
+   XEM danh sách Workspace làm được gì, xem comment trong workspace.html. */
+.ws-megamenu-item--static { cursor: default; opacity: 0.85; }
+
+.ws-megamenu-icon {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  background: var(--surface);
+}
+.ws-megamenu-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ws-megamenu-item-text strong { font-size: 13.5px; color: var(--ink); font-weight: 600; }
+.ws-megamenu-item-text small { font-size: 12px; color: var(--ink-faint); line-height: 1.35; }
+
+/* Khối CTA đậm bên phải mega menu -- không có border-right vì là cột cuối. */
+.ws-megamenu-cta {
+  padding: 22px;
+  background: var(--signal-dark);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-decoration: none;
+  border-radius: 0 0 var(--radius-md) 0;
+}
+.ws-megamenu-cta-eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  margin: 0 0 14px;
+}
+.ws-megamenu-cta-title { font-size: 20px; font-weight: 700; line-height: 1.25; margin: 0; }
+.ws-megamenu-cta-arrow { font-size: 20px; margin-top: 18px; }
+
+/* Dòng ghi chú "đang xây dựng" ở thân trang tạm thời. */
+.ws-wip-note {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  color: var(--ink-faint);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 22px;
+  text-align: center;
+}
+
+/* ===== Responsive: màn hình hẹp thì mega menu khó hiện đủ 4 cột, tạm cho
+   cuộn ngang thay vì vỡ layout -- đủ dùng cho demo khoá luận trên máy tính,
+   chưa tối ưu sâu cho điện thoại (giống mức độ các trang khác đã làm). ===== */
+@media (max-width: 1040px) {
+  .ws-megamenu { grid-template-columns: repeat(4, 240px); overflow-x: auto; }
+}

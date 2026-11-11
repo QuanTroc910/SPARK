@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workspace — Dò &amp; Xử Lý Nhiễu Dữ Liệu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;650;700&display=swap" rel="stylesheet" />
+  <!-- QUAN TRỌNG: nạp style.css TRƯỚC để lấy màu/token/nút/chip đã có (--signal,
+       --bg, .btn, .chip, .results-table...) -- workspace.css chỉ CHỨA RULE MỚI,
+       không copy lại gì đã có, để không bao giờ bị lệch màu giữa 2 file. Trang
+       này KHÔNG sửa 1 dòng nào của style.css -- xem giải thích đầy đủ lý do
+       tách file trong CLAUDE.md mục Workspace mới. -->
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="workspace.css" />
+</head>
+<body class="auth-ready">
+  <!-- Trang MỚI, ĐANG XÂY, THAY THẾ DẦN index.html (luồng 5 bước cũ) --
+       y hệt convert.html/tools.html ở chỗ: bắt đăng nhập qua cookie session
+       dùng chung (checkAuth() trong workspace.js), form đăng nhập thật vẫn
+       CHỈ sống ở index.html. -->
+  <header class="ws-header">
+    <div class="container ws-header-inner">
+      <div class="ws-brand">
+        <span class="ws-logo"><span class="ws-logo-accent">De</span>noise</span>
+      </div>
+
+      <nav class="ws-nav">
+        <!-- "Product ▾" -- mega menu 3 cột + 1 khối CTA đậm, bố cục Y HỆT
+             dropdown PRODUCT của trang tham khảo (CYD), nội dung đổi hẳn
+             sang đúng 3 nhóm tính năng thật của Denoise. -->
+        <div class="ws-has-dropdown" id="ws-product-wrap">
+          <button type="button" class="ws-nav-pill" id="ws-product-btn" aria-expanded="false">
+            Product <span class="ws-caret">⌄</span>
+          </button>
+          <div class="ws-megamenu" id="ws-product-menu" hidden>
+            <!-- Cột 1: loại noise CẦN NHẬP TAY tham số -- CHƯA có trang riêng
+                 cho từng loại (chỉ là lựa chọn bên trong Workspace), nên CHƯA
+                 bấm vào được ở bản này -- sẽ nối link thật khi phần thân
+                 trang (sidebar cấu hình) được xây xong. -->
+            <div class="ws-megamenu-col">
+              <span class="ws-megamenu-label">CẦN CẤU HÌNH (Workspace)</span>
+              <div class="ws-megamenu-item ws-megamenu-item--static">
+                <span class="ws-megamenu-icon">📝</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Sai định dạng</strong>
+                  <small>Email/SĐT/ngày tháng không đúng khuôn mẫu</small>
+                </span>
+              </div>
+              <div class="ws-megamenu-item ws-megamenu-item--static">
+                <span class="ws-megamenu-icon">📏</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Ngoài khoảng</strong>
+                  <small>Tự khai min/max hợp lý cho cột số</small>
+                </span>
+              </div>
+              <div class="ws-megamenu-item ws-megamenu-item--static">
+                <span class="ws-megamenu-icon">📈</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Giá trị bất thường</strong>
+                  <small>Outlier theo IQR/Z-score</small>
+                </span>
+              </div>
+              <div class="ws-megamenu-item ws-megamenu-item--static">
+                <span class="ws-megamenu-icon">🧩</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Không nhất quán</strong>
+                  <small>"Nam"/"nam"/"NAM" cùng 1 nghĩa</small>
+                </span>
+              </div>
+              <div class="ws-megamenu-item ws-megamenu-item--static">
+                <span class="ws-megamenu-icon">🧮</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Thiếu giá trị (nâng cao)</strong>
+                  <small>Impute trung bình/trung vị/KNN/mode</small>
+                </span>
+              </div>
+              <div class="ws-megamenu-item ws-megamenu-item--static">
+                <span class="ws-megamenu-icon">🔗</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Rule liên cột</strong>
+                  <small>So sánh · điều kiện · công thức · phụ thuộc hàm</small>
+                </span>
+              </div>
+            </div>
+
+            <!-- Cột 2: Convert (đã gộp từ trang Convert File riêng vào đây) --
+                 CÓ trang thật, bấm vào được luôn. -->
+            <div class="ws-megamenu-col">
+              <span class="ws-megamenu-label">CONVERT</span>
+              <a class="ws-megamenu-item" href="convert.html">
+                <span class="ws-megamenu-icon">↔</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Đổi delimiter CSV</strong>
+                  <small>Phẩy, chấm phẩy, tab, gạch đứng</small>
+                </span>
+              </a>
+              <a class="ws-megamenu-item" href="convert.html">
+                <span class="ws-megamenu-icon">{ }</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>CSV → JSON</strong>
+                  <small>Giữ nguyên số 0 đầu, chữ có dấu</small>
+                </span>
+              </a>
+              <a class="ws-megamenu-item" href="convert.html">
+                <span class="ws-megamenu-icon">{ }</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>JSON → CSV</strong>
+                  <small>Nhận cả JSON array lẫn JSON Lines</small>
+                </span>
+              </a>
+            </div>
+
+            <!-- Cột 3: Free Tools (4 loại tự động, không cần cấu hình) --
+                 CÓ trang thật, bấm vào được luôn. -->
+            <div class="ws-megamenu-col">
+              <span class="ws-megamenu-label">TỰ ĐỘNG (Free Tools)</span>
+              <a class="ws-megamenu-item" href="tools.html">
+                <span class="ws-megamenu-icon">🧬</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Xoá dòng trùng</strong>
+                  <small>Giữ bản đầu hoặc bản cuối</small>
+                </span>
+              </a>
+              <a class="ws-megamenu-item" href="tools.html">
+                <span class="ws-megamenu-icon">✂️</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Cắt khoảng trắng thừa</strong>
+                  <small>Mọi ô, mọi cột, tự động</small>
+                </span>
+              </a>
+              <a class="ws-megamenu-item" href="tools.html">
+                <span class="ws-megamenu-icon">🩹</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Điền / xoá ô trống</strong>
+                  <small>1 cột, xoá dòng hoặc điền giá trị</small>
+                </span>
+              </a>
+              <a class="ws-megamenu-item" href="tools.html">
+                <span class="ws-megamenu-icon">🗑️</span>
+                <span class="ws-megamenu-item-text">
+                  <strong>Xoá dòng trống hoàn toàn</strong>
+                  <small>Mọi cột trong dòng đều trống</small>
+                </span>
+              </a>
+            </div>
+
+            <!-- Khối CTA đậm bên phải -- TẠM thời trỏ về "#" (bản thân trang
+                 này chưa có phần thân Workspace thật) -- sẽ nối khi sidebar
+                 chính được xây xong. -->
+            <a class="ws-megamenu-cta" href="#">
+              <p class="ws-megamenu-cta-eyebrow">TẢI FILE LÊN, XỬ LÝ TỪNG BƯỚC</p>
+              <p class="ws-megamenu-cta-title">MỞ WORKSPACE</p>
+              <span class="ws-megamenu-cta-arrow">→</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Class Noise -- đứng riêng (không nằm trong dropdown Product) vì
+             đây là 1 luồng khác hẳn (chọn nhãn+đặc trưng+thuật toán ML), không
+             phải "tick chọn loại lỗi" như attribute noise. TẠM href="#" vì
+             phần thân trang Class Noise chưa xây lại ở đây. -->
+        <a class="ws-nav-pill" href="#">Class Noise</a>
+
+        <!-- Guide -- hướng dẫn cách dùng thật (KHÔNG làm Blog/Pricing kiểu
+             CYD vì Denoise không bán, không cần content marketing). TẠM
+             href="#", chưa viết nội dung trang Guide. -->
+        <a class="ws-nav-pill" href="#">Guide</a>
+      </nav>
+
+      <div class="ws-header-right">
+        <!-- Bỏ nút "Open Workspace" ở đây (không có yêu cầu, tự thêm nhầm) --
+             khối CTA "MỞ WORKSPACE" thật nằm TRONG dropdown Product phía trên.
+             Trạng thái backend giờ CHỈ còn 1 chấm tròn màu (xanh=đã kết nối,
+             vàng=chưa) -- bỏ chữ "Backend: đã/chưa kết nối", giữ lại nội dung
+             đó dưới dạng `title` (tooltip khi rê chuột) để không mất hẳn
+             thông tin, xem workspace.js::checkBackendHealth(). -->
+        <div class="status-pill">
+          <span id="backend-dot" class="status-dot is-offline"></span>
+        </div>
+        <div class="account-area" id="account-area" hidden>
+          <span class="account-username mono" id="account-username-text"></span>
+          <button class="btn btn-ghost btn-small" id="open-profile-btn" type="button">Hồ sơ</button>
+          <button class="btn btn-ghost btn-small" id="logout-btn" type="button">Đăng xuất</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container main-area">
+    <p class="ws-wip-note">
+      [ Đang xây dựng — bản này mới chỉ có HEADER để xem trước bố cục. Phần thân trang
+      (sidebar cấu hình + khu vực kết quả) sẽ làm ở bước tiếp theo. ]
+    </p>
+  </main>
+
+  <script src="workspace.js"></script>
+</body>
+</html>
