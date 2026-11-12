@@ -43,6 +43,10 @@ function setError(el, message) {
   el.textContent = message || "";
   el.hidden = !message;
 }
+// Bảng dữ liệu kiểu CYD: cột ĐẦU TIÊN là số thứ tự dòng (1-based, chữ mờ,
+// có kẻ dọc ngăn -- xem .cyd-table trong workspace.css), các cột sau là dữ
+// liệu thật. Dùng chung cho bảng xem trước, bảng kết quả Free Tools và
+// bảng kết quả Convert.
 function renderPreviewTable(table, rows) {
   if (!rows || !rows.length) {
     table.innerHTML = "";
@@ -50,8 +54,30 @@ function renderPreviewTable(table, rows) {
   }
   const [header, ...body] = rows;
   table.innerHTML =
-    "<thead><tr>" + header.map((h) => `<th>${escapeHtml(h)}</th>`).join("") + "</tr></thead>" +
-    "<tbody>" + body.map((row) => "<tr>" + row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("") + "</tr>").join("") + "</tbody>";
+    "<thead><tr><th>Dòng</th>" + header.map((h) => `<th>${escapeHtml(h)}</th>`).join("") + "</tr></thead>" +
+    "<tbody>" +
+    body.map((row, i) => `<tr><td>${i + 1}</td>` + row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("") + "</tr>").join("") +
+    "</tbody>";
+}
+// Chuỗi "N DÒNG × M CỘT" hiện ở góc phải thanh trên của bảng (CYD ghi
+// "240 ROWS × 4 COLS").
+function tableDims(rowCount, colCount) {
+  return `${rowCount} dòng × ${colCount} cột`;
+}
+// Công tắc nhiều nửa nối liền (.ft-seg) thay cho <select> ở lựa chọn ngắn:
+// bấm nút nào thì gán giá trị đó cho <select> gốc (đang ẩn) rồi phát sự
+// kiện "change" để các listener cũ (vd ẩn/hiện ô "Giá trị điền vào") vẫn
+// chạy y như khi người dùng chọn trong <select>.
+function wireSegmented(segEl) {
+  const select = $(segEl.dataset.segFor);
+  const buttons = segEl.querySelectorAll("button");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      buttons.forEach((b) => b.classList.toggle("is-active", b === btn));
+      select.value = btn.dataset.value;
+      select.dispatchEvent(new Event("change"));
+    });
+  });
 }
 function wireDropzone(dropzoneEl, fileInputEl, onFile) {
   dropzoneEl.addEventListener("click", () => fileInputEl.click());
@@ -91,6 +117,7 @@ const state = {
     // true khi đang hiện bảng xem trước dữ liệu GỐC (thay cho ô kéo-thả) --
     // xem showFtRawPreview()/hideFtRawPreview()/renderFtInputArea().
     rawPreviewActive: false,
+    filePreview: null, // {label, dims, rows, note} của file đã chọn, xem showFtRawPreview()
     activeContinueCategory: null,
     // "Nối tiếp" trong CHÍNH khối Free Tools (chạy nhiều tool liên tiếp mà
     // không cần tải file về/tải lên lại) -- xem showFtResult() bên dưới.
@@ -186,10 +213,13 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") setProductMenuOpen(false);
 });
 
-// Cột "Tự động" -- chuyển sang khối Free Tools + đúng tab. Cột "Convert" --
-// chuyển sang khối Convert + đúng tab. Cả 2 đều CHUYỂN TẠI CHỖ (không điều
-// hướng đi đâu), xem activateFtTool()/activateCvTool() định nghĩa bên dưới.
-productMenu.querySelectorAll("a.ws-megamenu-item[data-tool]").forEach((a) => {
+// Mọi link TĨNH có data-tool (cột "Tự động" trong mega menu + chân trang) --
+// chuyển sang khối Free Tools + đúng tab. data-convert-tool -- chuyển sang
+// khối Convert + đúng tab. Cả 2 đều CHUYỂN TẠI CHỖ (không điều hướng đi
+// đâu), xem activateFtTool()/activateCvTool() định nghĩa bên dưới. Các link
+// trong panel "Xử lý tiếp" được tạo SAU lúc này nên gắn listener riêng ở
+// renderContinuePanel().
+document.querySelectorAll("a[data-tool]").forEach((a) => {
   a.addEventListener("click", (e) => {
     e.preventDefault();
     switchSection("free-tools");
@@ -197,7 +227,7 @@ productMenu.querySelectorAll("a.ws-megamenu-item[data-tool]").forEach((a) => {
     setProductMenuOpen(false);
   });
 });
-productMenu.querySelectorAll("a.ws-megamenu-item[data-convert-tool]").forEach((a) => {
+document.querySelectorAll("a[data-convert-tool]").forEach((a) => {
   a.addEventListener("click", (e) => {
     e.preventDefault();
     switchSection("convert");
@@ -206,24 +236,43 @@ productMenu.querySelectorAll("a.ws-megamenu-item[data-convert-tool]").forEach((a
   });
 });
 
+// Chân trang: nút "Lên đầu trang" + link "Đăng xuất" (dùng chung hành vi với
+// nút Đăng xuất ở header).
+$("ws-backtop").addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+$("footer-logout-link").addEventListener("click", (e) => {
+  e.preventDefault();
+  $("logout-btn").click();
+});
+
 /* ============================================================
    KHỐI: FREE TOOLS -- gộp từ tools.js, giữ nguyên toàn bộ logic, chỉ đổi
    tên phần tử trùng ID sang tiền tố "ft-" (xem quy ước đầu file) + đổi tên
    hàm thêm "Ft" để phân biệt với khối Convert bên dưới.
    ============================================================ */
 
-function mockRow(cellClasses, removed) {
-  const cells = cellClasses.map((c) => `<span class="tool-mock-cell${c ? " " + c : ""}"></span>`).join("");
-  return `<div class="tool-mock-row${removed ? " is-removed" : ""}">${cells}</div>`;
+/* Hình minh hoạ TRƯỚC/SAU kiểu CYD: 2 bảng mini có nhãn đen đè mép trên-trái,
+   mỗi dòng có số thứ tự (hoặc 1 thẻ đen nhỏ như "TRÙNG"/"TRỐNG" ở dòng bị
+   xử lý), 3 thanh đen thay cho chữ; ô lỗi tô màu nhấn, dòng bị xoá gạch
+   chéo mờ. Bao quanh là 4 dấu ngoặc góc (.tool-mock-frame). */
+function mockRow(cellClasses, opts) {
+  const o = opts || {};
+  // Luôn vẽ đủ 3 cột để 2 bảng trước/sau thẳng hàng nhau.
+  const classes = [cellClasses[0] || "", cellClasses[1] || "", cellClasses[2] || ""];
+  const cells = classes.map((c) => `<span class="tool-mock-cell${c ? " " + c : ""}"></span>`).join("");
+  const num = o.tag ? `<span class="tool-mock-tag">${o.tag}</span>` : `<span class="tool-mock-num">${o.n}</span>`;
+  return `<div class="tool-mock-row${o.removed ? " is-removed" : ""}">${num}${cells}</div>`;
 }
-function mockBox(label, rowsHtml) {
-  return `<div class="tool-mock-box"><span class="tool-mock-label">${label}</span>${rowsHtml}</div>`;
+// rows: mảng các phần tử [cellClasses, opts] -- số thứ tự dòng tự đánh 1, 2, 3...
+function mockBox(label, rows) {
+  const html = rows.map((r, i) => mockRow(r[0], Object.assign({ n: i + 1 }, r[1] || {}))).join("");
+  return `<div class="tool-mock-box"><span class="tool-mock-label">${label}</span>${html}</div>`;
 }
 function mockPair(beforeRows, afterRows, delta) {
   return (
-    `<div class="tool-mock">${mockBox("TRƯỚC", beforeRows)}` +
+    `<div class="tool-mock-frame"><span class="tool-mock-corner is-tr"></span><span class="tool-mock-corner is-bl"></span>` +
+    `<div class="tool-mock">${mockBox("Trước", beforeRows)}` +
     `<span class="tool-mock-delta">→<span class="tool-mock-delta-label">${delta}</span></span>` +
-    `${mockBox("SAU", afterRows)}</div>`
+    `${mockBox("Sau", afterRows)}</div></div>`
   );
 }
 
@@ -232,9 +281,9 @@ const TOOL_INFO = {
     headline: "XOÁ DÒNG TRÙNG<br>TRONG FILE CSV",
     desc: "Tìm và xoá các dòng lặp lại chỉ trong vài giây. So khớp trên mọi cột, hoặc chỉ những cột xác định 1 bản ghi (vd email) -- bản đầu tiên (hoặc cuối cùng) luôn được giữ lại.",
     mock: mockPair(
-      mockRow([]) + mockRow(["is-hit"]) + mockRow([]),
-      mockRow([]) + mockRow([]),
-      "-1 DÒNG"
+      [[[]], [[]], [["is-hit", "is-hit", "is-hit"], { tag: "TRÙNG" }], [[]]],
+      [[[]], [[]], [[]]],
+      "-1 dòng"
     ),
     steps: [
       "Thả file CSV/Excel vào, hoặc dán text.",
@@ -257,9 +306,9 @@ const TOOL_INFO = {
     headline: "CẮT KHOẢNG TRẮNG THỪA<br>TRONG FILE CSV",
     desc: "Cắt khoảng trắng vô hình làm 2 giá trị tưởng giống nhau mà máy tính lại coi là khác nhau: khoảng trắng đầu/cuối, non-breaking space, và ký tự zero-width.",
     mock: mockPair(
-      mockRow(["is-hit"]) + mockRow(["", "is-hit"]) + mockRow([]),
-      mockRow(["is-fixed"]) + mockRow(["", "is-fixed"]) + mockRow([]),
-      "3 Ô"
+      [[["is-hit"]], [["", "is-hit"]], [[]], [["", "", "is-hit"]]],
+      [[["is-fixed"]], [["", "is-fixed"]], [[]], [["", "", "is-fixed"]]],
+      "3 ô"
     ),
     steps: [
       "Thả file CSV/Excel vào, hoặc dán text.",
@@ -282,9 +331,9 @@ const TOOL_INFO = {
     headline: "ĐIỀN / XOÁ Ô TRỐNG<br>TRONG FILE CSV",
     desc: "Thay ô trống bằng giá trị bạn chọn, điền theo giá trị ở dòng gần nhất phía trên, hoặc xoá hẳn cả dòng thiếu -- áp dụng cho ĐÚNG 1 cột bạn chỉ định.",
     mock: mockPair(
-      mockRow([]) + mockRow(["is-hit"]) + mockRow([]),
-      mockRow([]) + mockRow(["is-fixed"]) + mockRow([]),
-      "1 Ô"
+      [[[]], [["is-hit"]], [[]], [["is-hit"]]],
+      [[[]], [["is-fixed"]], [[]], [["is-fixed"]]],
+      "Điền ↓"
     ),
     steps: [
       "Thả file CSV/Excel vào, hoặc dán text.",
@@ -307,9 +356,9 @@ const TOOL_INFO = {
     headline: "XOÁ DÒNG TRỐNG<br>TRONG FILE CSV",
     desc: "Xoá các dòng không có giá trị nào cả, kể cả dòng chỉ toàn khoảng trắng/dấu phẩy rỗng -- tuỳ chọn thêm: xoá luôn cột nào trống hoàn toàn từ trên xuống dưới.",
     mock: mockPair(
-      mockRow([]) + mockRow([], true) + mockRow([]),
-      mockRow([]) + mockRow([]),
-      "-1 DÒNG"
+      [[[]], [[], { removed: true, tag: "TRỐNG" }], [[]], [[], { removed: true, tag: "TRỐNG" }], [[]]],
+      [[[]], [[]], [[]]],
+      "-2 dòng"
     ),
     steps: [
       "Thả file CSV/Excel vào, hoặc dán text.",
@@ -339,10 +388,11 @@ function PRIVACY_COLUMN() {
 
 function renderFtToolHero(tool) {
   const info = TOOL_INFO[tool];
+  // Đường dẫn "Trang chủ / Free Tools / <tên tool>" ở đầu trang đổi theo tool.
+  $("ft-crumb-tool").textContent = TOOL_TAB_LABEL[tool];
   $("tool-hero").innerHTML = `
     <div class="tool-hero-grid">
       <div>
-        <p class="auth-eyebrow">[ FREE TOOLS ]</p>
         <h1 class="tool-hero-headline">${info.headline}</h1>
         <p class="tool-hero-desc">${info.desc}</p>
       </div>
@@ -418,34 +468,59 @@ async function handleFtFileSelected(file) {
     // File Excel (.xlsx/.xls) -- không đọc được dạng văn bản thuần trong
     // trình duyệt (cần thư viện riêng mới giải mã được định dạng nhị phân
     // này), nên chỉ hiện dòng xác nhận đã chọn, KHÔNG có bảng xem trước.
-    showFtRawPreview(`${file.name} · ${(file.size / 1024).toFixed(1)} KB`, null, "Không xem trước được file Excel trong trình duyệt -- bấm \"Chạy\" để xem kết quả.");
+    showFtRawPreview(file.name, `${(file.size / 1024).toFixed(1)} KB`, null, "Không xem trước được file Excel trong trình duyệt -- bấm \"Chạy\" để xem kết quả.");
     return;
   }
   let text;
   try {
     text = await readFileAsText(file);
   } catch (err) {
-    showFtRawPreview(`${file.name} · ${(file.size / 1024).toFixed(1)} KB`, null, "Không đọc được file để xem trước -- vẫn bấm \"Chạy\" được bình thường.");
+    showFtRawPreview(file.name, `${(file.size / 1024).toFixed(1)} KB`, null, "Không đọc được file để xem trước -- vẫn bấm \"Chạy\" được bình thường.");
     return;
   }
   const { rows, totalDataRows } = naiveParseCsvPreview(text, 20);
-  showFtRawPreview(`${file.name} · ${totalDataRows} dòng dữ liệu`, rows, totalDataRows > 20 ? `Xem trước 20/${totalDataRows} dòng đầu.` : "");
+  const colCount = rows.length ? rows[0].length : 0;
+  showFtRawPreview(file.name, tableDims(totalDataRows, colCount), rows, totalDataRows > 20 ? `Xem trước 20/${totalDataRows} dòng đầu.` : "");
 }
-function showFtRawPreview(label, rows, note) {
+// label = thẻ đen bên trái thanh trên (tên file), dims = chữ mờ bên phải
+// ("N dòng × M cột" hoặc dung lượng file nếu không đọc được).
+function showFtRawPreview(label, dims, rows, note) {
   state.ft.rawPreviewActive = true;
-  $("ft-raw-preview-label").textContent = `📄 ${label}`;
-  if (rows && rows.length) {
-    $("ft-raw-preview-table-wrap").hidden = false;
-    renderPreviewTable($("ft-raw-preview-table"), rows);
-  } else {
-    $("ft-raw-preview-table-wrap").hidden = true;
-  }
-  $("ft-raw-preview-note").hidden = !note;
-  $("ft-raw-preview-note").textContent = note || "";
+  // Nhớ lại nội dung xem trước của FILE ĐÃ CHỌN -- vì bảng xem trước dùng
+  // chung với chế độ pipeline (renderFtPipelinePreview() ghi đè), khi quay
+  // lại chế độ chọn file thì đổ lại từ đây, không cần đọc lại file.
+  state.ft.filePreview = { label, dims, rows, note };
   renderFtInputArea();
+}
+// Đổ nội dung vào bảng xem trước (dùng cho CẢ file vừa chọn LẪN đầu vào của
+// pipeline, xem renderFtPipelinePreview()). Ghi chú (note) khi KHÔNG có bảng
+// thì chiếm cả khung với nền gạch chéo (.is-only), có bảng thì chỉ là 1 dòng
+// nhỏ dưới bảng.
+function fillFtPreviewCard(label, dims, rows, note) {
+  const hasTable = !!(rows && rows.length);
+  $("ft-raw-preview-label").textContent = label;
+  $("ft-raw-preview-dims").textContent = dims || "";
+  $("ft-raw-preview-table-wrap").hidden = !hasTable;
+  if (hasTable) renderPreviewTable($("ft-raw-preview-table"), rows);
+  const noteEl = $("ft-raw-preview-note");
+  noteEl.hidden = !note;
+  noteEl.textContent = note || "";
+  noteEl.classList.toggle("is-only", !hasTable);
+}
+// Chế độ nối tiếp (pipeline đang chạy): khung 01 KHÔNG để trống mà hiện
+// ĐẦU VÀO của lần chạy kế tiếp = kết quả của bước trước (pipeline.currentText),
+// thẻ đen = tên file gốc, nút "Đổi file" ẩn (đã có "Tải file khác" trên dải
+// pipeline). Tách CSV chỉ để hiển thị, giống naiveParseCsvPreview().
+function renderFtPipelinePreview() {
+  const p = state.ft.pipeline;
+  const { rows, totalDataRows } = naiveParseCsvPreview(p.currentText || "", 20);
+  const colCount = rows.length ? rows[0].length : 0;
+  const stepsText = p.steps.length ? `Đầu vào hiện tại = kết quả sau: ${p.steps.map((s) => s.label).join(" → ")}` : "";
+  fillFtPreviewCard(p.originalLabel, tableDims(totalDataRows, colCount), rows, stepsText);
 }
 function hideFtRawPreview() {
   state.ft.rawPreviewActive = false;
+  state.ft.filePreview = null;
   state.ft.selectedFile = null;
   $("ft-file-input").value = "";
   renderFtInputArea();
@@ -458,13 +533,29 @@ $("ft-change-file-btn").addEventListener("click", hideFtRawPreview);
 // trạng thái pipeline đổi, showFtRawPreview()/hideFtRawPreview() cũng gọi). ======
 function renderFtInputArea() {
   const p = state.ft.pipeline;
-  const showUpload = !p.active || p.forceNewUpload; // false = đang dùng pipeline nối tiếp, ẩn hết khu nhập liệu gốc
-  const showRawPreview = showUpload && state.ft.rawPreviewActive;
-  const showPickers = showUpload && !state.ft.rawPreviewActive;
-  $("ft-input-toggle").hidden = !showPickers;
-  $("ft-dropzone").hidden = !showPickers || state.ft.inputMode !== "file";
-  $("ft-paste-input").hidden = !showPickers || state.ft.inputMode !== "paste";
+  const showUpload = !p.active || p.forceNewUpload; // false = đang dùng pipeline nối tiếp
+  if (!showUpload) {
+    // Pipeline: khung 01 hiện đầu vào của lần chạy kế tiếp, ẩn mọi ô chọn file.
+    renderFtPipelinePreview();
+    $("ft-input-toggle").hidden = true;
+    $("ft-dropzone").hidden = true;
+    $("ft-paste-input").hidden = true;
+    $("ft-raw-preview").hidden = false;
+    $("ft-change-file-btn").hidden = true;
+    return;
+  }
+  const showRawPreview = state.ft.rawPreviewActive && !!state.ft.filePreview;
+  // Chế độ chọn file: đổ lại nội dung file đã chọn từ bộ nhớ (bảng xem trước
+  // có thể vừa bị pipeline ghi đè).
+  if (showRawPreview) {
+    const f = state.ft.filePreview;
+    fillFtPreviewCard(f.label, f.dims, f.rows, f.note);
+  }
+  $("ft-input-toggle").hidden = showRawPreview;
+  $("ft-dropzone").hidden = showRawPreview || state.ft.inputMode !== "file";
+  $("ft-paste-input").hidden = showRawPreview || state.ft.inputMode !== "paste";
   $("ft-raw-preview").hidden = !showRawPreview;
+  $("ft-change-file-btn").hidden = false;
 }
 
 // ====== Tuỳ chọn riêng tool "Điền/xoá ô trống": ô "Giá trị điền vào" chỉ
@@ -472,6 +563,8 @@ function renderFtInputArea() {
 $("opt-action").addEventListener("change", () => {
   $("opt-fixed-value-wrap").hidden = $("opt-action").value !== "fixed_value";
 });
+// Công tắc nối liền (opt-keep, opt-action) -- xem wireSegmented() đầu file.
+document.querySelectorAll(".ft-seg[data-seg-for]").forEach(wireSegmented);
 
 /* ====== Thanh "nối tiếp" (pipeline) ====== */
 function renderFtPipelineStrip() {
@@ -503,7 +596,7 @@ $("pipeline-reset-btn").addEventListener("click", () => {
 /* ====== Kết quả ====== */
 function resetFtResult() {
   $("ft-result-empty").hidden = false;
-  $("ft-result-table-wrap").hidden = true;
+  $("ft-result-card").hidden = true;
   $("ft-download-btn").disabled = true;
   $("continue-panel").hidden = true;
   state.ft.activeContinueCategory = null;
@@ -535,7 +628,12 @@ const TOOL_TAB_LABEL = {
 function showFtResult(data, inputLabel) {
   $("ft-result-empty").hidden = true;
   $("ft-download-btn").disabled = false;
-  $("ft-result-table-wrap").hidden = false;
+  $("ft-result-card").hidden = false;
+  // Thanh trên của bảng kết quả: thẻ đen = tên tool vừa chạy, bên phải =
+  // "N dòng × M cột" (N lấy từ stats của backend, M đếm theo header preview).
+  $("ft-result-tag").textContent = TOOL_TAB_LABEL[state.ft.tool];
+  const colCount = data.preview_rows && data.preview_rows.length ? data.preview_rows[0].length : 0;
+  $("ft-result-dims").textContent = tableDims(data.stats.final_row_count, colCount);
   renderPreviewTable($("ft-result-table"), data.preview_rows);
   setStatus($("ft-status"), statusFromStats(data.stats), "is-ok");
 

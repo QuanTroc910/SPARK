@@ -3,31 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workspace — Dò &amp; Xử Lý Nhiễu Dữ Liệu</title>
+  <title>Denoise — Workspace</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;650;700&display=swap" rel="stylesheet" />
-  <!-- QUAN TRỌNG: nạp style.css TRƯỚC để lấy màu/token/nút/chip đã có (--signal,
-       --bg, .btn, .chip, .results-table...) -- workspace.css chỉ CHỨA RULE MỚI,
-       không copy lại gì đã có, để không bao giờ bị lệch màu giữa 2 file. Trang
-       này KHÔNG sửa 1 dòng nào của style.css -- xem giải thích đầy đủ lý do
-       tách file trong CLAUDE.md mục Workspace mới. -->
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;650;700;800&display=swap" rel="stylesheet" />
+  <!-- style.css nạp TRƯỚC để lấy các class dùng chung (.btn, .input, .results-table,
+       .convert-grid...). workspace.css nạp SAU, khai báo LẠI token màu/góc ở :root
+       nên toàn bộ trang này đổi sang giao diện Denoise (theo trang tham khảo CYD)
+       mà KHÔNG sửa 1 dòng nào của style.css -- index.html/landing.html giữ nguyên. -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="workspace.css" />
 </head>
 <body class="auth-ready">
-  <!-- Trang MỚI, thay thế dần index.html (luồng 5 bước cũ) -- bắt đăng nhập
-       qua cookie session dùng chung (checkAuth() trong workspace.js), form
-       đăng nhập thật vẫn CHỈ sống ở index.html.
+  <!-- Trang MỚI, thay thế dần index.html -- bắt đăng nhập qua cookie session dùng
+       chung (checkAuth() trong workspace.js), form đăng nhập thật vẫn CHỈ sống ở
+       index.html (sẽ xây lại ở bước 4).
 
-       ĐÃ GỘP (không còn là 2 trang riêng nữa): Free Tools (trước ở
-       tools.html/tools.js) + Convert File (trước ở convert.html/convert.js)
-       giờ là 2 KHỐI trong CÙNG 1 trang này (#section-free-tools/
-       #section-convert ở <main> bên dưới), chuyển khối bằng JS
-       (switchSection() trong workspace.js) -- KHÔNG điều hướng sang trang
-       khác nữa. Lý do gộp: workspace.html là trang DUY NHẤT dự định thay thế
-       toàn bộ giao diện cũ, tools.html/convert.html trước đó là 2 trang tạm
-       xây lố ra ngoài kế hoạch này (đã xoá, xem lịch sử commit). -->
+       Thân trang có 2 KHỐI (#section-free-tools / #section-convert), chuyển khối
+       bằng switchSection() -- không điều hướng sang trang khác. Khối Free Tools
+       đã làm lại theo ĐÚNG khuôn 1 trang tool của CYD (bước 2); khối Convert mới
+       chỉ ăn theo bảng màu/góc vuông chung, bố cục đầy đủ làm ở bước 3. -->
+
+  <!-- Link "bỏ qua điều hướng" cho người dùng bàn phím -- chỉ hiện khi bấm Tab. -->
+  <a class="ws-skip" href="#main">Bỏ qua điều hướng, tới nội dung</a>
+  <!-- Các đường kẻ dọc mờ chạy suốt trang (trang trí, không tương tác). -->
+  <div class="ws-gridlines" aria-hidden="true"></div>
+
   <header class="ws-header">
     <div class="container ws-header-inner">
       <div class="ws-brand">
@@ -35,194 +36,146 @@
       </div>
 
       <nav class="ws-nav">
-        <!-- "Product ▾" -- mega menu 3 cột + 1 khối CTA đậm, bố cục Y HỆT
-             dropdown PRODUCT của trang tham khảo (CYD), nội dung đổi hẳn
-             sang đúng 3 nhóm tính năng thật của Denoise. -->
+        <!-- "Product ▾": mega menu 3 cột + 1 khối CTA đen, bố cục theo dropdown của
+             CYD, nội dung là 3 nhóm tính năng thật của Denoise. Viền màu nhấn
+             (.is-current) vì Free Tools/Convert đều thuộc nhóm này. -->
         <div class="ws-has-dropdown" id="ws-product-wrap">
-          <button type="button" class="ws-nav-pill" id="ws-product-btn" aria-expanded="false">
+          <button type="button" class="ws-nav-pill is-current" id="ws-product-btn" aria-expanded="false">
             Product <span class="ws-caret">⌄</span>
           </button>
           <div class="ws-megamenu" id="ws-product-menu" hidden>
-            <!-- Cột 1: loại noise CẦN NHẬP TAY tham số -- CHƯA có khối thân
-                 trang riêng (chỉ là lựa chọn bên trong Workspace, phần
-                 "Cần cấu hình" CHƯA xây ở trang mới này), nên CHƯA bấm vào
-                 được ở bản này -- sẽ nối link thật khi phần đó được xây xong. -->
+            <!-- Cột 1: loại noise CẦN NHẬP TAY tham số -- phần thân trang này CHƯA
+                 xây lại ở Denoise nên chưa bấm được. -->
             <div class="ws-megamenu-col">
-              <span class="ws-megamenu-label">CẦN CẤU HÌNH (Workspace)</span>
+              <span class="ws-megamenu-label">Cần cấu hình · Workspace</span>
               <div class="ws-megamenu-item ws-megamenu-item--static">
                 <span class="ws-megamenu-icon">📝</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Sai định dạng</strong>
-                  <small>Email/SĐT/ngày tháng không đúng khuôn mẫu</small>
-                </span>
+                <span class="ws-megamenu-item-text"><strong>Sai định dạng</strong><small>Email · SĐT · ngày tháng sai khuôn</small></span>
               </div>
               <div class="ws-megamenu-item ws-megamenu-item--static">
                 <span class="ws-megamenu-icon">📏</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Ngoài khoảng</strong>
-                  <small>Tự khai min/max hợp lý cho cột số</small>
-                </span>
+                <span class="ws-megamenu-item-text"><strong>Ngoài khoảng</strong><small>Tự khai min/max cho cột số</small></span>
               </div>
               <div class="ws-megamenu-item ws-megamenu-item--static">
                 <span class="ws-megamenu-icon">📈</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Giá trị bất thường</strong>
-                  <small>Outlier theo IQR/Z-score</small>
-                </span>
+                <span class="ws-megamenu-item-text"><strong>Giá trị bất thường</strong><small>Outlier theo IQR / Z-score</small></span>
               </div>
               <div class="ws-megamenu-item ws-megamenu-item--static">
                 <span class="ws-megamenu-icon">🧩</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Không nhất quán</strong>
-                  <small>"Nam"/"nam"/"NAM" cùng 1 nghĩa</small>
-                </span>
+                <span class="ws-megamenu-item-text"><strong>Không nhất quán</strong><small>"Nam" / "nam" / "NAM" cùng 1 nghĩa</small></span>
               </div>
               <div class="ws-megamenu-item ws-megamenu-item--static">
                 <span class="ws-megamenu-icon">🧮</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Thiếu giá trị (nâng cao)</strong>
-                  <small>Impute trung bình/trung vị/KNN/mode</small>
-                </span>
+                <span class="ws-megamenu-item-text"><strong>Thiếu giá trị (nâng cao)</strong><small>Impute mean · median · KNN · mode</small></span>
               </div>
               <div class="ws-megamenu-item ws-megamenu-item--static">
                 <span class="ws-megamenu-icon">🔗</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Rule liên cột</strong>
-                  <small>So sánh · điều kiện · công thức · phụ thuộc hàm</small>
-                </span>
+                <span class="ws-megamenu-item-text"><strong>Rule liên cột</strong><small>So sánh · điều kiện · công thức · phụ thuộc</small></span>
               </div>
             </div>
 
-            <!-- Cột 2: Convert -- bấm vào CHUYỂN KHỐI tại chỗ (không điều
-                 hướng đi đâu nữa, xem comment đầu file), href="#" +
-                 data-convert-tool để JS bắt sự kiện (switchSection("convert")
-                 + activateCvTool(), xem workspace.js). -->
+            <!-- Cột 2: Convert -- chuyển khối tại chỗ (data-convert-tool, xem workspace.js). -->
             <div class="ws-megamenu-col">
-              <span class="ws-megamenu-label">CONVERT</span>
+              <span class="ws-megamenu-label">Convert</span>
               <a class="ws-megamenu-item" href="#" data-convert-tool="delimiter">
-                <span class="ws-megamenu-icon">↔</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Đổi delimiter CSV</strong>
-                  <small>Phẩy, chấm phẩy, tab, gạch đứng</small>
-                </span>
+                <span class="ws-megamenu-icon">⇄</span>
+                <span class="ws-megamenu-item-text"><strong>Đổi delimiter CSV</strong><small>Phẩy · chấm phẩy · tab · gạch đứng</small></span>
               </a>
               <a class="ws-megamenu-item" href="#" data-convert-tool="csv-to-json">
                 <span class="ws-megamenu-icon">{ }</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>CSV → JSON</strong>
-                  <small>Giữ nguyên số 0 đầu, chữ có dấu</small>
-                </span>
+                <span class="ws-megamenu-item-text"><strong>CSV → JSON</strong><small>Mỗi dòng 1 object, khoá là tên cột</small></span>
               </a>
               <a class="ws-megamenu-item" href="#" data-convert-tool="json-to-csv">
                 <span class="ws-megamenu-icon">{ }</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>JSON → CSV</strong>
-                  <small>Nhận cả JSON array lẫn JSON Lines</small>
-                </span>
+                <span class="ws-megamenu-item-text"><strong>JSON → CSV</strong><small>Làm phẳng JSON lồng nhau thành cột</small></span>
               </a>
             </div>
 
-            <!-- Cột 3: Free Tools (4 loại tự động, không cần cấu hình) --
-                 bấm vào CHUYỂN KHỐI tại chỗ, href="#" + data-tool. -->
+            <!-- Cột 3: Free Tools -- chuyển khối tại chỗ (data-tool). -->
             <div class="ws-megamenu-col">
-              <span class="ws-megamenu-label">TỰ ĐỘNG (Free Tools)</span>
+              <span class="ws-megamenu-label">Tự động · Free Tools</span>
               <a class="ws-megamenu-item" href="#" data-tool="remove-duplicates">
-                <span class="ws-megamenu-icon">🧬</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Xoá dòng trùng</strong>
-                  <small>Giữ bản đầu hoặc bản cuối</small>
-                </span>
+                <span class="ws-megamenu-icon">⧉</span>
+                <span class="ws-megamenu-item-text"><strong>Xoá dòng trùng</strong><small>Giữ 1 bản cho mỗi dòng</small></span>
               </a>
               <a class="ws-megamenu-item" href="#" data-tool="trim-whitespace">
-                <span class="ws-megamenu-icon">✂️</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Cắt khoảng trắng thừa</strong>
-                  <small>Mọi ô, mọi cột, tự động</small>
-                </span>
-              </a>
-              <a class="ws-megamenu-item" href="#" data-tool="fill-blanks">
-                <span class="ws-megamenu-icon">🩹</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Điền / xoá ô trống</strong>
-                  <small>1 cột, xoá dòng hoặc điền giá trị</small>
-                </span>
+                <span class="ws-megamenu-icon">⇥</span>
+                <span class="ws-megamenu-item-text"><strong>Cắt khoảng trắng thừa</strong><small>Khoảng trắng lạc và vô hình</small></span>
               </a>
               <a class="ws-megamenu-item" href="#" data-tool="remove-empty-rows">
-                <span class="ws-megamenu-icon">🗑️</span>
-                <span class="ws-megamenu-item-text">
-                  <strong>Xoá dòng trống hoàn toàn</strong>
-                  <small>Mọi cột trong dòng đều trống</small>
-                </span>
+                <span class="ws-megamenu-icon">☰</span>
+                <span class="ws-megamenu-item-text"><strong>Xoá dòng trống</strong><small>Xoá dòng và cột trống hoàn toàn</small></span>
+              </a>
+              <a class="ws-megamenu-item" href="#" data-tool="fill-blanks">
+                <span class="ws-megamenu-icon">▦</span>
+                <span class="ws-megamenu-item-text"><strong>Điền ô trống</strong><small>Điền từ trên xuống hoặc 1 giá trị cố định</small></span>
               </a>
             </div>
 
-            <!-- Khối CTA đậm bên phải -- TẠM thời trỏ về "#" (phần thân
-                 trang "Cần cấu hình" chưa xây) -- sẽ nối khi xây xong. -->
+            <!-- Khối CTA đen -- TẠM trỏ "#" (phần Workspace đầy đủ chưa xây lại). -->
             <a class="ws-megamenu-cta" href="#">
-              <p class="ws-megamenu-cta-eyebrow">TẢI FILE LÊN, XỬ LÝ TỪNG BƯỚC</p>
-              <p class="ws-megamenu-cta-title">MỞ WORKSPACE</p>
+              <p class="ws-megamenu-cta-eyebrow">Tải file lên và làm sạch<br>từng bước một</p>
+              <p class="ws-megamenu-cta-title">Mở<br>Workspace</p>
               <span class="ws-megamenu-cta-arrow">→</span>
             </a>
           </div>
         </div>
 
-        <!-- Class Noise -- đứng riêng (không nằm trong dropdown Product) vì
-             đây là 1 luồng khác hẳn (chọn nhãn+đặc trưng+thuật toán ML), không
-             phải "tick chọn loại lỗi" như attribute noise. TẠM href="#" vì
-             phần thân trang Class Noise chưa xây lại ở đây. -->
+        <!-- Class Noise, Guide: TẠM href="#", phần thân chưa xây lại ở đây. -->
         <a class="ws-nav-pill" href="#">Class Noise</a>
-
-        <!-- Guide -- hướng dẫn cách dùng thật (KHÔNG làm Blog/Pricing kiểu
-             CYD vì Denoise không bán, không cần content marketing). TẠM
-             href="#", chưa viết nội dung trang Guide. -->
         <a class="ws-nav-pill" href="#">Guide</a>
       </nav>
 
       <div class="ws-header-right">
-        <!-- Trạng thái backend CHỈ còn 1 chấm tròn màu (xanh=đã kết nối,
-             vàng=chưa) -- giữ chữ "Backend: đã/chưa kết nối" dưới dạng
-             `title` (tooltip khi rê chuột), xem workspace.js::checkBackendHealth(). -->
-        <div class="status-pill">
-          <span id="backend-dot" class="status-dot is-offline"></span>
-        </div>
+        <!-- Chấm trạng thái backend (xanh chanh = đã kết nối, vàng = chưa), chữ
+             giải thích nằm trong title (rê chuột), xem checkBackendHealth(). -->
+        <span id="backend-dot" class="status-dot is-offline" title="Backend: đang kiểm tra…"></span>
         <div class="account-area" id="account-area" hidden>
-          <span class="account-username mono" id="account-username-text"></span>
-          <button class="btn btn-ghost btn-small" id="open-profile-btn" type="button">Hồ sơ</button>
+          <span class="account-username" id="account-username-text"></span>
           <button class="btn btn-ghost btn-small" id="logout-btn" type="button">Đăng xuất</button>
+          <button class="btn btn-accent btn-small" id="open-profile-btn" type="button">Hồ sơ</button>
         </div>
       </div>
     </div>
   </header>
 
-  <main class="container main-area">
+  <main class="container main-area" id="main">
     <!-- ============================================================
-         KHỐI: Free Tools (Tự động) -- MẶC ĐỊNH hiện khi vào trang (giữ
-         đúng hành vi cũ của tools.html: vào là thấy ngay, không cần chọn gì
-         trước). ID các phần tử dùng tiền tố "ft-" ở CHỖ TRÙNG TÊN với khối
-         Convert bên dưới (vd convert-tabs/convert-dropzone...) -- những ID
-         không trùng (convert-options-*, opt-*, tool-hero, pipeline-*,
-         continue-*) giữ nguyên tên cũ, không đổi gì. ============================================================ -->
+         KHỐI: Free Tools -- MẶC ĐỊNH hiện khi vào trang. Bố cục = 1 trang tool
+         của CYD. ID phần tử dùng tiền tố "ft-" ở chỗ trùng tên với khối Convert.
+         ============================================================ -->
     <div id="section-free-tools">
-      <!-- Hero RIÊNG từng tool -- nội dung đổ vào bằng JS (renderFtToolHero()),
-           đổi theo tab đang chọn, xem TOOL_INFO trong workspace.js. -->
+      <!-- Đường dẫn (trái) + 3 chỉ số nhỏ (phải) -- CYD ghi "RUNS IN / YOUR
+           BROWSER · PRICE / FREE · SIGN-UP / NOT NEEDED"; Denoise ghi đúng sự
+           thật của mình (xử lý qua backend, bắt đăng nhập). -->
+      <div class="ft-topbar">
+        <span class="ft-crumb">Trang chủ<i>/</i>Free Tools<i>/</i><b id="ft-crumb-tool">Xoá dòng trùng</b></span>
+        <span class="ft-meta">
+          <span>Chạy trên<strong>Backend Flask</strong></span>
+          <span>Giá<strong>Miễn phí</strong></span>
+          <span>Đăng nhập<strong>Bắt buộc</strong></span>
+        </span>
+      </div>
+
+      <!-- Tiêu đề + mô tả + hình trước/sau -- đổ vào bằng JS (renderFtToolHero()). -->
       <div id="tool-hero"></div>
 
       <div class="convert-badges">
-        <span class="convert-badge">⚡ Không cần cấu hình tay</span>
+        <span class="convert-badge">⚡ Không cần cấu hình</span>
         <span class="convert-badge">🔒 Cần đăng nhập</span>
-        <span class="convert-badge">🧮 Luôn xử lý qua backend Flask thật</span>
+        <span class="convert-badge">▦ Xử lý qua backend thật</span>
       </div>
 
+      <!-- Tab chọn tool: CYD mỗi tool 1 trang riêng, Denoise gộp 4 tool trong 1
+           khối nên giữ hàng tab (kiểu viên thuốc) để đổi tool nhanh. -->
       <div class="convert-tabs" id="ft-tabs">
-        <button type="button" class="convert-tab is-active" data-tool="remove-duplicates">🧬 Xoá dòng trùng</button>
-        <button type="button" class="convert-tab" data-tool="trim-whitespace">✂️ Cắt khoảng trắng thừa</button>
-        <button type="button" class="convert-tab" data-tool="fill-blanks">🩹 Điền/xoá ô trống</button>
-        <button type="button" class="convert-tab" data-tool="remove-empty-rows">🗑️ Xoá dòng trống</button>
+        <button type="button" class="convert-tab is-active" data-tool="remove-duplicates">Xoá dòng trùng</button>
+        <button type="button" class="convert-tab" data-tool="trim-whitespace">Cắt khoảng trắng</button>
+        <button type="button" class="convert-tab" data-tool="fill-blanks">Điền ô trống</button>
+        <button type="button" class="convert-tab" data-tool="remove-empty-rows">Xoá dòng trống</button>
       </div>
 
-      <!-- Thanh "đang nối tiếp" -- CHỈ hiện khi đã có 1 pipeline đang chạy
-           (xem state.ft.pipeline trong workspace.js). Ẩn khung chọn file/dán
-           text bên dưới khi thanh này hiện, trừ khi bấm "Tải file khác". -->
+      <!-- Dải "đang nối tiếp" -- chỉ hiện khi có pipeline (state.ft.pipeline). -->
       <div class="pipeline-strip" id="pipeline-strip" hidden>
         <span class="pipeline-strip-text" id="pipeline-strip-text"></span>
         <span class="pipeline-strip-actions">
@@ -235,7 +188,7 @@
         <!-- 01 · ĐẦU VÀO -->
         <section class="convert-panel ft-panel">
           <div class="ft-panel-head">
-            <span class="ft-eyebrow-tag">01 · ĐẦU VÀO</span>
+            <span class="ft-eyebrow-tag">01 · Đầu vào</span>
             <div class="convert-input-toggle" id="ft-input-toggle">
               <button type="button" class="is-active" data-mode="file">File</button>
               <button type="button" data-mode="paste">Dán text</button>
@@ -243,89 +196,99 @@
           </div>
 
           <div class="ft-panel-body">
-          <!-- MỚI: bọc riêng phần "hiện dữ liệu" (ô kéo-thả HOẶC bảng xem
-               trước) vào 1 khung CHIỀU CAO CỐ ĐỊNH (.ft-input-zone, xem
-               workspace.css) -- không đổi dù đang trống/đã chọn file/đang
-               dán text, để khung không bị co giãn qua lại giữa các trạng
-               thái, và khi CÓ dữ liệu thì có đủ chỗ xem rõ (bảng cuộn BÊN
-               TRONG khung thay vì khung tự phình to). -->
+          <!-- Khung chiều cao CỐ ĐỊNH chứa ô kéo-thả HOẶC bảng xem trước
+               (.ft-input-zone) -- không co giãn giữa các trạng thái. -->
           <div class="ft-input-zone">
             <label class="dropzone dropzone--compact" id="ft-dropzone">
-              <span class="dropzone-icon">⬆</span>
-              <p class="ft-dropzone-title">Kéo thả file CSV/Excel vào đây</p>
-              <p class="hint-note">Tối đa 10MB · xử lý qua backend thật, không lưu lại file gốc</p>
+              <svg class="ft-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+              </svg>
+              <p class="ft-dropzone-title">Thả file CSV vào đây</p>
+              <p class="ft-dropzone-hint">Tối đa 10 MB · CSV hoặc Excel · không lưu lại file gốc</p>
               <span class="btn btn-primary btn-small ft-choose-file-btn">Chọn file</span>
             </label>
             <input type="file" id="ft-file-input" accept=".csv,.xlsx,.xls" hidden />
             <textarea class="input mono convert-paste-input" id="ft-paste-input" rows="9" placeholder="Dán nội dung CSV vào đây (dòng đầu là tên cột)…" hidden></textarea>
 
-            <!-- MỚI: bảng xem trước dữ liệu GỐC (chưa xử lý) -- hiện THAY cho
-                 ô kéo-thả ngay sau khi chọn xong 1 file CSV (xem
-                 showFtRawPreview() trong workspace.js). CHỈ áp dụng cho chế độ
-                 chọn FILE -- chế độ "Dán text" giữ nguyên hành vi cũ (ô dán text
-                 không biến mất khi đang gõ dở). File Excel (.xlsx/.xls) không
-                 đọc được dạng văn bản thuần trong trình duyệt nên chỉ hiện
-                 dòng xác nhận đã chọn, không có bảng xem trước. -->
-            <div class="ft-raw-preview" id="ft-raw-preview" hidden>
-              <div class="ft-raw-preview-head">
-                <span id="ft-raw-preview-label" class="mono"></span>
-                <button class="btn btn-ghost btn-small" id="ft-change-file-btn" type="button">↺ Đổi file khác</button>
+            <!-- Bảng xem trước dữ liệu GỐC (chưa xử lý), kiểu bảng CYD: thanh trên
+                 có thẻ đen = tên file, bên phải = "N DÒNG × M CỘT" + nút đổi file.
+                 Hiện THAY ô kéo-thả sau khi chọn file CSV (showFtRawPreview()).
+                 File Excel không đọc được dạng văn bản trong trình duyệt nên chỉ
+                 hiện dòng ghi chú (#ft-raw-preview-note), không có bảng. -->
+            <div class="ft-raw-preview cyd-table" id="ft-raw-preview" hidden>
+              <div class="cyd-table-bar">
+                <span class="cyd-table-tag" id="ft-raw-preview-label"></span>
+                <span class="cyd-table-right">
+                  <span class="cyd-table-dims" id="ft-raw-preview-dims"></span>
+                  <button class="btn btn-ghost btn-small" id="ft-change-file-btn" type="button">↺ Đổi file</button>
+                </span>
               </div>
-              <div class="table-wrap ft-raw-preview-table-wrap" id="ft-raw-preview-table-wrap">
+              <div class="table-wrap" id="ft-raw-preview-table-wrap">
                 <table class="results-table" id="ft-raw-preview-table"></table>
               </div>
-              <p class="hint-note" id="ft-raw-preview-note" hidden></p>
+              <p class="ft-table-note" id="ft-raw-preview-note" hidden></p>
             </div>
           </div>
 
-          <!-- Tuỳ chọn riêng từng tool -- chỉ 1 khối hiện tại 1 thời điểm, khớp state.ft.tool -->
+          <!-- Tuỳ chọn riêng từng tool -- chỉ 1 khối hiện tại 1 thời điểm (state.ft.tool).
+               Lựa chọn ngắn (2-3 mục) dùng công tắc nối liền .ft-seg kiểu CYD; <select>
+               gốc vẫn giữ (ẩn) để JS đọc .value như cũ, xem wireSegmented(). -->
           <div class="convert-options" id="convert-options-remove-duplicates">
-            <div class="field-row">
-              <div class="field field-grow">
-                <label>Chỉ so theo các cột này (để trống = so toàn bộ)</label>
-                <input class="input" id="opt-subset-columns" placeholder="vd: email, so_dien_thoai" />
-              </div>
-              <div class="field">
-                <label>Giữ lại bản nào</label>
-                <select class="select" id="opt-keep">
-                  <option value="first">Đầu tiên</option>
-                  <option value="last">Cuối cùng</option>
-                </select>
-              </div>
+            <div class="field">
+              <label for="opt-subset-columns">Chỉ so theo các cột này (để trống = so toàn bộ)</label>
+              <input class="input" id="opt-subset-columns" placeholder="vd: email, so_dien_thoai" />
             </div>
-            <label class="switch-row"><input type="checkbox" id="opt-ignore-case" /> Bỏ qua hoa/thường (vd "An" và "AN" tính là trùng)</label>
-            <label class="switch-row"><input type="checkbox" id="opt-ignore-whitespace" /> Bỏ qua khoảng trắng thừa khi so sánh</label>
+            <div class="field">
+              <label>Giữ lại bản nào</label>
+              <div class="ft-seg" data-seg-for="opt-keep">
+                <button type="button" class="is-active" data-value="first">Đầu tiên</button>
+                <button type="button" data-value="last">Cuối cùng</button>
+              </div>
+              <select class="select" id="opt-keep" hidden>
+                <option value="first">Đầu tiên</option>
+                <option value="last">Cuối cùng</option>
+              </select>
+            </div>
+            <label class="switch-row"><input type="checkbox" id="opt-ignore-case" /> Bỏ qua hoa/thường</label>
+            <p class="hint-note">"An" và "AN" tính là trùng</p>
+            <label class="switch-row"><input type="checkbox" id="opt-ignore-whitespace" /> Bỏ qua khoảng trắng thừa</label>
+            <p class="hint-note">Khoảng trắng đầu, cuối và lặp lại</p>
           </div>
 
           <div class="convert-options" id="convert-options-trim-whitespace" hidden>
-            <label class="switch-row"><input type="checkbox" id="opt-collapse-repeated" /> Gộp khoảng trắng lặp lại ("a␣␣b" → "a␣b")</label>
+            <label class="switch-row"><input type="checkbox" id="opt-collapse-repeated" /> Gộp khoảng trắng lặp lại</label>
+            <p class="hint-note">"a␣␣b" thành "a␣b"</p>
             <label class="switch-row"><input type="checkbox" id="opt-remove-zero-width" checked /> Xoá ký tự vô hình (zero-width)</label>
-            <p class="hint-note">Luôn cắt khoảng trắng đầu/cuối và đổi non-breaking space thành dấu cách thường, dù tick hay không.</p>
+            <p class="hint-note">Luôn cắt khoảng trắng đầu/cuối và đổi non-breaking space thành dấu cách, dù tick hay không</p>
           </div>
 
           <div class="convert-options" id="convert-options-fill-blanks" hidden>
-            <div class="field-row">
-              <div class="field field-grow">
-                <label>Tên cột cần xử lý (gõ đúng tên cột)</label>
-                <input class="input" id="opt-column" placeholder="vd: age" />
+            <div class="field">
+              <label for="opt-column">Tên cột cần xử lý (gõ đúng tên cột)</label>
+              <input class="input" id="opt-column" placeholder="vd: age" />
+            </div>
+            <div class="field">
+              <label>Điền bằng</label>
+              <div class="ft-seg" data-seg-for="opt-action">
+                <button type="button" class="is-active" data-value="fill_down">Giá trị phía trên</button>
+                <button type="button" data-value="fixed_value">Giá trị cố định</button>
+                <button type="button" data-value="remove_row">Xoá cả dòng</button>
               </div>
-              <div class="field">
-                <label>Cách xử lý</label>
-                <select class="select" id="opt-action">
-                  <option value="fill_down">Điền theo giá trị phía trên</option>
-                  <option value="fixed_value">Điền giá trị cố định</option>
-                  <option value="remove_row">Xoá cả dòng thiếu</option>
-                </select>
-              </div>
+              <select class="select" id="opt-action" hidden>
+                <option value="fill_down">Điền theo giá trị phía trên</option>
+                <option value="fixed_value">Điền giá trị cố định</option>
+                <option value="remove_row">Xoá cả dòng thiếu</option>
+              </select>
             </div>
             <div class="field" id="opt-fixed-value-wrap" hidden>
-              <label>Giá trị điền vào</label>
+              <label for="opt-fixed-value">Giá trị điền vào</label>
               <input class="input" id="opt-fixed-value" placeholder="vd: 0, hoặc Không rõ" />
             </div>
           </div>
 
           <div class="convert-options" id="convert-options-remove-empty-rows" hidden>
-            <label class="switch-row"><input type="checkbox" id="opt-remove-empty-columns" /> Xoá luôn cột nào trống hoàn toàn (mọi dòng đều thiếu)</label>
+            <label class="switch-row"><input type="checkbox" id="opt-remove-empty-columns" /> Xoá luôn cột trống hoàn toàn</label>
+            <p class="hint-note">Cột mà mọi dòng đều thiếu, kể cả tiêu đề</p>
           </div>
 
           <p class="form-error" id="ft-error" hidden></p>
@@ -339,39 +302,38 @@
         <!-- 02 · KẾT QUẢ -->
         <section class="convert-panel ft-panel">
           <div class="ft-panel-head">
-            <span class="ft-eyebrow-tag">02 · KẾT QUẢ</span>
+            <span class="ft-eyebrow-tag">02 · Kết quả</span>
             <button class="btn btn-ghost btn-small" id="ft-download-btn" type="button" disabled>⬇ Tải xuống CSV</button>
           </div>
           <div class="ft-panel-body">
-          <!-- MỚI: bọc riêng khung "ĐANG CHỜ DỮ LIỆU" / bảng kết quả vào 1
-               khung CHIỀU CAO CỐ ĐỊNH (.ft-result-zone, khớp CHIỀU CAO với
-               .ft-input-zone ở khung 01 -- xem workspace.css) -- không đổi
-               dù đang trống/đã có kết quả, bảng cuộn BÊN TRONG khung khi dữ
-               liệu dài hơn thay vì khung tự phình to. -->
           <div class="ft-result-zone">
-            <!-- Khung "ĐANG CHỜ DỮ LIỆU" kiểu khung xương (skeleton) -- CHỈ
-                 hiện khi CHƯA có kết quả nào, xem resetFtResult() trong
-                 workspace.js (vẫn cùng 1 id ft-result-empty như trước, chỉ đổi
-                 nội dung HTML bên trong). -->
+            <!-- Khung "ĐANG CHỜ DỮ LIỆU" kiểu khung xương -- chỉ hiện khi CHƯA có kết
+                 quả (resetFtResult()). Vẫn giữ id ft-result-empty như trước. -->
             <div class="ft-result-skeleton" id="ft-result-empty">
               <div class="ft-result-skeleton-box">
-                <span class="ft-result-skeleton-tag">ĐANG CHỜ DỮ LIỆU</span>
-                <div class="ft-result-skeleton-rows">
-                  <div></div><div></div><div></div><div></div>
+                <span class="ft-result-skeleton-tag">Đang chờ CSV</span>
+                <div class="ft-result-skeleton-rows" aria-hidden="true">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
                 </div>
+                <p class="ft-result-skeleton-sub">Xử lý qua backend · không lưu file gốc</p>
               </div>
-              <p class="ft-result-skeleton-caption">Kết quả sẽ hiện ở đây ngay khi bạn bấm "Chạy".</p>
+              <p class="ft-result-skeleton-caption">Kết quả hiện ở đây ngay khi bạn bấm "Chạy".</p>
             </div>
-            <div class="table-wrap" id="ft-result-table-wrap" hidden>
-              <table class="results-table" id="ft-result-table"></table>
+            <!-- Bảng kết quả kiểu CYD: thẻ đen = tên tool vừa chạy, phải = N DÒNG × M CỘT. -->
+            <div class="cyd-table" id="ft-result-card" hidden>
+              <div class="cyd-table-bar">
+                <span class="cyd-table-tag" id="ft-result-tag">Kết quả</span>
+                <span class="cyd-table-right"><span class="cyd-table-dims" id="ft-result-dims"></span></span>
+              </div>
+              <div class="table-wrap" id="ft-result-table-wrap">
+                <table class="results-table" id="ft-result-table"></table>
+              </div>
             </div>
           </div>
 
-          <!-- "Xử lý tiếp" -- CHỈ hiện sau khi có ít nhất 1 kết quả, xem
-               renderContinuePanel() trong workspace.js. 3 danh mục y hệt
-               dropdown "Product" ở header. -->
+          <!-- "Xử lý tiếp" -- chỉ hiện sau khi có kết quả (renderContinuePanel()). -->
           <div class="continue-panel" id="continue-panel" hidden>
-            <p class="continue-title">✅ Xong -- xử lý tiếp bằng:</p>
+            <p class="continue-title">✓ Xong · xử lý tiếp bằng</p>
             <div class="continue-pills" id="continue-pills">
               <button type="button" class="continue-pill" data-category="configure">Cần cấu hình</button>
               <button type="button" class="continue-pill" data-category="convert">Convert</button>
@@ -383,36 +345,50 @@
         </section>
       </div>
 
-      <!-- "Cách hoạt động" (3 bước) + giải thích 3 cột -- RIÊNG từng tool,
-           render bằng JS, đổi theo tab đang chọn (giống #tool-hero ở trên). -->
+      <!-- "CÁCH HOẠT ĐỘNG" (3 bước) + 3 cột giải thích -- RIÊNG từng tool, render
+           bằng JS theo tab đang chọn. Đường kẻ .ft-rule chạy hết chiều ngang màn
+           hình như CYD. -->
+      <div class="ft-rule"></div>
+      <div class="ft-section-head">
+        <h2 class="ft-h2">Cách hoạt động</h2>
+        <span class="ft-section-meta">Ba bước · không cần cài gì</span>
+      </div>
       <div class="tool-steps" id="tool-steps"></div>
+      <div class="ft-rule"></div>
       <div class="tool-explainer" id="tool-explainer"></div>
     </div>
 
     <!-- ============================================================
-         KHỐI: Convert File -- ẨN mặc định (hidden), chỉ hiện khi chọn từ
-         dropdown Product (cột Convert) hoặc bấm "Convert" trong panel
-         "Xử lý tiếp" của khối Free Tools phía trên.
+         KHỐI: Convert File -- ẨN mặc định. Bước 3 sẽ làm lại theo khuôn như
+         Free Tools; hiện mới ăn theo bảng màu/góc vuông chung.
          ============================================================ -->
     <div id="section-convert" hidden>
-      <div class="convert-hero">
-        <p class="auth-eyebrow">[ CÔNG CỤ ]</p>
-        <h1 class="auth-headline">Convert File</h1>
-        <p class="panel-desc">
-          Đổi định dạng nhanh gọn -- 3 tool tách riêng, dùng xong tải file ngay. File bạn convert ở đây
-          KHÔNG liên quan gì tới dữ liệu đang xử lý ở khối Free Tools phía trên, trừ khi bấm "Convert" ở
-          panel "Xử lý tiếp" (khi đó kết quả Free Tools đang có được dùng luôn làm đầu vào ở đây).
-        </p>
+      <div class="ft-topbar">
+        <span class="ft-crumb">Trang chủ<i>/</i>Convert<i>/</i><b>Đổi định dạng file</b></span>
+        <span class="ft-meta">
+          <span>Chạy trên<strong>Backend Flask</strong></span>
+          <span>Giá<strong>Miễn phí</strong></span>
+          <span>Đăng nhập<strong>Bắt buộc</strong></span>
+        </span>
+      </div>
+      <div class="tool-hero-grid" style="margin-bottom: 26px">
+        <div>
+          <h1 class="tool-hero-headline">Convert<br>file</h1>
+          <p class="tool-hero-desc">
+            Đổi định dạng nhanh gọn: delimiter CSV, CSV ⇄ JSON. Dùng xong tải file ngay. Dữ liệu ở đây
+            không liên quan khối Free Tools, trừ khi bấm "Convert" ở panel "Xử lý tiếp".
+          </p>
+        </div>
       </div>
 
       <div class="convert-badges">
         <span class="convert-badge">⚡ Kết quả tức thì</span>
         <span class="convert-badge">🔒 Cần đăng nhập</span>
-        <span class="convert-badge">🧮 Luôn xử lý qua backend Flask thật</span>
+        <span class="convert-badge">▦ Xử lý qua backend thật</span>
       </div>
 
       <div class="convert-tabs" id="convert-tabs">
-        <button type="button" class="convert-tab is-active" data-tool="delimiter">↔ Đổi Delimiter CSV</button>
+        <button type="button" class="convert-tab is-active" data-tool="delimiter">⇄ Đổi delimiter CSV</button>
         <button type="button" class="convert-tab" data-tool="csv-to-json">CSV → JSON</button>
         <button type="button" class="convert-tab" data-tool="json-to-csv">JSON → CSV</button>
       </div>
@@ -421,7 +397,7 @@
         <!-- 01 · ĐẦU VÀO -->
         <section class="convert-panel">
           <div class="convert-panel-head">
-            <span class="convert-panel-eyebrow">01 · ĐẦU VÀO</span>
+            <span class="convert-panel-eyebrow">01 · Đầu vào</span>
             <div class="convert-input-toggle" id="convert-input-toggle">
               <button type="button" class="is-active" data-mode="file">File</button>
               <button type="button" data-mode="paste">Dán text</button>
@@ -436,7 +412,6 @@
           <input type="file" id="convert-file-input" accept=".csv,.json,.jsonl,.txt" hidden />
           <textarea class="input mono convert-paste-input" id="convert-paste-input" rows="9" placeholder="Dán nội dung CSV/JSON vào đây…" hidden></textarea>
 
-          <!-- Tuỳ chọn riêng từng tool -- chỉ 1 khối hiện tại 1 thời điểm, khớp state.cv.tool -->
           <div class="convert-options" id="convert-options-delimiter">
             <div class="field-row">
               <div class="field">
@@ -510,7 +485,7 @@
         <!-- 02 · KẾT QUẢ -->
         <section class="convert-panel">
           <div class="convert-panel-head">
-            <span class="convert-panel-eyebrow">02 · KẾT QUẢ</span>
+            <span class="convert-panel-eyebrow">02 · Kết quả</span>
             <button class="btn btn-ghost btn-small" id="convert-download-btn" type="button" disabled>⬇ Tải xuống</button>
           </div>
           <p class="empty-state" id="convert-result-empty">Kết quả sẽ hiện ở đây ngay khi bạn bấm "Convert".</p>
@@ -522,6 +497,60 @@
       </div>
     </div>
   </main>
+
+  <!-- ============================================================
+       CHÂN TRANG ĐEN (theo CYD): câu mời + 2 nút, cột link, wordmark khổng lồ,
+       dòng chữ nhỏ dưới cùng. Link tool dùng data-tool/data-convert-tool như
+       trong mega menu, cùng 1 bộ xử lý trong workspace.js.
+       ============================================================ -->
+  <footer class="ws-footer">
+    <div class="container ws-footer-inner">
+      <div class="ws-footer-cta">
+        <div>
+          <p class="ws-footer-lead">Có file xuất ra mà không tin được? Làm sạch trong vài phút, giữ nguyên bản gốc.</p>
+          <div class="ws-footer-actions">
+            <a class="btn btn-accent" href="#" data-tool="remove-duplicates">Bắt đầu, miễn phí →</a>
+            <a class="btn btn-outline-light" href="#">Đọc hướng dẫn</a>
+          </div>
+        </div>
+        <button class="ws-backtop" id="ws-backtop" type="button">Lên đầu trang <span>↑</span></button>
+      </div>
+
+      <div class="ws-footer-cols">
+        <div class="ws-footer-col">
+          <h4>Sản phẩm</h4>
+          <span>Workspace (đang xây)</span>
+          <span>Class Noise (đang xây)</span>
+          <span>Guide (đang xây)</span>
+        </div>
+        <div class="ws-footer-col">
+          <h4>Free Tools</h4>
+          <a href="#" data-tool="remove-duplicates">Xoá dòng trùng</a>
+          <a href="#" data-tool="trim-whitespace">Cắt khoảng trắng</a>
+          <a href="#" data-tool="remove-empty-rows">Xoá dòng trống</a>
+          <a href="#" data-tool="fill-blanks">Điền ô trống</a>
+        </div>
+        <div class="ws-footer-col">
+          <h4>Convert</h4>
+          <a href="#" data-convert-tool="delimiter">Đổi delimiter CSV</a>
+          <a href="#" data-convert-tool="csv-to-json">CSV → JSON</a>
+          <a href="#" data-convert-tool="json-to-csv">JSON → CSV</a>
+        </div>
+        <div class="ws-footer-col">
+          <h4>Tài khoản</h4>
+          <a href="index.html?open=profile">Hồ sơ</a>
+          <a href="#" id="footer-logout-link">Đăng xuất</a>
+        </div>
+      </div>
+
+      <div class="ws-wordmark" aria-hidden="true"><span>De</span>noise</div>
+      <div class="ws-footer-bottom">
+        <span>Denoise · khoá luận tốt nghiệp 2026</span>
+        <span><i>■</i>Riêng tư theo tài khoản · không dùng dịch vụ bên thứ ba</span>
+        <span>Xử lý qua backend Flask</span>
+      </div>
+    </div>
+  </footer>
 
   <script src="workspace.js"></script>
 </body>
