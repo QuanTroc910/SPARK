@@ -23,10 +23,10 @@
        Thân trang có 8 KHỐI, chuyển bằng switchSection() (không điều hướng sang
        trang khác): #section-home (trang chủ, MẶC ĐỊNH), #section-guide,
        #section-security, #section-privacy (4 trang CÔNG KHAI, bước 5 -- chưa
-       đăng nhập vẫn xem được), #section-workspace (luồng 5 bước, bước 6,
-       logic ở workspace-flow.js), #section-profile (hồ sơ, bước 6),
-       #section-free-tools và #section-convert (4 khối sau cần đăng nhập; bấm
-       vào khi chưa đăng nhập thì #ws-auth hiện đè lên).
+       đăng nhập vẫn xem được), #section-config (6 tool cần cấu hình),
+       #section-class-noise (4 bước, logic ở workspace-flow.js), #section-profile
+       (hồ sơ), #section-free-tools và #section-convert (5 khối sau cần đăng
+       nhập; bấm vào khi chưa đăng nhập thì #ws-auth hiện đè lên).
        Chưa đăng nhập: header hiện 2 nút Đăng nhập / Bắt đầu (#ws-guest-area)
        thay cho khối tài khoản, body có class ws-guest. -->
 
@@ -118,31 +118,31 @@
             Product <span class="ws-caret">⌄</span>
           </button>
           <div class="ws-megamenu" id="ws-product-menu" hidden>
-            <!-- Cột 1: loại noise CẦN NHẬP TAY tham số -- bấm mục nào cũng mở khối
-                 Workspace (5 bước), vì cấu hình nằm ở Bước 3 của luồng đó. -->
+            <!-- Cột 1: 6 tool CẦN NHẬP TAY tham số -- mỗi mục mở đúng tab của khối
+                 Cần cấu hình (data-config-tool, xem workspace.js). -->
             <div class="ws-megamenu-col">
-              <span class="ws-megamenu-label">Cần cấu hình · Workspace</span>
-              <a class="ws-megamenu-item" href="#" data-section="workspace">
+              <span class="ws-megamenu-label">Cần cấu hình</span>
+              <a class="ws-megamenu-item" href="#" data-config-tool="format-noise">
                 <span class="ws-megamenu-icon">📝</span>
                 <span class="ws-megamenu-item-text"><strong>Sai định dạng</strong><small>Email · SĐT · ngày tháng sai khuôn</small></span>
               </a>
-              <a class="ws-megamenu-item" href="#" data-section="workspace">
+              <a class="ws-megamenu-item" href="#" data-config-tool="out-of-range">
                 <span class="ws-megamenu-icon">📏</span>
                 <span class="ws-megamenu-item-text"><strong>Ngoài khoảng</strong><small>Tự khai min/max cho cột số</small></span>
               </a>
-              <a class="ws-megamenu-item" href="#" data-section="workspace">
+              <a class="ws-megamenu-item" href="#" data-config-tool="outlier">
                 <span class="ws-megamenu-icon">📈</span>
                 <span class="ws-megamenu-item-text"><strong>Giá trị bất thường</strong><small>Outlier theo IQR / Z-score</small></span>
               </a>
-              <a class="ws-megamenu-item" href="#" data-section="workspace">
+              <a class="ws-megamenu-item" href="#" data-config-tool="inconsistent-category">
                 <span class="ws-megamenu-icon">🧩</span>
                 <span class="ws-megamenu-item-text"><strong>Không nhất quán</strong><small>"Nam" / "nam" / "NAM" cùng 1 nghĩa</small></span>
               </a>
-              <a class="ws-megamenu-item" href="#" data-section="workspace">
+              <a class="ws-megamenu-item" href="#" data-config-tool="missing-advanced">
                 <span class="ws-megamenu-icon">🧮</span>
                 <span class="ws-megamenu-item-text"><strong>Thiếu giá trị (nâng cao)</strong><small>Impute mean · median · KNN · mode</small></span>
               </a>
-              <a class="ws-megamenu-item" href="#" data-section="workspace">
+              <a class="ws-megamenu-item" href="#" data-config-tool="cross-rule">
                 <span class="ws-megamenu-icon">🔗</span>
                 <span class="ws-megamenu-item-text"><strong>Rule liên cột</strong><small>So sánh · điều kiện · công thức · phụ thuộc</small></span>
               </a>
@@ -186,10 +186,10 @@
               </a>
             </div>
 
-            <!-- Khối CTA đen -> mở khối Workspace (5 bước). -->
-            <a class="ws-megamenu-cta" href="#" data-section="workspace">
-              <p class="ws-megamenu-cta-eyebrow">Tải file lên và làm sạch<br>từng bước một</p>
-              <p class="ws-megamenu-cta-title">Mở<br>Workspace</p>
+            <!-- Khối CTA đen -> mở khối Class Noise (4 bước). -->
+            <a class="ws-megamenu-cta" href="#" data-section="class-noise">
+              <p class="ws-megamenu-cta-eyebrow">Nhãn có thể bị gán sai?<br>3 thuật toán, 4 bước</p>
+              <p class="ws-megamenu-cta-title">Class<br>Noise</p>
               <span class="ws-megamenu-cta-arrow">→</span>
             </a>
           </div>
@@ -199,7 +199,7 @@
              2 (data-direction, xem workspace.js + DenoiseFlow.presetDirection).
              Guide: chuyển sang khối Guide tại chỗ. Viền màu nhấn (.is-current)
              do switchSection() tự gắn cho pill của khối đang mở. -->
-        <a class="ws-nav-pill" href="#" id="ws-nav-class" data-section="workspace" data-direction="class">Class Noise</a>
+        <a class="ws-nav-pill" href="#" id="ws-nav-class" data-section="class-noise">Class Noise</a>
         <a class="ws-nav-pill" href="#" id="ws-nav-guide" data-section="guide">Guide</a>
       </nav>
 
@@ -290,14 +290,14 @@
         <span class="ft-section-meta">7 loại nhiễu thuộc tính · 4 rule liên cột · class noise</span>
       </div>
       <div class="hm-fix-grid">
-        <div class="hm-card"><span class="hm-card-num">/01</span><span class="hm-card-icon">∅</span><h3>Thiếu giá trị</h3><p>Ô trống, "NA", "null", "-"... đều bị bắt. Xoá dòng, điền giá trị cố định, hoặc điền mean / median / KNN / mode theo kiểu cột.</p><small>Free Tools · Workspace</small></div>
-        <div class="hm-card"><span class="hm-card-num">/02</span><span class="hm-card-icon">@</span><h3>Sai định dạng</h3><p>Email, số điện thoại, ngày tháng, số nguyên không đúng khuôn của kiểu cột bạn chọn.</p><small>Workspace</small></div>
-        <div class="hm-card"><span class="hm-card-num">/03</span><span class="hm-card-icon">↕</span><h3>Ngoài khoảng</h3><p>Tuổi 210, lương âm... Bạn khai min / max, Denoise gắn cờ và có thể kéo về biên.</p><small>Workspace</small></div>
-        <div class="hm-card"><span class="hm-card-num">/04</span><span class="hm-card-icon">σ</span><h3>Giá trị bất thường</h3><p>Outlier theo IQR hoặc Z-score trên cột số. Cap về biên, điền lại hoặc giữ nguyên nếu đó là dữ liệu thật.</p><small>Workspace</small></div>
-        <div class="hm-card"><span class="hm-card-num">/05</span><span class="hm-card-icon">Aa</span><h3>Không nhất quán</h3><p>"Nam", "nam", "NAM", " Nam " cùng một nghĩa. Tự chuẩn hoá về giá trị chuẩn bạn khai.</p><small>Workspace</small></div>
-        <div class="hm-card"><span class="hm-card-num">/06</span><span class="hm-card-icon">⇥</span><h3>Khoảng trắng thừa</h3><p>Khoảng trắng đầu/cuối, lặp nhiều lần, ký tự vô hình. Luôn an toàn để sửa tự động.</p><small>Free Tools · Workspace</small></div>
-        <div class="hm-card"><span class="hm-card-num">/07</span><span class="hm-card-icon">⧉</span><h3>Dòng trùng</h3><p>So toàn bộ cột hoặc chỉ vài cột bạn chọn. Giữ bản đầu hoặc bản cuối, xoá phần còn lại.</p><small>Free Tools · Workspace</small></div>
-        <div class="hm-card"><span class="hm-card-num">/08</span><span class="hm-card-icon">⇄</span><h3>Rule liên cột</h3><p>Mâu thuẫn giữa 2 cột: so sánh, điều kiện nếu-thì, công thức, phụ thuộc hàm. Bạn khai rule, Denoise kiểm tra từng dòng.</p><small>Workspace</small></div>
+        <div class="hm-card"><span class="hm-card-num">/01</span><span class="hm-card-icon">∅</span><h3>Thiếu giá trị</h3><p>Ô trống, "NA", "null", "-"... đều bị bắt. Xoá dòng, điền giá trị cố định, hoặc điền mean / median / KNN / mode theo kiểu cột.</p><small>Free Tools · Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/02</span><span class="hm-card-icon">@</span><h3>Sai định dạng</h3><p>Email, số điện thoại, ngày tháng, số nguyên không đúng khuôn của kiểu cột bạn chọn.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/03</span><span class="hm-card-icon">↕</span><h3>Ngoài khoảng</h3><p>Tuổi 210, lương âm... Bạn khai min / max, Denoise gắn cờ và có thể kéo về biên.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/04</span><span class="hm-card-icon">σ</span><h3>Giá trị bất thường</h3><p>Outlier theo IQR hoặc Z-score trên cột số. Cap về biên, điền lại hoặc giữ nguyên nếu đó là dữ liệu thật.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/05</span><span class="hm-card-icon">Aa</span><h3>Không nhất quán</h3><p>"Nam", "nam", "NAM", " Nam " cùng một nghĩa. Tự chuẩn hoá về giá trị chuẩn bạn khai.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/06</span><span class="hm-card-icon">⇥</span><h3>Khoảng trắng thừa</h3><p>Khoảng trắng đầu/cuối, lặp nhiều lần, ký tự vô hình. Luôn an toàn để sửa tự động.</p><small>Free Tools · Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/07</span><span class="hm-card-icon">⧉</span><h3>Dòng trùng</h3><p>So toàn bộ cột hoặc chỉ vài cột bạn chọn. Giữ bản đầu hoặc bản cuối, xoá phần còn lại.</p><small>Free Tools · Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/08</span><span class="hm-card-icon">⇄</span><h3>Rule liên cột</h3><p>Mâu thuẫn giữa 2 cột: so sánh, điều kiện nếu-thì, công thức, phụ thuộc hàm. Bạn khai rule, Denoise kiểm tra từng dòng.</p><small>Cần cấu hình</small></div>
         <div class="hm-card"><span class="hm-card-num">/09</span><span class="hm-card-icon">🏷</span><h3>Class noise</h3><p>Dòng có thể bị gán sai nhãn. 3 thuật toán độc lập: Confident Learning, Mutual k-NN, Ensemble biểu quyết.</p><small>Class Noise</small></div>
       </div>
 
@@ -345,7 +345,7 @@
         <a class="hm-tool" href="#" data-convert-tool="delimiter"><span class="hm-tool-kind">Convert</span><b>Đổi delimiter CSV</b><small>Phẩy · chấm phẩy · tab · gạch đứng</small><i>→</i></a>
         <a class="hm-tool" href="#" data-convert-tool="csv-to-json"><span class="hm-tool-kind">Convert</span><b>CSV → JSON</b><small>Mỗi dòng 1 object, khoá là tên cột</small><i>→</i></a>
         <a class="hm-tool" href="#" data-convert-tool="json-to-csv"><span class="hm-tool-kind">Convert</span><b>JSON → CSV</b><small>Làm phẳng JSON lồng nhau thành cột</small><i>→</i></a>
-        <a class="hm-tool is-dark" href="#" data-section="workspace"><span class="hm-tool-kind">Workspace</span><b>Dò &amp; xử lý đầy đủ</b><small>5 bước, 7 loại nhiễu + rule liên cột + class noise, xử lý từng dòng có hoàn tác.</small><i>→</i></a>
+        <a class="hm-tool is-dark" href="#" data-section="class-noise"><span class="hm-tool-kind">Class Noise</span><b>Nhãn bị gán sai</b><small>4 bước, 3 thuật toán độc lập, có chẩn đoán độ tin cậy trước khi tin kết quả.</small><i>→</i></a>
       </div>
 
       <!-- "VỀ DỰ ÁN" (thay cho "WHO IT'S FOR" của CYD, vì đây là khoá luận) +
@@ -422,7 +422,7 @@
           <a href="#guide-02"><i>02</i>Chuẩn bị file</a>
           <a href="#guide-03"><i>03</i>Free Tools</a>
           <a href="#guide-04"><i>04</i>Convert</a>
-          <a href="#guide-05"><i>05</i>Workspace 5 bước</a>
+          <a href="#guide-05"><i>05</i>Tool cần cấu hình</a>
           <a href="#guide-06"><i>06</i>Class Noise</a>
           <a href="#guide-07"><i>07</i>Xử lý an toàn</a>
           <a href="#guide-08"><i>08</i>Câu hỏi thường gặp</a>
@@ -434,9 +434,10 @@
             <ul class="tx-list">
               <li><b>Free Tools</b> — 4 thao tác không cần khai gì: xoá dòng trùng, cắt khoảng trắng, điền hoặc xoá ô trống, xoá dòng trống. Tải file lên, bấm Chạy, có kết quả ngay.</li>
               <li><b>Convert</b> — đổi delimiter CSV, CSV sang JSON, JSON sang CSV. Chỉ đổi định dạng, giữ nguyên văn từng giá trị.</li>
-              <li><b>Workspace</b> — luồng 5 bước đầy đủ cho 7 loại nhiễu thuộc tính và 4 rule liên cột, xử lý từng dòng, hoàn tác được. <b>Class Noise</b> nằm trong luồng này ở nhánh riêng.</li>
+              <li><b>Cần cấu hình</b> — 6 tool cho lỗi phải khai cột và tham số: sai định dạng, ngoài khoảng, giá trị bất thường, không nhất quán, thiếu giá trị nâng cao, rule liên cột. Chạy hai nhịp: phát hiện rồi áp dụng.</li>
+              <li><b>Class Noise</b> — 4 bước riêng cho nhãn phân loại bị gán sai, 3 thuật toán để so sánh.</li>
             </ul>
-            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Workspace và Class Noise đang được dựng lại trong giao diện Denoise. Hiện tại hai phần này vẫn chạy ở giao diện cũ (<code>index.html</code>); mọi tính năng mô tả bên dưới đều đã hoạt động ở đó.</p></div>
+            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Ba nhóm tool nối được với nhau: xong tool nào, panel "Xử lý tiếp" cho chọn bất kỳ tool nào khác và mang đúng kết quả vừa có sang làm đầu vào. Dải đen phía trên ghi lại chuỗi các bước; "Bắt đầu lại từ gốc" trả về file ban đầu.</p></div>
           </section>
 
           <section class="tx-section" id="guide-02">
@@ -474,15 +475,15 @@
           </section>
 
           <section class="tx-section" id="guide-05">
-            <h2 class="tx-h2"><span>05</span>Workspace 5 bước</h2>
+            <h2 class="tx-h2"><span>05</span>Tool cần cấu hình</h2>
+            <p>Cùng khuôn hai khung như Free Tools, nhưng chạy <b>hai nhịp</b> vì phải khai cột và tham số trước.</p>
             <ol class="tx-steps">
-              <li><b>Tải file lên.</b> Denoise đọc toàn bộ cột và đoán kiểu dữ liệu cho từng cột dựa trên giá trị thật (email, số điện thoại, ngày, số, nhóm, chữ).</li>
-              <li><b>Chọn hướng.</b> Attribute noise (lỗi trong từng ô) hoặc Class noise (nhãn có thể sai).</li>
-              <li><b>Cấu hình.</b> Mỗi cột có kiểu dữ liệu (đã chọn sẵn, sửa được) và các chip loại nhiễu hợp với kiểu đó. Tick chip nào thì tham số của chip đó xổ ra. Thêm rule liên cột nếu dữ liệu có quan hệ giữa các cột.</li>
-              <li><b>Kết quả.</b> Ba thẻ thống kê, lọc theo loại lỗi, tìm kiếm, phân trang. Mỗi ô lỗi tô màu theo đúng loại.</li>
-              <li><b>Xử lý &amp; xuất.</b> Từng nhóm (cột, loại lỗi) có bảng chi tiết với checkbox từng dòng và cột "Tự điều chỉnh" để mỗi dòng chọn cách xử lý riêng. Áp dụng xong, bảng cập nhật tại chỗ. Cuối cùng bấm Xuất CSV.</li>
+              <li><b>Chọn file hoặc dán text.</b> Denoise đọc tên cột và đoán kiểu dữ liệu từng cột để điền sẵn dropdown.</li>
+              <li><b>Khai cột và tham số.</b> Ví dụ cột <code>tuoi</code>, kiểu số nguyên, khoảng hợp lệ 18 đến 65; hay cột <code>email</code>, kiểu email. Rule liên cột khai quan hệ giữa hai cột.</li>
+              <li><b>Phát hiện.</b> Khung 02 liệt kê các dòng có lỗi, ô lỗi tô màu. Chưa sửa gì cả.</li>
+              <li><b>Áp dụng.</b> Chọn một cách xử lý cho mọi ô vừa gắn cờ rồi bấm Áp dụng. Khung 02 đổi thành dữ liệu đã sửa, tải về được, và nối tiếp sang tool khác được.</li>
             </ol>
-            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Cách xử lý khả dụng phụ thuộc vào cặp <b>kiểu cột × loại lỗi</b>. Ví dụ cột email thiếu giá trị chỉ được xoá dòng hoặc điền cố định, không bao giờ được "đoán" bằng impute.</p></div>
+            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Cách xử lý khả dụng phụ thuộc vào cặp <b>kiểu cột × loại lỗi</b>. Ví dụ cột email thiếu giá trị chỉ được xoá dòng hoặc điền cố định, không bao giờ được "đoán" bằng impute. Rule liên cột chỉ có xoá dòng vi phạm hoặc giữ nguyên để xem.</p></div>
           </section>
 
           <section class="tx-section" id="guide-06">
@@ -499,10 +500,10 @@
           <section class="tx-section" id="guide-07">
             <h2 class="tx-h2"><span>07</span>Xử lý an toàn</h2>
             <ul class="tx-list">
-              <li>Dropdown cách xử lý mặc định để trống. Chưa chọn thì không Áp dụng được.</li>
-              <li>Thao tác có xoá dòng luôn <b>chạy thử</b> trước và hỏi lại: "Sẽ xoá N dòng (a → b)".</li>
-              <li><b>Hoàn tác</b> 5 bước gần nhất, hoặc <b>Về dữ liệu gốc</b> bất cứ lúc nào. Bản gốc không bao giờ bị sửa.</li>
-              <li>Khi một dòng dính lỗi ở nhiều cột và một trong các cách xử lý là xoá dòng, dòng đó bị xoá. Chọn xoá nghĩa là không tin dòng đó.</li>
+              <li>Tool cần cấu hình luôn <b>phát hiện trước</b>: bạn thấy đúng những ô sẽ bị sửa rồi mới chọn cách xử lý.</li>
+              <li>File gốc không bao giờ bị đụng tới. Mỗi tool trả về một bản mới; "Bắt đầu lại từ gốc" trên dải đen quay về file ban đầu bất cứ lúc nào.</li>
+              <li>Mọi tool đều chạy qua backend và không giữ lại file sau khi trả kết quả.</li>
+              <li>Class Noise có chẩn đoán độ tin cậy ở bước Kết quả. Đọc nó trước khi tin danh sách dòng nghi ngờ.</li>
             </ul>
           </section>
 
@@ -512,7 +513,7 @@
               <dt>Vì sao phải đăng nhập?</dt>
               <dd>Mỗi file gắn với một tài khoản. Nhờ vậy hai người dùng chung một server không bao giờ thấy file của nhau.</dd>
               <dt>File của tôi lưu ở đâu?</dt>
-              <dd>Trong bộ nhớ của server, trong lúc server chạy. Khởi động lại server là file biến mất. Chỉ tài khoản được lưu lâu dài.</dd>
+              <dd>Free Tools, Convert và tool cần cấu hình không giữ lại file sau khi trả kết quả; chuỗi xử lý nằm trong trình duyệt của bạn. Class Noise giữ file trong bộ nhớ server trong lúc server chạy. Chỉ tài khoản được lưu lâu dài.</dd>
               <dt>Mở trực tiếp file HTML được không?</dt>
               <dd>Không. Phải chạy <code>python3 app.py</code> rồi mở <code>http://localhost:5000</code>, vì cookie đăng nhập chỉ hoạt động khi giao diện và backend cùng một địa chỉ.</dd>
               <dt>Kết quả trên màn hình có khớp file tải về không?</dt>
@@ -710,20 +711,20 @@
     </div>
 
     <!-- ============================================================
-         KHỐI: WORKSPACE (bước 6) -- luồng 5 bước đầy đủ (Attribute Noise 7
-         loại + rule liên cột, Class Noise 3 thuật toán), chuyển từ index.html
-         sang. Logic nằm ở workspace-flow.js (bản sao của script.js, giữ
-         nguyên). MỌI id/class mà workspace-flow.js dựa vào đều GIỮ NGUYÊN
-         (#stepper, .step[data-step], #panel-N, #panel-N-attribute/-class,
-         #dropzone, #col-list, #handling-list...), chỉ bọc thêm khung/thẻ
-         Denoise bên ngoài và đổi chữ. Khối này CẦN đăng nhập.
+         KHỐI: CLASS NOISE -- 4 bước (File & phương pháp / Nhãn & đặc trưng /
+         Kết quả / Xử lý), chạy bằng workspace-flow.js (bản sao script.js, hướng
+         cố định = "class"). Nhánh Attribute Noise của luồng cũ KHÔNG còn dùng
+         (đã thay bằng 6 tool "Cần cấu hình" ở #section-config) -- các khối
+         #panel-N-attribute vẫn còn trong HTML vì workspace-flow.js gắn listener
+         theo id lúc nạp, nhưng luôn bị ẩn (toggleStepNDirection()). Khối này
+         CẦN đăng nhập.
          ============================================================ -->
-    <div id="section-workspace" hidden>
+    <div id="section-class-noise" hidden>
       <div class="ft-topbar">
-        <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i><b>Workspace</b></span>
+        <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i><b>Class Noise</b></span>
         <span class="ft-meta">
           <span>Chạy trên<strong>Backend Flask</strong></span>
-          <span>Hoàn tác<strong>5 bước gần nhất</strong></span>
+          <span>Thuật toán<strong>3 lựa chọn</strong></span>
           <span>Bản gốc<strong>Không bị sửa</strong></span>
         </span>
       </div>
@@ -733,20 +734,23 @@
            GIỮ NGUYÊN cấu trúc .stepper > .step[data-step] > .step-circle +
            .step-label vì renderStepper()/goStep() trong workspace-flow.js
            dựa vào đúng các class này. -->
-      <nav class="stepper" id="stepper" aria-label="Năm bước">
+      <!-- 4 BƯỚC (Class Noise): bước "Hướng xử lý" cũ đã gộp vào bước 1 (chọn
+           phương pháp ngay cạnh ô tải file). data-step vẫn là số panel nội bộ
+           của workspace-flow.js (1, 3, 4, 5 -- panel-2 không còn dùng), chỉ
+           SỐ HIỂN THỊ là 1-4 (renderStepper() đánh lại theo thứ tự ô). -->
+      <nav class="stepper" id="stepper" aria-label="Bốn bước">
         <div class="stepper-track"></div>
-        <div class="step" data-step="1"><span class="step-circle">1</span><span class="step-label">Tải file lên</span></div>
-        <div class="step" data-step="2"><span class="step-circle">2</span><span class="step-label">Hướng xử lý</span></div>
-        <div class="step" data-step="3"><span class="step-circle">3</span><span class="step-label">Cấu hình</span></div>
-        <div class="step" data-step="4"><span class="step-circle">4</span><span class="step-label">Kết quả</span></div>
-        <div class="step" data-step="5"><span class="step-circle">5</span><span class="step-label">Xử lý &amp; xuất</span></div>
+        <div class="step" data-step="1"><span class="step-circle">1</span><span class="step-label">File &amp; phương pháp</span></div>
+        <div class="step" data-step="3"><span class="step-circle">2</span><span class="step-label">Nhãn &amp; đặc trưng</span></div>
+        <div class="step" data-step="4"><span class="step-circle">3</span><span class="step-label">Kết quả</span></div>
+        <div class="step" data-step="5"><span class="step-circle">4</span><span class="step-label">Xử lý</span></div>
       </nav>
 
       <!-- ===== Bước 1: tải file lên -- 2 khung 01/02 cùng khuôn trang tool ===== -->
       <section class="panel is-active" id="panel-1">
-        <p class="eyebrow">[ Bước 1 / 5 ]</p>
-        <h2 class="panel-title">Tải dữ liệu lên</h2>
-        <p class="panel-desc">CSV hoặc Excel, dòng đầu là tên cột. File chỉ nằm trong bộ nhớ của server và gắn với tài khoản của bạn.</p>
+        <p class="eyebrow">[ Bước 1 / 4 ]</p>
+        <h2 class="panel-title">Tải dữ liệu &amp; chọn phương pháp</h2>
+        <p class="panel-desc">CSV hoặc Excel, dòng đầu là tên cột, có một cột nhãn phân loại. Chọn một trong ba thuật toán phát hiện (Bảng 6, Gupta &amp; Gupta 2019) rồi bấm Tải lên.</p>
         <div class="convert-grid">
           <section class="convert-panel ft-panel">
             <div class="ft-panel-head"><span class="ft-eyebrow-tag">01 · File của bạn</span></div>
@@ -776,18 +780,28 @@
             </div>
           </section>
           <section class="convert-panel ft-panel">
-            <div class="ft-panel-head"><span class="ft-eyebrow-tag">02 · Sau khi tải lên</span></div>
+            <div class="ft-panel-head"><span class="ft-eyebrow-tag">02 · Phương pháp phát hiện</span></div>
             <div class="ft-panel-body">
-              <div class="ft-result-zone">
-                <div class="ft-result-skeleton">
-                  <div class="ft-result-skeleton-box">
-                    <span class="ft-result-skeleton-tag">Đang chờ file</span>
-                    <div class="ft-result-skeleton-rows" aria-hidden="true">
-                      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-                    </div>
-                    <p class="ft-result-skeleton-sub">Đọc tên cột · đoán kiểu dữ liệu · không ghi ra đĩa</p>
+              <!-- 3 nhóm phương pháp theo Bảng 6, Gupta & Gupta (2019). Chọn đúng 1.
+                   id/class GIỮ NGUYÊN (class-method-section/grid, .direction-card
+                   [data-method]) vì workspace-flow.js gắn listener theo đúng tên này. -->
+              <div id="class-method-section">
+                <div class="direction-grid method-grid is-stacked" id="class-method-grid">
+                  <div class="direction-card" data-method="distance_based" tabindex="0" role="button">
+                    <span class="dir-num">N13</span>
+                    <h3>Distance-based</h3>
+                    <p>Mutual k-Nearest Neighbor. Dựa thuần vào khoảng cách giữa các dòng, không train model nào. Nhanh.</p>
                   </div>
-                  <p class="ft-result-skeleton-caption">Tải xong, Denoise đoán kiểu từng cột rồi đưa bạn sang Bước 2.</p>
+                  <div class="direction-card" data-method="single_learning" tabindex="0" role="button">
+                    <span class="dir-num">CL</span>
+                    <h3>Single learning-based</h3>
+                    <p>Confident Learning với Random Forest. Dùng xác suất dự đoán của một model để tìm dòng nghi ngờ. Có thể mất vài phút.</p>
+                  </div>
+                  <div class="direction-card" data-method="ensemble_based" tabindex="0" role="button">
+                    <span class="dir-num">N29</span>
+                    <h3>Ensemble-based</h3>
+                    <p>Ba classifier khác họ (Logistic Regression, Naive Bayes, Linear SVM) biểu quyết. Dòng nào đa số bất đồng với nhãn ghi thì nghi ngờ.</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -795,55 +809,9 @@
         </div>
       </section>
 
-      <!-- ===== Bước 2: hướng xử lý -- 2 thẻ vuông nối liền, chọn = nền đen ===== -->
-      <section class="panel" id="panel-2">
-        <p class="eyebrow">[ Bước 2 / 5 ]</p>
-        <h2 class="panel-title">Chọn hướng xử lý</h2>
-        <p class="panel-desc">Nhiễu trong dữ liệu chia làm hai hướng, mỗi hướng có cách phát hiện và xử lý riêng.</p>
-
-        <div class="direction-grid">
-          <div class="direction-card" data-direction="attribute" tabindex="0" role="button">
-            <span class="dir-num">/01</span>
-            <h3>Attribute Noise</h3>
-            <p>Lỗi ở từng ô: thiếu giá trị, sai định dạng, ngoài khoảng, giá trị bất thường, không nhất quán, khoảng trắng thừa, dòng trùng, cộng rule mâu thuẫn giữa hai cột.</p>
-            <small class="dir-meta">7 loại lỗi · 4 rule liên cột · xử lý từng dòng</small>
-          </div>
-          <div class="direction-card" data-direction="class" tabindex="0" role="button">
-            <span class="dir-num">/02</span>
-            <h3>Class Noise</h3>
-            <p>Nhãn phân loại bị gán sai. Chọn một cột làm nhãn, các cột số làm đặc trưng, rồi chọn một trong ba thuật toán bên dưới để tìm dòng nghi ngờ.</p>
-            <small class="dir-meta">3 thuật toán độc lập · có chẩn đoán độ tin cậy</small>
-          </div>
-        </div>
-
-        <!-- Chỉ hiện khi đã chọn thẻ Class Noise: 3 nhóm phương pháp theo
-             Bảng 6, Gupta & Gupta (2019). Chọn đúng 1 để chạy thật. -->
-        <div class="sub-section" id="class-method-section" hidden>
-          <h3 class="sub-title">Phương pháp phát hiện Class Noise</h3>
-          <p class="panel-desc">Ba nhóm theo Bảng 6, Gupta &amp; Gupta (2019). Chọn đúng một phương pháp để chạy.</p>
-          <div class="direction-grid method-grid" id="class-method-grid">
-            <div class="direction-card" data-method="distance_based" tabindex="0" role="button">
-              <span class="dir-num">N13</span>
-              <h3>Distance-based</h3>
-              <p>Mutual k-Nearest Neighbor. Dựa thuần vào khoảng cách giữa các dòng, không train model nào. Nhanh.</p>
-            </div>
-            <div class="direction-card" data-method="single_learning" tabindex="0" role="button">
-              <span class="dir-num">CL</span>
-              <h3>Single learning-based</h3>
-              <p>Confident Learning với Random Forest. Dùng xác suất dự đoán của một model để tìm dòng nghi ngờ. Có thể mất vài phút.</p>
-            </div>
-            <div class="direction-card" data-method="ensemble_based" tabindex="0" role="button">
-              <span class="dir-num">N29</span>
-              <h3>Ensemble-based</h3>
-              <p>Ba classifier khác họ (Logistic Regression, Naive Bayes, Linear SVM) biểu quyết. Dòng nào đa số bất đồng với nhãn ghi thì nghi ngờ.</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel-actions">
-          <button class="btn btn-primary" id="continue-step2-btn" disabled>Tiếp tục →</button>
-        </div>
-      </section>
+      <!-- Panel 2 (hướng xử lý) KHÔNG còn dùng: hướng luôn là Class Noise, phương
+           pháp chọn ở bước 1. Giữ 1 nút ẩn vì workspace-flow.js gắn listener theo id. -->
+      <section class="panel" id="panel-2"><button id="continue-step2-btn" type="button" hidden></button></section>
 
       <!-- ===== Bước 3: cấu hình ===== -->
       <section class="panel" id="panel-3">
@@ -982,7 +950,7 @@
 
       <!-- ===== Bước 4: kết quả ===== -->
       <section class="panel" id="panel-4">
-        <p class="eyebrow">[ Bước 4 / 5 ]</p>
+        <p class="eyebrow">[ Bước 3 / 4 ]</p>
         <h2 class="panel-title" id="panel-4-title">Kết quả phát hiện</h2>
 
         <!-- Nhánh ATTRIBUTE NOISE -->
@@ -1076,8 +1044,8 @@
 
       <!-- ===== Bước 5: xử lý & xuất file ===== -->
       <section class="panel" id="panel-5">
-        <p class="eyebrow">[ Bước 5 / 5 ]</p>
-        <h2 class="panel-title">Xử lý &amp; xuất file</h2>
+        <p class="eyebrow">[ Bước 4 / 4 ]</p>
+        <h2 class="panel-title">Xử lý</h2>
 
         <!-- Nhánh ATTRIBUTE NOISE -->
         <div id="panel-5-attribute">
@@ -1195,12 +1163,172 @@
               <li>Chưa có nút tự xoá tài khoản; người quản trị server xoá trực tiếp trong SQLite.</li>
             </ul>
             <div class="panel-actions">
-              <a class="btn btn-ghost" href="#" data-section="workspace">← Về Workspace</a>
+              <a class="btn btn-ghost" href="#" data-section="home">← Về trang chủ</a>
               <button class="btn btn-ghost" id="profile-logout-btn" type="button">Đăng xuất</button>
             </div>
           </div>
         </section>
       </div>
+    </div>
+
+    <!-- ============================================================
+         KHỐI: CẦN CẤU HÌNH -- 6 tool (Sai định dạng / Ngoài khoảng / Giá trị
+         bất thường / Không nhất quán / Thiếu giá trị nâng cao / Rule liên cột),
+         CÙNG KHUÔN trang tool Free Tools (01 đầu vào / 02 kết quả) nhưng chạy
+         2 NHỊP: bấm "Phát hiện" -> khung 02 tô màu các ô lỗi; chọn cách xử lý
+         rồi bấm "Áp dụng" -> khung 02 thành dữ liệu đã sửa, hiện "Xử lý tiếp".
+         Khối tuỳ chọn (#cf-options) do JS dựng vì cần danh sách cột đọc từ
+         backend (/api/noise-tools/inspect). Logic: workspace.js (phần "cf").
+         ============================================================ -->
+    <div id="section-config" hidden>
+      <div class="ft-topbar">
+        <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i>Cần cấu hình<i>/</i><b id="cf-crumb-tool">Sai định dạng</b></span>
+        <span class="ft-meta">
+          <span>Chạy trên<strong>Backend Flask</strong></span>
+          <span>Hai nhịp<strong>Phát hiện → Áp dụng</strong></span>
+          <span>Đăng nhập<strong>Bắt buộc</strong></span>
+        </span>
+      </div>
+
+      <div id="cf-hero"></div>
+
+      <div class="convert-badges">
+        <span class="convert-badge">⚙ Khai cột &amp; tham số</span>
+        <span class="convert-badge">👁 Xem lỗi trước khi sửa</span>
+        <span class="convert-badge">▦ Xử lý qua backend thật</span>
+      </div>
+
+      <div class="convert-tabs" id="cf-tabs">
+        <button type="button" class="convert-tab is-active" data-tool="format-noise">Sai định dạng</button>
+        <button type="button" class="convert-tab" data-tool="out-of-range">Ngoài khoảng</button>
+        <button type="button" class="convert-tab" data-tool="outlier">Giá trị bất thường</button>
+        <button type="button" class="convert-tab" data-tool="inconsistent-category">Không nhất quán</button>
+        <button type="button" class="convert-tab" data-tool="missing-advanced">Thiếu giá trị</button>
+        <button type="button" class="convert-tab" data-tool="cross-rule">Rule liên cột</button>
+      </div>
+
+      <!-- Dải "đang nối tiếp" dùng chung cho cả 3 nhóm tool (state.pipe). -->
+      <div class="pipeline-strip pipe-strip" id="cf-pipe-strip" hidden>
+        <span class="pipeline-strip-text pipe-strip-text"></span>
+        <span class="pipeline-strip-actions">
+          <button class="btn btn-ghost btn-small pipe-new-file-btn" type="button">⬆ Tải file khác</button>
+          <button class="btn btn-ghost btn-small pipe-reset-btn" type="button">↺ Bắt đầu lại từ gốc</button>
+        </span>
+      </div>
+
+      <div class="convert-grid">
+        <!-- 01 · ĐẦU VÀO -->
+        <section class="convert-panel ft-panel">
+          <div class="ft-panel-head">
+            <span class="ft-eyebrow-tag">01 · Đầu vào</span>
+            <div class="convert-input-toggle" id="cf-input-toggle">
+              <button type="button" class="is-active" data-mode="file">File</button>
+              <button type="button" data-mode="paste">Dán text</button>
+            </div>
+          </div>
+          <div class="ft-panel-body">
+          <div class="ft-input-zone">
+            <label for="cf-file-input" class="dropzone dropzone--compact" id="cf-dropzone">
+              <svg class="ft-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+              <p class="ft-dropzone-title">Thả file CSV / Excel vào đây</p>
+              <p class="ft-dropzone-hint">CSV · XLSX · dòng đầu là tên cột</p>
+              <span class="btn btn-primary btn-small ft-choose-file-btn">Chọn file</span>
+            </label>
+            <input type="file" id="cf-file-input" accept=".csv,.xlsx,.xls" hidden />
+            <textarea class="input mono convert-paste-input" id="cf-paste-input" rows="9" placeholder="Dán nội dung CSV vào đây (dòng đầu là tên cột)…" hidden></textarea>
+            <div class="ft-raw-preview cyd-table" id="cf-raw-preview" hidden>
+              <div class="cyd-table-bar">
+                <span class="cyd-table-tag" id="cf-raw-preview-label"></span>
+                <span class="cyd-table-right">
+                  <span class="cyd-table-dims" id="cf-raw-preview-dims"></span>
+                  <button class="btn btn-ghost btn-small" id="cf-change-file-btn" type="button">↺ Đổi file</button>
+                </span>
+              </div>
+              <div class="table-wrap" id="cf-raw-preview-table-wrap">
+                <table class="results-table" id="cf-raw-preview-table"></table>
+              </div>
+              <p class="ft-table-note" id="cf-raw-preview-note" hidden></p>
+            </div>
+          </div>
+
+          <!-- Tuỳ chọn riêng từng tool -- JS dựng theo tab + danh sách cột (renderCfOptions()). -->
+          <div class="convert-options" id="cf-options"></div>
+
+          <p class="form-error" id="cf-error" hidden></p>
+          <div class="panel-actions">
+            <button class="btn btn-primary" id="cf-detect-btn" type="button">Phát hiện</button>
+            <span class="status-text" id="cf-status"></span>
+          </div>
+
+          <!-- Nhịp 2: chọn cách xử lý -- chỉ hiện sau khi "Phát hiện" ra lỗi. Danh
+               sách cách xử lý do backend trả (bảng kiểu cột × loại lỗi). -->
+          <div class="cf-handling" id="cf-handling" hidden>
+            <p class="continue-title">Cách xử lý mọi ô vừa bị gắn cờ</p>
+            <div class="field">
+              <label for="cf-action">Cách xử lý</label>
+              <select class="select" id="cf-action"></select>
+            </div>
+            <div class="field" id="cf-fixed-value-wrap" hidden>
+              <label for="cf-fixed-value">Giá trị cố định</label>
+              <input class="input" id="cf-fixed-value" placeholder="vd: 0 · Không rõ · 2024-01-01" />
+            </div>
+            <p class="form-error" id="cf-apply-error" hidden></p>
+            <div class="panel-actions">
+              <button class="btn btn-accent" id="cf-apply-btn" type="button">Áp dụng</button>
+              <span class="status-text" id="cf-apply-status"></span>
+            </div>
+          </div>
+          </div>
+        </section>
+
+        <!-- 02 · KẾT QUẢ: sau "Phát hiện" = bảng các dòng lỗi (ô lỗi tô màu);
+             sau "Áp dụng" = dữ liệu đã sửa. -->
+        <section class="convert-panel ft-panel">
+          <div class="ft-panel-head">
+            <span class="ft-eyebrow-tag">02 · Kết quả</span>
+            <button class="btn btn-ghost btn-small" id="cf-download-btn" type="button" disabled>⬇ Tải xuống CSV</button>
+          </div>
+          <div class="ft-panel-body">
+          <div class="ft-result-zone">
+            <div class="ft-result-skeleton" id="cf-result-empty">
+              <div class="ft-result-skeleton-box">
+                <span class="ft-result-skeleton-tag">Đang chờ cấu hình</span>
+                <div class="ft-result-skeleton-rows" aria-hidden="true">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                </div>
+                <p class="ft-result-skeleton-sub">Phát hiện trước · xử lý sau · không lưu file gốc</p>
+              </div>
+              <p class="ft-result-skeleton-caption">Bấm "Phát hiện" để xem ô lỗi, rồi chọn cách xử lý.</p>
+            </div>
+            <div class="cyd-table" id="cf-result-card" hidden>
+              <div class="cyd-table-bar">
+                <span class="cyd-table-tag" id="cf-result-tag">Kết quả</span>
+                <span class="cyd-table-right"><span class="cyd-table-dims" id="cf-result-dims"></span></span>
+              </div>
+              <div class="table-wrap" id="cf-result-table-wrap">
+                <table class="results-table" id="cf-result-table"></table>
+              </div>
+              <p class="ft-table-note" id="cf-result-note" hidden></p>
+            </div>
+          </div>
+
+          <div class="continue-panel" id="cf-continue" hidden>
+            <p class="continue-title">✓ Xong · xử lý tiếp bằng</p>
+            <div class="continue-pills"></div>
+            <div class="continue-list"></div>
+          </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="ft-rule"></div>
+      <div class="ft-section-head">
+        <h2 class="ft-h2">Cách hoạt động</h2>
+        <span class="ft-section-meta">Phát hiện trước · xử lý sau</span>
+      </div>
+      <div class="tool-steps" id="cf-steps"></div>
+      <div class="ft-rule"></div>
+      <div class="tool-explainer" id="cf-explainer"></div>
     </div>
 
     <!-- ============================================================
@@ -1238,12 +1366,13 @@
         <button type="button" class="convert-tab" data-tool="remove-empty-rows">Xoá dòng trống</button>
       </div>
 
-      <!-- Dải "đang nối tiếp" -- chỉ hiện khi có pipeline (state.ft.pipeline). -->
-      <div class="pipeline-strip" id="pipeline-strip" hidden>
-        <span class="pipeline-strip-text" id="pipeline-strip-text"></span>
+      <!-- Dải "đang nối tiếp" -- chỉ hiện khi có chuỗi xử lý (state.pipe, DÙNG
+           CHUNG cho cả 3 nhóm tool: Free Tools / Convert / Cần cấu hình). -->
+      <div class="pipeline-strip pipe-strip" id="pipeline-strip" hidden>
+        <span class="pipeline-strip-text pipe-strip-text" id="pipeline-strip-text"></span>
         <span class="pipeline-strip-actions">
-          <button class="btn btn-ghost btn-small" id="pipeline-new-file-btn" type="button">⬆ Tải file khác</button>
-          <button class="btn btn-ghost btn-small" id="pipeline-reset-btn" type="button">↺ Bắt đầu lại từ gốc</button>
+          <button class="btn btn-ghost btn-small pipe-new-file-btn" id="pipeline-new-file-btn" type="button">⬆ Tải file khác</button>
+          <button class="btn btn-ghost btn-small pipe-reset-btn" id="pipeline-reset-btn" type="button">↺ Bắt đầu lại từ gốc</button>
         </span>
       </div>
 
@@ -1395,13 +1524,11 @@
           </div>
 
           <!-- "Xử lý tiếp" -- chỉ hiện sau khi có kết quả (renderContinuePanel()). -->
+          <!-- "Xử lý tiếp" -- 3 danh mục, JS dựng (renderContinuePanel()), mọi mục
+               đều bấm được và mang kết quả hiện tại sang tool đích. -->
           <div class="continue-panel" id="continue-panel" hidden>
             <p class="continue-title">✓ Xong · xử lý tiếp bằng</p>
-            <div class="continue-pills" id="continue-pills">
-              <button type="button" class="continue-pill" data-category="configure">Cần cấu hình</button>
-              <button type="button" class="continue-pill" data-category="convert">Convert</button>
-              <button type="button" class="continue-pill" data-category="auto">Tự động</button>
-            </div>
+            <div class="continue-pills" id="continue-pills"></div>
             <div class="continue-list" id="continue-list"></div>
           </div>
           </div>
@@ -1453,6 +1580,14 @@
         <button type="button" class="convert-tab is-active" data-tool="delimiter">Đổi delimiter CSV</button>
         <button type="button" class="convert-tab" data-tool="csv-to-json">CSV → JSON</button>
         <button type="button" class="convert-tab" data-tool="json-to-csv">JSON → CSV</button>
+      </div>
+
+      <div class="pipeline-strip pipe-strip" id="cv-pipe-strip" hidden>
+        <span class="pipeline-strip-text pipe-strip-text"></span>
+        <span class="pipeline-strip-actions">
+          <button class="btn btn-ghost btn-small pipe-new-file-btn" type="button">⬆ Tải file khác</button>
+          <button class="btn btn-ghost btn-small pipe-reset-btn" type="button">↺ Bắt đầu lại từ gốc</button>
+        </span>
       </div>
 
       <div class="convert-grid">
@@ -1609,6 +1744,12 @@
               <pre class="convert-result-text mono" id="convert-result-text"></pre>
             </div>
           </div>
+
+          <div class="continue-panel" id="cv-continue" hidden>
+            <p class="continue-title">✓ Xong · xử lý tiếp bằng</p>
+            <div class="continue-pills"></div>
+            <div class="continue-list"></div>
+          </div>
           </div>
         </section>
       </div>
@@ -1646,8 +1787,8 @@
         <div class="ws-footer-col">
           <h4>Sản phẩm</h4>
           <a href="#" data-section="home">Trang chủ</a>
-          <a href="#" data-section="workspace">Workspace 5 bước</a>
-          <a href="#" data-section="workspace" data-direction="class">Class Noise</a>
+          <a href="#" data-config-tool="format-noise">Cần cấu hình</a>
+          <a href="#" data-section="class-noise">Class Noise</a>
         </div>
         <div class="ws-footer-col">
           <h4>Free Tools</h4>

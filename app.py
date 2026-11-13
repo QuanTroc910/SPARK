@@ -31,6 +31,7 @@ from attribute_noise.attribute_handling import (
     HandlingAction,
     HandlingChoice,
     apply_handling,
+    get_available_actions,
 )
 from attribute_noise.config import (
     ColumnDType,
@@ -1567,6 +1568,184 @@ def noise_tool_remove_empty_rows():
     except Exception as exc:
         return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
     return _noise_tool_response(result_df, stats)
+
+
+# ===========================================================================
+# TOOL "CẦN CẤU HÌNH" (6 tool, giao diện Denoise): Sai định dạng / Ngoài
+# khoảng / Giá trị bất thường / Không nhất quán / Thiếu giá trị nâng cao /
+# Rule liên cột. Vận hành GIỐNG 4 Free Tools ở trên (không file_id, xong
+# trong 1 request, @login_required) nhưng KHÁC ở chỗ cần người dùng khai cột
+# + tham số, nên chia 2 nhịp: mode="detect" (chỉ phát hiện, trả các dòng bị
+# gắn cờ + danh sách cách xử lý hợp lệ) rồi mode="apply" (phát hiện lại trên
+# cùng dữ liệu + áp dụng ĐÚNG 1 cách xử lý cho mọi ô bị gắn cờ, trả CSV kết
+# quả). Lõi dùng lại NGUYÊN detect_noise()/apply_handling() (bảng quyết định
+# kiểu cột × loại lỗi ở attribute_handling.py), không viết logic mới.
+# ===========================================================================
+CONFIG_TOOL_NOISE_TYPE = {
+    "format-noise": NoiseType.FORMAT_NOISE,
+    "out-of-range": NoiseType.OUT_OF_RANGE,
+    "outlier": NoiseType.OUTLIER,
+    "inconsistent-category": NoiseType.INCONSISTENT_CATEGORY,
+    "missing-advanced": NoiseType.MISSING_VALUE,
+}
+CONFIG_TOOL_FLAGGED_LIMIT = 200  # số dòng bị gắn cờ tối đa trả về cho FE hiện bảng
+
+
+def _df_preview_rows(df: pd.DataFrame, limit: int = 20) -> list:
+    """Header + tối đa `limit` dòng đầu của DataFrame, dạng list[list[str]]
+    (cùng shape với _csv_preview_rows()) để FE hiện bảng xem trước."""
+    rows = [[str(c) for c in df.columns]]
+    for values in df.head(limit).itertuples(index=False):
+        rows.append(["" if v is None else str(v) for v in values])
+    return rows
+
+
+@app.route("/api/noise-tools/inspect", methods=["POST"])
+@login_required
+def noise_tool_inspect():
+    """Đọc nhanh file/text vừa chọn: tên cột + kiểu dữ liệu đoán sẵn
+    (guess_column_dtype(), cùng hàm /api/upload dùng) + 20 dòng xem trước.
+    FE dùng để dựng dropdown chọn cột cho các tool cần cấu hình (kể cả file
+    Excel mà trình duyệt không tự đọc được). Không giữ lại gì sau khi trả."""
+    try:
+        df = _read_df_for_noise_tool(request)
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc được file: {exc}"}), 400
+    return jsonify(
+        {
+            "columns": [str(c) for c in df.columns],
+            "guessed_dtypes": {str(c): guess_column_dtype(df[c]) for c in df.columns},
+            "row_count": int(len(df)),
+            "preview_rows": _df_preview_rows(df),
+        }
+    )
+
+
+def _parse_config_tool_payload(form) -> dict:
+    """Field `config` là 1 chuỗi JSON (gửi kèm multipart cùng file/text):
+    {tool, column, dtype, params{...}, rule{...}, action, fixed_value}."""
+    raw = form.get("config", "")
+    try:
+        cfg = json.loads(raw) if raw else {}
+    except json.JSONDecodeError as exc:
+        raise QuickToolError(f"config không phải JSON hợp lệ: {exc}")
+    tool = cfg.get("tool")
+    if tool != "cross-rule" and tool not in CONFIG_TOOL_NOISE_TYPE:
+        raise QuickToolError(f"Tool không hợp lệ: {tool}")
+    return cfg
+
+
+def _run_config_tool_detect(df: pd.DataFrame, cfg: dict):
+    """Chạy detect cho ĐÚNG 1 cấu hình. Trả về (column_configs,
+    cross_field_rules, findings, noise_key, column) -- column = None với rule
+    liên cột (noise cấp dòng, không gắn với 1 cột)."""
+    tool = cfg["tool"]
+    if tool == "cross-rule":
+        rule = _cross_field_rule_from_json(cfg.get("rule") or {})
+        findings = detect_noise(df, [], cross_field_rules=[rule])
+        return [], [rule], findings, f"rule:{rule.rule_type.value}", None
+
+    noise_type = CONFIG_TOOL_NOISE_TYPE[tool]
+    column = cfg.get("column")
+    if not column or column not in df.columns:
+        raise QuickToolError(f"Cột '{column}' không tồn tại trong file")
+    params = cfg.get("params") or {}
+    # Bỏ các tham số để trống ("" / None) để dataclass dùng giá trị mặc định.
+    params = {k: v for k, v in params.items() if v not in ("", None)}
+    item = {"column": column, "dtype": cfg.get("dtype") or "text", "noise_types": [noise_type.value], **params}
+    col_cfg = _config_from_json(item)
+    findings = detect_noise(df, [col_cfg])
+    return [col_cfg], [], findings, noise_type.value, column
+
+
+def _config_tool_actions(column_configs, noise_key) -> list[str]:
+    """Danh sách cách xử lý hợp lệ: theo bảng kiểu cột × loại lỗi; rule liên
+    cột chỉ có 2 lựa chọn (xoá dòng vi phạm / giữ nguyên, chỉ xem)."""
+    if not column_configs:
+        return ["remove_row", "keep"]
+    return [a.value for a in get_available_actions(column_configs[0].dtype, NoiseType(noise_key))]
+
+
+@app.route("/api/noise-tools/configured", methods=["POST"])
+@login_required
+def noise_tool_configured():
+    mode = request.form.get("mode", "detect")
+    try:
+        cfg = _parse_config_tool_payload(request.form)
+        df = _read_df_for_noise_tool(request)
+        column_configs, _rules, findings, noise_key, column = _run_config_tool_detect(df, cfg)
+        actions = _config_tool_actions(column_configs, noise_key)
+
+        if mode == "detect":
+            # Gom cột bị gắn cờ theo từng dòng để FE tô màu đúng ô. Rule liên
+            # cột ghi column dạng "a & b" (describe_rule()) -> tách ra từng cột.
+            flagged: dict[int, set] = {}
+            for f in findings:
+                cols = flagged.setdefault(int(f.row_index), set())
+                for part in str(f.column).split(" & "):
+                    if part in df.columns:
+                        cols.add(part)
+            indices = sorted(flagged)
+            rows = []
+            for i in indices[:CONFIG_TOOL_FLAGGED_LIMIT]:
+                values = ["" if v is None else str(v) for v in df.loc[i].tolist()]
+                rows.append({"row_number": int(i) + 1, "cells": values, "flagged": sorted(flagged[i])})
+            payload = {
+                    "mode": "detect",
+                    "total_rows": int(len(df)),
+                    "findings_count": len(findings),
+                    "flagged_rows_count": len(indices),
+                    "truncated": len(indices) > CONFIG_TOOL_FLAGGED_LIMIT,
+                    "columns": [str(c) for c in df.columns],
+                    "flagged_rows": rows,
+                    "available_actions": actions,
+            }
+            if not findings:
+                # Không có gì để sửa -> trả luôn CSV (không đổi) để FE vẫn nối
+                # tiếp sang tool khác được mà không phải gọi "apply" rỗng.
+                buffer = StringIO()
+                df.to_csv(buffer, index=False)
+                payload["result_text"] = buffer.getvalue()
+            return jsonify(payload)
+
+        # mode == "apply"
+        action = cfg.get("action") or ""
+        fixed_value = cfg.get("fixed_value")
+        if action not in actions:
+            raise QuickToolError("Cách xử lý không hợp lệ cho kiểu cột / loại lỗi này")
+        if action == "fixed_value" and (fixed_value is None or str(fixed_value) == ""):
+            raise QuickToolError("Chưa nhập giá trị cố định để điền vào")
+        if column is None:
+            # Rule liên cột: không đi qua apply_handling() (hàm xử lý theo CỘT),
+            # chỉ có xoá thẳng các dòng vi phạm theo row_index.
+            flagged_idx = sorted({int(f.row_index) for f in findings})
+            new_df = df.drop(index=flagged_idx) if action == "remove_row" else df
+        else:
+            choice = HandlingChoice(
+                column=column,
+                noise_type=NoiseType(noise_key),
+                action=HandlingAction(action),
+                fixed_value=fixed_value,
+            )
+            new_df, _stats = apply_handling(df, column_configs, findings, [choice])
+        rows_removed, cells_changed = _summarize_change(df, new_df, column)
+        stats = {
+            "original_row_count": int(len(df)),
+            "final_row_count": int(len(new_df)),
+            "removed_row_count": int(rows_removed),
+            "cells_changed": int(cells_changed),
+            "findings_count": len(findings),
+            "action": action,
+        }
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except (FormulaError, ValueError, KeyError, TypeError, re.error) as exc:
+        return jsonify({"error": f"Cấu hình không hợp lệ: {exc}"}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
+    return _noise_tool_response(new_df, stats)
 
 
 if __name__ == "__main__":

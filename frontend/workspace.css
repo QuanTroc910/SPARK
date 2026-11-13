@@ -919,94 +919,94 @@ a.hm-tool:hover { background: #ebebe7; }
    style.css vẫn được nạp trước nên mọi class của luồng cũ (.panel, .stepper,
    .direction-card, .col-row, .chip, .stat-card, .handling-row, .history-bar,
    .results-table...) đã có kiểu "thẻ bo tròn kem/teal". Ở đây GHI ĐÈ (scope
-   #section-workspace) cho đúng Denoise: vuông góc, viền đen 1px, các ô nối
+   #section-class-noise) cho đúng Denoise: vuông góc, viền đen 1px, các ô nối
    liền không khe, thẻ chọn = nền đen, nhãn mono viết hoa, số to.
    Màu 11 family (chip đã tick, ô lỗi .cell-flag-*) GIỮ NGUYÊN của style.css
    vì đó là mã màu phân biệt loại lỗi, không phải trang trí.
    ========================================================================== */
 
 /* ----- Thanh 5 bước: 5 ô nối liền, ô đang làm nền đen, ô đã qua số nền cobalt ----- */
-#section-workspace .stepper { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid #111; margin: 0 0 44px; }
-#section-workspace .stepper-track { display: none; }
-#section-workspace .step {
+#section-class-noise .stepper { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid #111; margin: 0 0 44px; }
+#section-class-noise .stepper-track { display: none; }
+#section-class-noise .step {
   flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px;
   padding: 14px 18px; border-left: 1px solid #111; opacity: 0.45; cursor: default;
   transition: background 0.12s ease;
 }
-#section-workspace .step:first-child { border-left: 0; }
-#section-workspace .step.is-reachable { opacity: 1; cursor: pointer; }
-#section-workspace .step.is-reachable:hover { background: #ebebe7; }
-#section-workspace .step-circle {
+#section-class-noise .step:first-child { border-left: 0; }
+#section-class-noise .step.is-reachable { opacity: 1; cursor: pointer; }
+#section-class-noise .step.is-reachable:hover { background: #ebebe7; }
+#section-class-noise .step-circle {
   width: auto; height: auto; min-width: 28px; border-radius: 0; border: 1px solid #111;
   background: transparent; color: #111; font-size: 10.5px; padding: 3px 7px;
 }
-#section-workspace .step-label {
+#section-class-noise .step-label {
   font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
   text-transform: uppercase; color: #111; text-align: left;
 }
-#section-workspace .step.is-complete .step-circle { background: var(--signal); border-color: var(--signal); color: #fff; }
-#section-workspace .step.is-active { background: #111; }
-#section-workspace .step.is-active:hover { background: #111; }
-#section-workspace .step.is-active .step-circle { background: #fff; border-color: #fff; color: #111; }
-#section-workspace .step.is-active .step-label { color: #fff; }
+#section-class-noise .step.is-complete .step-circle { background: var(--signal); border-color: var(--signal); color: #fff; }
+#section-class-noise .step.is-active { background: #111; }
+#section-class-noise .step.is-active:hover { background: #111; }
+#section-class-noise .step.is-active .step-circle { background: #fff; border-color: #fff; color: #111; }
+#section-class-noise .step.is-active .step-label { color: #fff; }
 
 /* ----- Panel: phẳng, không khung; tiêu đề to viết hoa như các trang khác ----- */
-#section-workspace .panel { background: transparent; border: 0; padding: 0 0 70px; box-shadow: none; border-radius: 0; }
-#section-workspace .panel--narrow { max-width: none; }
-#section-workspace .eyebrow {
+#section-class-noise .panel { background: transparent; border: 0; padding: 0 0 70px; box-shadow: none; border-radius: 0; }
+#section-class-noise .panel--narrow { max-width: none; }
+#section-class-noise .eyebrow {
   font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--ink-dim); margin-bottom: 14px;
 }
-#section-workspace .panel-title {
+#section-class-noise .panel-title {
   font-size: clamp(34px, 3.6vw, 52px); font-weight: 600; letter-spacing: -0.03em;
   text-transform: uppercase; line-height: 0.98; margin-bottom: 16px;
 }
-#section-workspace .panel-desc { font-size: 16px; line-height: 1.5; color: var(--ink-dim); max-width: 80ch; margin-bottom: 26px; }
-#section-workspace .panel-actions { border-top: 1px solid #111; margin-top: 28px; padding-top: 20px; }
-#section-workspace .ft-panel-body .panel-actions { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
-#section-workspace .sub-section .panel-actions { border-top: 0; margin-top: 10px; padding-top: 0; }
-#section-workspace .hint-note {
+#section-class-noise .panel-desc { font-size: 16px; line-height: 1.5; color: var(--ink-dim); max-width: 80ch; margin-bottom: 26px; }
+#section-class-noise .panel-actions { border-top: 1px solid #111; margin-top: 28px; padding-top: 20px; }
+#section-class-noise .ft-panel-body .panel-actions { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+#section-class-noise .sub-section .panel-actions { border-top: 0; margin-top: 10px; padding-top: 0; }
+#section-class-noise .hint-note {
   font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--ink-faint); line-height: 1.5;
 }
-#section-workspace .sub-section { border-top: 1px solid #111; margin-top: 36px; padding-top: 22px; }
-#section-workspace .sub-title { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; text-transform: uppercase; margin-bottom: 8px; }
-#section-workspace .empty-state {
+#section-class-noise .sub-section { border-top: 1px solid #111; margin-top: 36px; padding-top: 22px; }
+#section-class-noise .sub-title { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; text-transform: uppercase; margin-bottom: 8px; }
+#section-class-noise .empty-state {
   border: 1px dashed #111; border-radius: 0; font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
   letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-dim);
   background: repeating-linear-gradient(135deg, transparent 0 7px, rgba(17, 17, 17, 0.06) 7px 8px);
 }
-#section-workspace .field label, #section-profile .field label {
+#section-class-noise .field label, #section-profile .field label {
   font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--ink-dim);
 }
 
 /* ----- Bước 1: ô kéo-thả nằm trong khung 01 cao cố định (như trang tool) ----- */
-#section-workspace .dropzone-idle { gap: 0; color: #111; font-size: inherit; }
-#section-workspace .dropzone-file {
+#section-class-noise .dropzone-idle { gap: 0; color: #111; font-size: inherit; }
+#section-class-noise .dropzone-file {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   height: 100%; text-align: center;
 }
 .ws-file-icon { font-size: 30px; line-height: 1; margin-bottom: 10px; color: var(--signal); }
-#section-workspace .file-name { font-family: "IBM Plex Mono", monospace; font-size: 15px; font-weight: 600; margin: 0; }
-#section-workspace .file-meta {
+#section-class-noise .file-name { font-family: "IBM Plex Mono", monospace; font-size: 15px; font-weight: 600; margin: 0; }
+#section-class-noise .file-meta {
   font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--ink-faint); margin: 0 0 12px;
 }
 
 /* ----- Bước 2: thẻ hướng / thẻ phương pháp -- ô vuông nối liền, chọn = nền đen ----- */
-#section-workspace .direction-grid { gap: 0; border: 1px solid #111; }
-#section-workspace .direction-card {
+#section-class-noise .direction-grid { gap: 0; border: 1px solid #111; }
+#section-class-noise .direction-card {
   position: relative; border: 0; border-left: 1px solid #111; border-radius: 0; padding: 24px 24px 22px;
   background: transparent; min-height: 200px; display: flex; flex-direction: column;
   transition: none; /* style.css có transition 0.15s -- tắt để đổi màu dứt khoát */
 }
-#section-workspace .direction-card:first-child { border-left: 0; }
-#section-workspace .direction-card:hover { background: #ebebe7; }
-#section-workspace .direction-card.is-selected, #section-workspace .direction-card.is-selected:hover { background: #111; color: #fff; }
-#section-workspace .direction-card h3 { font-size: 22px; font-weight: 600; text-transform: uppercase; letter-spacing: -0.02em; margin: 0 0 10px; }
-#section-workspace .direction-card p { font-size: 14px; line-height: 1.55; color: var(--ink-dim); flex: 1 1 auto; margin: 0; }
-#section-workspace .direction-card.is-selected p { color: rgba(255, 255, 255, 0.78); }
+#section-class-noise .direction-card:first-child { border-left: 0; }
+#section-class-noise .direction-card:hover { background: #ebebe7; }
+#section-class-noise .direction-card.is-selected, #section-class-noise .direction-card.is-selected:hover { background: #111; color: #fff; }
+#section-class-noise .direction-card h3 { font-size: 22px; font-weight: 600; text-transform: uppercase; letter-spacing: -0.02em; margin: 0 0 10px; }
+#section-class-noise .direction-card p { font-size: 14px; line-height: 1.55; color: var(--ink-dim); flex: 1 1 auto; margin: 0; }
+#section-class-noise .direction-card.is-selected p { color: rgba(255, 255, 255, 0.78); }
 .dir-num {
   display: inline-block; align-self: flex-start; font-family: "IBM Plex Mono", monospace; font-size: 10px;
   letter-spacing: 0.08em; border: 1px solid #111; padding: 3px 7px; margin-bottom: 26px; color: var(--ink-faint);
@@ -1017,78 +1017,78 @@ a.hm-tool:hover { background: #ebebe7; }
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint);
 }
 .direction-card.is-selected .dir-meta { color: rgba(255, 255, 255, 0.6); }
-#section-workspace .method-grid .direction-card { min-height: 170px; }
-#section-workspace .method-grid .direction-card h3 { font-size: 17px; }
+#section-class-noise .method-grid .direction-card { min-height: 170px; }
+#section-class-noise .method-grid .direction-card h3 { font-size: 17px; }
 
 /* ----- Bước 3: hàng cột + chip + rule ----- */
-#section-workspace .col-list { gap: 0; border: 1px solid #111; }
-#section-workspace .col-row { border: 0; border-top: 1px solid #111; border-radius: 0; background: transparent; padding: 16px 18px; }
-#section-workspace .col-row:first-child { border-top: 0; }
-#section-workspace .col-name { font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; }
-#section-workspace .chip, #section-workspace .filter-chip {
+#section-class-noise .col-list { gap: 0; border: 1px solid #111; }
+#section-class-noise .col-row { border: 0; border-top: 1px solid #111; border-radius: 0; background: transparent; padding: 16px 18px; }
+#section-class-noise .col-row:first-child { border-top: 0; }
+#section-class-noise .col-name { font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; }
+#section-class-noise .chip, #section-class-noise .filter-chip {
   border-radius: 999px; border-color: #111; background: transparent; color: #111;
   font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
   text-transform: uppercase; padding: 6px 12px;
 }
-#section-workspace .chip:hover, #section-workspace .filter-chip:hover { background: #ebebe7; }
-#section-workspace .param-panel.is-open { border-left: 2px solid var(--signal); padding-left: 12px; margin-top: 10px; }
-#section-workspace .rule-row { border: 1px solid #111; border-radius: 0; background: transparent; padding: 14px 16px; }
-#section-workspace .rule-word {
+#section-class-noise .chip:hover, #section-class-noise .filter-chip:hover { background: #ebebe7; }
+#section-class-noise .param-panel.is-open { border-left: 2px solid var(--signal); padding-left: 12px; margin-top: 10px; }
+#section-class-noise .rule-row { border: 1px solid #111; border-radius: 0; background: transparent; padding: 14px 16px; }
+#section-class-noise .rule-word {
   color: var(--signal); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600;
   letter-spacing: 0.06em; text-transform: uppercase;
 }
-#section-workspace .rule-hint { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-faint); }
-#section-workspace .feature-check-list { border: 1px solid #111; border-radius: 0; background: transparent; }
-#section-workspace .switch-row, #section-workspace .feature-check-list label { font-size: 13.5px; }
+#section-class-noise .rule-hint { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-faint); }
+#section-class-noise .feature-check-list { border: 1px solid #111; border-radius: 0; background: transparent; }
+#section-class-noise .switch-row, #section-class-noise .feature-check-list label { font-size: 13.5px; }
 
 /* ----- Bước 4: thẻ số nối liền, số to; biểu đồ; bảng kiểu CYD ----- */
-#section-workspace .stats-grid { gap: 0; border: 1px solid #111; margin-bottom: 24px; }
-#section-workspace .stat-card { border: 0; border-left: 1px solid #111; border-radius: 0; background: transparent; padding: 18px 20px 20px; gap: 8px; }
-#section-workspace .stat-card:first-child { border-left: 0; }
-#section-workspace .stat-value {
+#section-class-noise .stats-grid { gap: 0; border: 1px solid #111; margin-bottom: 24px; }
+#section-class-noise .stat-card { border: 0; border-left: 1px solid #111; border-radius: 0; background: transparent; padding: 18px 20px 20px; gap: 8px; }
+#section-class-noise .stat-card:first-child { border-left: 0; }
+#section-class-noise .stat-value {
   font-family: "IBM Plex Sans", sans-serif; font-size: clamp(36px, 3.4vw, 54px); font-weight: 600;
   letter-spacing: -0.04em; line-height: 0.95;
 }
-#section-workspace .stat-label {
+#section-class-noise .stat-label {
   font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
   text-transform: uppercase; color: #111;
 }
-#section-workspace .stat-sub { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.03em; color: var(--ink-faint); }
-#section-workspace .stat-amber .stat-value { color: var(--amber-text); }
-#section-workspace .stat-crimson .stat-value { color: var(--crimson-text); }
-#section-workspace .stat-teal .stat-value { color: var(--signal); }
-#section-workspace .chart-card { border: 1px solid #111; border-radius: 0; background: transparent; padding: 18px 20px 20px; margin-bottom: 24px; }
-#section-workspace .chart-card .sub-title { font-size: 14px; }
-#section-workspace .chart-bar-track, #section-workspace .chart-bar-fill { border-radius: 0; }
-#section-workspace .chart-label { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; }
-#section-workspace .toolbar { margin-bottom: 14px; }
-#section-workspace .table-wrap { border: 1px solid #111; border-radius: 0; background: var(--surface-2); }
-#section-workspace .results-table { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
-#section-workspace .results-table thead th {
+#section-class-noise .stat-sub { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.03em; color: var(--ink-faint); }
+#section-class-noise .stat-amber .stat-value { color: var(--amber-text); }
+#section-class-noise .stat-crimson .stat-value { color: var(--crimson-text); }
+#section-class-noise .stat-teal .stat-value { color: var(--signal); }
+#section-class-noise .chart-card { border: 1px solid #111; border-radius: 0; background: transparent; padding: 18px 20px 20px; margin-bottom: 24px; }
+#section-class-noise .chart-card .sub-title { font-size: 14px; }
+#section-class-noise .chart-bar-track, #section-class-noise .chart-bar-fill { border-radius: 0; }
+#section-class-noise .chart-label { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; }
+#section-class-noise .toolbar { margin-bottom: 14px; }
+#section-class-noise .table-wrap { border: 1px solid #111; border-radius: 0; background: var(--surface-2); }
+#section-class-noise .results-table { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+#section-class-noise .results-table thead th {
   background: var(--bg); color: #111; font-weight: 600; font-size: 11.5px; letter-spacing: 0.03em;
   border-bottom: 1px solid #111; padding: 9px 14px;
 }
-#section-workspace .results-table td { padding: 8px 14px; border-bottom: 1px solid var(--line); }
-#section-workspace .results-table tbody tr:hover { background: #ebebe7; }
-#section-workspace .pagination {
+#section-class-noise .results-table td { padding: 8px 14px; border-bottom: 1px solid var(--line); }
+#section-class-noise .results-table tbody tr:hover { background: #ebebe7; }
+#section-class-noise .pagination {
   font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
 }
 
 /* ----- Bước 5: nhóm xử lý nối liền, thanh lịch sử có thẻ đen ----- */
-#section-workspace .handling-list { gap: 0; border: 1px solid #111; margin-bottom: 20px; }
-#section-workspace .handling-row { border: 0; border-top: 1px solid #111; border-radius: 0; background: transparent; padding: 14px 18px; }
-#section-workspace .handling-row:first-child { border-top: 0; }
-#section-workspace .handling-row-summary { font-weight: 600; }
-#section-workspace .handling-bulk-label { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; }
-#section-workspace .handling-action-col { background: var(--surface-2); }
-#section-workspace .history-bar { border: 1px solid #111; border-radius: 0; background: transparent; padding: 14px 18px; margin-bottom: 20px; }
-#section-workspace .history-bar-title {
+#section-class-noise .handling-list { gap: 0; border: 1px solid #111; margin-bottom: 20px; }
+#section-class-noise .handling-row { border: 0; border-top: 1px solid #111; border-radius: 0; background: transparent; padding: 14px 18px; }
+#section-class-noise .handling-row:first-child { border-top: 0; }
+#section-class-noise .handling-row-summary { font-weight: 600; }
+#section-class-noise .handling-bulk-label { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; }
+#section-class-noise .handling-action-col { background: var(--surface-2); }
+#section-class-noise .history-bar { border: 1px solid #111; border-radius: 0; background: transparent; padding: 14px 18px; margin-bottom: 20px; }
+#section-class-noise .history-bar-title {
   font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
   text-transform: uppercase; background: #111; color: #fff; padding: 5px 10px;
 }
-#section-workspace .history-log { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; }
-#section-workspace .handling-confirm { border-radius: 0; }
-#section-workspace .status-text.is-ok { color: var(--signal); }
+#section-class-noise .history-log { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; }
+#section-class-noise .handling-confirm { border-radius: 0; }
+#section-class-noise .status-text.is-ok { color: var(--signal); }
 
 /* ----- Hồ sơ tài khoản ----- */
 .pf-hero { padding-bottom: 40px; border-bottom: 1px solid #111; margin-bottom: 36px; }
@@ -1101,11 +1101,38 @@ a.hm-tool:hover { background: #ebebe7; }
 .pf-list li { font-size: 14px; }
 
 @media (max-width: 900px) {
-  #section-workspace .stepper { grid-template-columns: 1fr; }
-  #section-workspace .step { border-left: 0; border-top: 1px solid #111; }
-  #section-workspace .step:first-child { border-top: 0; }
-  #section-workspace .direction-grid, #section-workspace .method-grid { grid-template-columns: 1fr; }
-  #section-workspace .direction-card { border-left: 0; border-top: 1px solid #111; }
-  #section-workspace .direction-card:first-child { border-top: 0; }
+  #section-class-noise .stepper { grid-template-columns: 1fr; }
+  #section-class-noise .step { border-left: 0; border-top: 1px solid #111; }
+  #section-class-noise .step:first-child { border-top: 0; }
+  #section-class-noise .direction-grid, #section-class-noise .method-grid { grid-template-columns: 1fr; }
+  #section-class-noise .direction-card { border-left: 0; border-top: 1px solid #111; }
+  #section-class-noise .direction-card:first-child { border-top: 0; }
   .pf-grid { grid-template-columns: 1fr; }
 }
+
+/* ==========================================================================
+   TOOL CẦN CẤU HÌNH (#section-config) + chỉnh Class Noise 4 bước
+   ========================================================================== */
+/* Ô lỗi trong bảng kết quả "Phát hiện": nền xanh nhạt + viền cobalt. */
+.cf-flag { background: var(--signal-soft); box-shadow: inset 0 0 0 1.5px var(--signal); color: var(--signal-dark); font-weight: 600; }
+#section-config .results-table td.cf-flag { background: var(--signal-soft); }
+/* Khối tuỳ chọn do JS dựng: 2 cột cho các cặp ô ngắn (min/max, cột A/B...). */
+.cf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cf-row-3 { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; }
+#cf-options .field { margin: 0; }
+#cf-options .field + .field, #cf-options .cf-row + .field, #cf-options .field + .cf-row { margin-top: 0; }
+#cf-options textarea.input { min-height: 64px; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+#cf-options .hint-note { margin-left: 0; }
+/* Nhịp 2 (chọn cách xử lý) -- tách bằng kẻ đen, nút Áp dụng màu nhấn. */
+.cf-handling { margin-top: 16px; padding-top: 14px; border-top: 1px solid #111; }
+.cf-handling .continue-title { margin-bottom: 12px; }
+.cf-handling .panel-actions { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+/* 3 thẻ phương pháp Class Noise xếp DỌC trong khung 02 của bước 1. */
+#section-class-noise .method-grid.is-stacked { grid-template-columns: 1fr; }
+#section-class-noise .method-grid.is-stacked .direction-card { border-left: 0; border-top: 1px solid #111; min-height: 0; padding: 16px 18px 16px; }
+#section-class-noise .method-grid.is-stacked .direction-card:first-child { border-top: 0; }
+#section-class-noise .method-grid.is-stacked .direction-card h3 { font-size: 16px; margin-bottom: 6px; }
+#section-class-noise .method-grid.is-stacked .direction-card p { font-size: 13px; }
+#section-class-noise .method-grid.is-stacked .dir-num { margin-bottom: 12px; }
+#section-class-noise .stepper { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 900px) { .cf-row, .cf-row-3 { grid-template-columns: 1fr; } }

@@ -112,7 +112,7 @@ const state = {
   fileId: null,
   headers: [],
   columnConfig: {}, // { [tên cột]: cấu hình -- xem defaultColumnConfig() }
-  direction: null,
+  direction: "class", // giao diện Denoise: luồng này CHỈ còn Class Noise (Attribute Noise đã thành 6 tool riêng)
   backendAvailable: false,
   currentStep: 1,
   maxReached: 1,
@@ -166,7 +166,7 @@ const state = {
 
 // ====== Stepper (5 bước) ======
 function renderStepper() {
-  document.querySelectorAll(".step").forEach((el) => {
+  document.querySelectorAll(".step").forEach((el, idx) => {
     const n = parseInt(el.dataset.step, 10);
     const complete = n < state.maxReached;
     const active = n === state.currentStep;
@@ -174,7 +174,9 @@ function renderStepper() {
     el.classList.toggle("is-complete", complete);
     el.classList.toggle("is-active", active);
     el.classList.toggle("is-reachable", reachable);
-    el.querySelector(".step-circle").textContent = complete && !active ? "✓" : String(n);
+    // Số hiển thị = thứ tự ô trên thanh (1-4), không phải data-step nội bộ
+    // (1,3,4,5 -- panel-2 không còn dùng trong giao diện Denoise).
+    el.querySelector(".step-circle").textContent = complete && !active ? "✓" : String(idx + 1);
   });
 }
 function goStep(n) {
@@ -267,6 +269,12 @@ function handleFileSelected(file) {
 $("upload-btn").addEventListener("click", async () => {
   const file = state.selectedFile;
   if (!file) return;
+  // Bước 1 (Denoise) gộp "chọn phương pháp" vào cùng ô tải file -- phải chọn
+  // 1 trong 3 thẻ ở khung 02 trước khi tải lên.
+  if (!state.classMethod) {
+    setStatusMessage($("upload-status"), "Chọn 1 phương pháp phát hiện ở khung 02 trước.", "error");
+    return;
+  }
 
   setButtonLoading($("upload-btn"), true, "Đang upload...", "Tải lên & tiếp tục");
 
@@ -327,9 +335,9 @@ $("upload-btn").addEventListener("click", async () => {
   // trong danh sách (chỉ các cột của file mới mới được vẽ ra) -- nhẹ thì bị
   // chặn báo lỗi "cột không tồn tại", nặng hơn là ÂM THẦM dùng nhầm lựa chọn
   // cũ nếu 2 file tình cờ trùng tên cột, cho kết quả sai mà không ai biết.
+  // (classMethod GIỮ NGUYÊN: người dùng đã chọn ở ngay bước 1 trước khi tải lên.)
   state.classLabelColumn = null;
   state.classFeatureColumns = new Set();
-  state.classMethod = null;
   state.classDiagnostics = null;
   state.classResultMethod = null;
   state.classFindings = [];
@@ -337,12 +345,13 @@ $("upload-btn").addEventListener("click", async () => {
   state.classFindingsFilterText = "";
   $("class-reduce-result").hidden = true;
   $("class-reduce-result").innerHTML = "";
-  $("class-method-section").hidden = true;
-  document.querySelectorAll("#class-method-grid .direction-card").forEach((c) => c.classList.remove("is-selected"));
 
   setStatusMessage($("upload-status"), `Đã tải lên: ${data.row_count} dòng, ${data.columns.length} cột.`, "ok");
-  unlockStep(2);
-  goStep(2);
+  // Không còn bước "Hướng xử lý": hướng luôn là Class Noise, sang thẳng bước
+  // chọn nhãn & đặc trưng (panel nội bộ số 3 = ô thứ 2 trên thanh).
+  state.direction = "class";
+  unlockStep(3);
+  goStep(3);
 });
 
 // ====== BƯỚC 2: chọn hướng xử lý ======
@@ -1993,8 +2002,8 @@ function toggleStep3Direction() {
   // đưa lên dòng nhãn nhỏ "[ Bước 3 / 5 · ... ]" phía trên thay vì nối vào tiêu đề.
   $("panel-3-title").textContent = isClass ? "Chọn nhãn & đặc trưng" : "Cấu hình noise cho từng cột";
   $("panel-3-eyebrow").textContent = isClass
-    ? `[ Bước 3 / 5 · ${CLASS_METHOD_LABELS[state.classMethod] || "Class Noise"} ]`
-    : "[ Bước 3 / 5 ]";
+    ? `[ Bước 2 / 4 · ${CLASS_METHOD_LABELS[state.classMethod] || "Class Noise"} ]`
+    : "[ Bước 2 / 4 ]";
   if (isClass) renderClassNoiseConfigForm();
 }
 
