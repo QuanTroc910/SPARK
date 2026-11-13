@@ -110,8 +110,9 @@ function wireInputToggle(toggleEl, dropzoneEl, pasteEl, onModeChange) {
 }
 
 // Danh sách khối trong <main>, đúng thứ tự xuất hiện. 4 khối đầu là trang
-// CÔNG KHAI (bước 5): chưa đăng nhập vẫn xem được. 2 khối sau cần đăng nhập.
-const SECTIONS = ["home", "guide", "security", "privacy", "free-tools", "convert"];
+// CÔNG KHAI (bước 5): chưa đăng nhập vẫn xem được. 4 khối sau cần đăng nhập
+// (workspace = luồng 5 bước ở workspace-flow.js, profile = hồ sơ, bước 6).
+const SECTIONS = ["home", "guide", "security", "privacy", "workspace", "profile", "free-tools", "convert"];
 const PUBLIC_SECTIONS = new Set(["home", "guide", "security", "privacy"]);
 
 const state = {
@@ -260,23 +261,19 @@ $("logout-btn").addEventListener("click", async () => {
   } catch (err) {
     // vẫn hiện form đăng nhập dù gọi API lỗi -- không giữ người dùng kẹt lại.
   }
-  // Đăng xuất xong về trang chủ ở trạng thái khách (giống CYD), không hiện
-  // thẳng form đăng nhập nữa -- muốn đăng nhập lại thì bấm nút ở header.
-  setAuthMode("login");
-  authState.user = null;
-  switchSection("home");
-  onLoggedOut();
-  window.scrollTo(0, 0);
+  // Đăng xuất xong TẢI LẠI trang về trang chủ ở trạng thái khách (giống CYD):
+  // tải lại để xoá sạch mọi trạng thái trong bộ nhớ JS của luồng 5 bước
+  // (file_id, cấu hình, kết quả của người vừa đăng xuất) -- người đăng nhập
+  // kế tiếp trên cùng trình duyệt bắt đầu từ Bước 1 sạch, không đụng file cũ.
+  window.location.assign("workspace.html");
 });
-$("open-profile-btn").addEventListener("click", () => {
-  window.location.href = "index.html?open=profile";
-});
+$("open-profile-btn").addEventListener("click", () => switchSection("profile"));
 // Nút cho KHÁCH ở header + link ở chân trang: mở form ở đúng chế độ. "Bắt
-// đầu" = tạo tài khoản rồi vào thẳng Free Tools sau khi xong.
+// đầu" = tạo tài khoản rồi vào thẳng Workspace 5 bước sau khi xong.
 $("ws-guest-login-btn").addEventListener("click", () => openAuth("login"));
-$("ws-guest-start-btn").addEventListener("click", () => openAuth("register", "free-tools"));
+$("ws-guest-start-btn").addEventListener("click", () => openAuth("register", "workspace"));
 $("footer-login-link").addEventListener("click", (e) => { e.preventDefault(); openAuth("login"); });
-$("footer-register-link").addEventListener("click", (e) => { e.preventDefault(); openAuth("register", "free-tools"); });
+$("footer-register-link").addEventListener("click", (e) => { e.preventDefault(); openAuth("register", "workspace"); });
 
 async function checkBackendHealth() {
   // Header chỉ còn 1 chấm tròn màu, không có chữ đi kèm -- giữ thông tin đó
@@ -298,15 +295,23 @@ async function checkBackendHealth() {
 // ====== Chuyển khối (Free Tools <-> Convert) -- thay cho việc điều hướng
 // sang trang khác trước đây. Cuộn lên đầu trang để người dùng không bị lạc
 // khi nội dung đổi hẳn bên dưới header. ======
-function switchSection(section) {
+function switchSection(section, opts) {
+  opts = opts || {};
   if (!SECTIONS.includes(section)) section = "home";
   state.section = section;
   SECTIONS.forEach((name) => { $("section-" + name).hidden = name !== section; });
   // Viền màu nhấn (.is-current) cho pill của "vùng" đang mở: Product chứa
-  // Free Tools + Convert, Guide là pill riêng. Trang chủ/Bảo mật/Riêng tư:
-  // không pill nào sáng.
-  $("ws-product-btn").classList.toggle("is-current", section === "free-tools" || section === "convert");
+  // Free Tools + Convert + Workspace, Guide là pill riêng, Class Noise sáng
+  // khi mở Workspace bằng đúng pill đó. Trang chủ/Bảo mật/Riêng tư: không
+  // pill nào sáng.
+  $("ws-product-btn").classList.toggle("is-current", ["free-tools", "convert", "workspace"].includes(section));
   $("ws-nav-guide").classList.toggle("is-current", section === "guide");
+  $("ws-nav-class").classList.toggle("is-current", section === "workspace" && opts.direction === "class");
+  // Pill "Class Noise"/link chân trang: chọn sẵn thẻ hướng ở Bước 2 của luồng
+  // 5 bước (workspace-flow.js lộ ra window.DenoiseFlow, nạp sau file này nên
+  // phải kiểm tra tồn tại).
+  if (section === "workspace" && opts.direction && window.DenoiseFlow) window.DenoiseFlow.presetDirection(opts.direction);
+  if (section === "profile") renderProfile();
   // Đổi khối là thoát trạng thái "khách tự bấm Đăng nhập" (vd bấm "Về trang
   // chủ" trong form); khối cần đăng nhập thì applyAuthView() tự hiện form lại.
   authState.forceAuth = false;
@@ -319,10 +324,49 @@ function switchSection(section) {
 document.querySelectorAll("a[data-section]").forEach((a) => {
   a.addEventListener("click", (e) => {
     e.preventDefault();
-    switchSection(a.dataset.section);
+    switchSection(a.dataset.section, { direction: a.dataset.direction });
     setProductMenuOpen(false);
   });
 });
+
+// ====== Hồ sơ tài khoản (#section-profile, bước 6 -- chuyển từ panel-profile
+// của index.html sang): hiện tên/ngày tạo từ authState.user, đổi mật khẩu
+// qua POST /api/auth/change-password (cần mật khẩu hiện tại). ======
+function renderProfile() {
+  const user = authState.user;
+  $("profile-username").textContent = user ? user.username : "—";
+  $("profile-created-at").textContent = user ? new Date(user.created_at).toLocaleString("vi-VN") : "—";
+  $("change-password-form").reset();
+  setError($("change-password-error"), "");
+  $("change-password-success").hidden = true;
+}
+$("change-password-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setError($("change-password-error"), "");
+  $("change-password-success").hidden = true;
+  const old_password = $("old-password").value;
+  const new_password = $("new-password").value;
+  if (!old_password || !new_password) return setError($("change-password-error"), "Nhập đủ mật khẩu hiện tại và mật khẩu mới.");
+  const btn = $("change-password-btn");
+  btn.disabled = true;
+  let response, data;
+  try {
+    response = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ old_password, new_password }),
+    });
+    data = await response.json();
+  } catch (err) {
+    btn.disabled = false;
+    return setError($("change-password-error"), "Không gọi được backend.");
+  }
+  btn.disabled = false;
+  if (!response.ok) return setError($("change-password-error"), data.error || "Đổi mật khẩu thất bại.");
+  $("change-password-form").reset();
+  $("change-password-success").hidden = false;
+});
+$("profile-logout-btn").addEventListener("click", () => $("logout-btn").click());
 
 // Mục lục dính "TRÊN TRANG NÀY" của 3 trang văn bản: bấm thì cuộn mượt tới
 // mục, và tự tô đậm mục đang đọc khi người dùng cuộn (IntersectionObserver

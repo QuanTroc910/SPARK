@@ -17,14 +17,16 @@
 <body class="auth-ready ws-auth-pending">
   <!-- Trang MỚI, thay thế dần index.html. Bước 4: trang này TỰ lo đăng nhập/tạo
        tài khoản (#ws-auth bên dưới, hiện khi chưa đăng nhập, body.ws-auth-mode),
-       không còn đá về index.html nữa. Hồ sơ/đổi mật khẩu vẫn ở index.html
-       (chưa xây lại). body.ws-auth-pending = đang chờ GET /api/auth/me.
+       không còn đá về index.html nữa. body.ws-auth-pending = đang chờ
+       GET /api/auth/me. Từ bước 6, trang này ĐỦ mọi tính năng của index.html.
 
-       Thân trang có 6 KHỐI, chuyển bằng switchSection() (không điều hướng sang
+       Thân trang có 8 KHỐI, chuyển bằng switchSection() (không điều hướng sang
        trang khác): #section-home (trang chủ, MẶC ĐỊNH), #section-guide,
        #section-security, #section-privacy (4 trang CÔNG KHAI, bước 5 -- chưa
-       đăng nhập vẫn xem được), #section-free-tools và #section-convert (cần
-       đăng nhập; bấm vào tool khi chưa đăng nhập thì #ws-auth hiện đè lên).
+       đăng nhập vẫn xem được), #section-workspace (luồng 5 bước, bước 6,
+       logic ở workspace-flow.js), #section-profile (hồ sơ, bước 6),
+       #section-free-tools và #section-convert (4 khối sau cần đăng nhập; bấm
+       vào khi chưa đăng nhập thì #ws-auth hiện đè lên).
        Chưa đăng nhập: header hiện 2 nút Đăng nhập / Bắt đầu (#ws-guest-area)
        thay cho khối tài khoản, body có class ws-guest. -->
 
@@ -116,34 +118,34 @@
             Product <span class="ws-caret">⌄</span>
           </button>
           <div class="ws-megamenu" id="ws-product-menu" hidden>
-            <!-- Cột 1: loại noise CẦN NHẬP TAY tham số -- phần thân trang này CHƯA
-                 xây lại ở Denoise nên chưa bấm được. -->
+            <!-- Cột 1: loại noise CẦN NHẬP TAY tham số -- bấm mục nào cũng mở khối
+                 Workspace (5 bước), vì cấu hình nằm ở Bước 3 của luồng đó. -->
             <div class="ws-megamenu-col">
               <span class="ws-megamenu-label">Cần cấu hình · Workspace</span>
-              <div class="ws-megamenu-item ws-megamenu-item--static">
+              <a class="ws-megamenu-item" href="#" data-section="workspace">
                 <span class="ws-megamenu-icon">📝</span>
                 <span class="ws-megamenu-item-text"><strong>Sai định dạng</strong><small>Email · SĐT · ngày tháng sai khuôn</small></span>
-              </div>
-              <div class="ws-megamenu-item ws-megamenu-item--static">
+              </a>
+              <a class="ws-megamenu-item" href="#" data-section="workspace">
                 <span class="ws-megamenu-icon">📏</span>
                 <span class="ws-megamenu-item-text"><strong>Ngoài khoảng</strong><small>Tự khai min/max cho cột số</small></span>
-              </div>
-              <div class="ws-megamenu-item ws-megamenu-item--static">
+              </a>
+              <a class="ws-megamenu-item" href="#" data-section="workspace">
                 <span class="ws-megamenu-icon">📈</span>
                 <span class="ws-megamenu-item-text"><strong>Giá trị bất thường</strong><small>Outlier theo IQR / Z-score</small></span>
-              </div>
-              <div class="ws-megamenu-item ws-megamenu-item--static">
+              </a>
+              <a class="ws-megamenu-item" href="#" data-section="workspace">
                 <span class="ws-megamenu-icon">🧩</span>
                 <span class="ws-megamenu-item-text"><strong>Không nhất quán</strong><small>"Nam" / "nam" / "NAM" cùng 1 nghĩa</small></span>
-              </div>
-              <div class="ws-megamenu-item ws-megamenu-item--static">
+              </a>
+              <a class="ws-megamenu-item" href="#" data-section="workspace">
                 <span class="ws-megamenu-icon">🧮</span>
                 <span class="ws-megamenu-item-text"><strong>Thiếu giá trị (nâng cao)</strong><small>Impute mean · median · KNN · mode</small></span>
-              </div>
-              <div class="ws-megamenu-item ws-megamenu-item--static">
+              </a>
+              <a class="ws-megamenu-item" href="#" data-section="workspace">
                 <span class="ws-megamenu-icon">🔗</span>
                 <span class="ws-megamenu-item-text"><strong>Rule liên cột</strong><small>So sánh · điều kiện · công thức · phụ thuộc</small></span>
-              </div>
+              </a>
             </div>
 
             <!-- Cột 2: Convert -- chuyển khối tại chỗ (data-convert-tool, xem workspace.js). -->
@@ -184,8 +186,8 @@
               </a>
             </div>
 
-            <!-- Khối CTA đen -- TẠM trỏ "#" (phần Workspace đầy đủ chưa xây lại). -->
-            <a class="ws-megamenu-cta" href="#">
+            <!-- Khối CTA đen -> mở khối Workspace (5 bước). -->
+            <a class="ws-megamenu-cta" href="#" data-section="workspace">
               <p class="ws-megamenu-cta-eyebrow">Tải file lên và làm sạch<br>từng bước một</p>
               <p class="ws-megamenu-cta-title">Mở<br>Workspace</p>
               <span class="ws-megamenu-cta-arrow">→</span>
@@ -193,10 +195,11 @@
           </div>
         </div>
 
-        <!-- Class Noise: TẠM href="#", phần thân chưa xây lại ở đây (bước 6).
+        <!-- Class Noise: mở khối Workspace và chọn sẵn hướng Class Noise ở Bước
+             2 (data-direction, xem workspace.js + DenoiseFlow.presetDirection).
              Guide: chuyển sang khối Guide tại chỗ. Viền màu nhấn (.is-current)
              do switchSection() tự gắn cho pill của khối đang mở. -->
-        <a class="ws-nav-pill" href="#">Class Noise</a>
+        <a class="ws-nav-pill" href="#" id="ws-nav-class" data-section="workspace" data-direction="class">Class Noise</a>
         <a class="ws-nav-pill" href="#" id="ws-nav-guide" data-section="guide">Guide</a>
       </nav>
 
@@ -342,7 +345,7 @@
         <a class="hm-tool" href="#" data-convert-tool="delimiter"><span class="hm-tool-kind">Convert</span><b>Đổi delimiter CSV</b><small>Phẩy · chấm phẩy · tab · gạch đứng</small><i>→</i></a>
         <a class="hm-tool" href="#" data-convert-tool="csv-to-json"><span class="hm-tool-kind">Convert</span><b>CSV → JSON</b><small>Mỗi dòng 1 object, khoá là tên cột</small><i>→</i></a>
         <a class="hm-tool" href="#" data-convert-tool="json-to-csv"><span class="hm-tool-kind">Convert</span><b>JSON → CSV</b><small>Làm phẳng JSON lồng nhau thành cột</small><i>→</i></a>
-        <div class="hm-tool is-dark"><span class="hm-tool-kind">Workspace</span><b>Dò &amp; xử lý đầy đủ</b><small>5 bước, 7 loại nhiễu + rule liên cột + class noise. Đang dựng lại trong Denoise.</small><i>…</i></div>
+        <a class="hm-tool is-dark" href="#" data-section="workspace"><span class="hm-tool-kind">Workspace</span><b>Dò &amp; xử lý đầy đủ</b><small>5 bước, 7 loại nhiễu + rule liên cột + class noise, xử lý từng dòng có hoàn tác.</small><i>→</i></a>
       </div>
 
       <!-- "VỀ DỰ ÁN" (thay cho "WHO IT'S FOR" của CYD, vì đây là khoá luận) +
@@ -707,7 +710,501 @@
     </div>
 
     <!-- ============================================================
-         KHỐI: Free Tools -- MẶC ĐỊNH hiện khi vào trang. Bố cục = 1 trang tool
+         KHỐI: WORKSPACE (bước 6) -- luồng 5 bước đầy đủ (Attribute Noise 7
+         loại + rule liên cột, Class Noise 3 thuật toán), chuyển từ index.html
+         sang. Logic nằm ở workspace-flow.js (bản sao của script.js, giữ
+         nguyên). MỌI id/class mà workspace-flow.js dựa vào đều GIỮ NGUYÊN
+         (#stepper, .step[data-step], #panel-N, #panel-N-attribute/-class,
+         #dropzone, #col-list, #handling-list...), chỉ bọc thêm khung/thẻ
+         Denoise bên ngoài và đổi chữ. Khối này CẦN đăng nhập.
+         ============================================================ -->
+    <div id="section-workspace" hidden>
+      <div class="ft-topbar">
+        <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i><b>Workspace</b></span>
+        <span class="ft-meta">
+          <span>Chạy trên<strong>Backend Flask</strong></span>
+          <span>Hoàn tác<strong>5 bước gần nhất</strong></span>
+          <span>Bản gốc<strong>Không bị sửa</strong></span>
+        </span>
+      </div>
+
+      <!-- Thanh 5 bước: 5 ô nối liền (theo 4 ô quy trình của trang Features
+           CYD), ô đang làm nền đen, ô đã qua có dấu ✓, ô chưa tới mờ đi.
+           GIỮ NGUYÊN cấu trúc .stepper > .step[data-step] > .step-circle +
+           .step-label vì renderStepper()/goStep() trong workspace-flow.js
+           dựa vào đúng các class này. -->
+      <nav class="stepper" id="stepper" aria-label="Năm bước">
+        <div class="stepper-track"></div>
+        <div class="step" data-step="1"><span class="step-circle">1</span><span class="step-label">Tải file lên</span></div>
+        <div class="step" data-step="2"><span class="step-circle">2</span><span class="step-label">Hướng xử lý</span></div>
+        <div class="step" data-step="3"><span class="step-circle">3</span><span class="step-label">Cấu hình</span></div>
+        <div class="step" data-step="4"><span class="step-circle">4</span><span class="step-label">Kết quả</span></div>
+        <div class="step" data-step="5"><span class="step-circle">5</span><span class="step-label">Xử lý &amp; xuất</span></div>
+      </nav>
+
+      <!-- ===== Bước 1: tải file lên -- 2 khung 01/02 cùng khuôn trang tool ===== -->
+      <section class="panel is-active" id="panel-1">
+        <p class="eyebrow">[ Bước 1 / 5 ]</p>
+        <h2 class="panel-title">Tải dữ liệu lên</h2>
+        <p class="panel-desc">CSV hoặc Excel, dòng đầu là tên cột. File chỉ nằm trong bộ nhớ của server và gắn với tài khoản của bạn.</p>
+        <div class="convert-grid">
+          <section class="convert-panel ft-panel">
+            <div class="ft-panel-head"><span class="ft-eyebrow-tag">01 · File của bạn</span></div>
+            <div class="ft-panel-body">
+              <div class="ft-input-zone">
+                <label for="file-input" class="dropzone dropzone--compact" id="dropzone">
+                  <div class="dropzone-idle" id="dropzone-idle">
+                    <svg class="ft-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+                    <p class="ft-dropzone-title">Kéo thả file vào đây</p>
+                    <p class="ft-dropzone-hint">CSV · XLSX · dòng đầu là tên cột</p>
+                    <span class="btn btn-primary btn-small ft-choose-file-btn">Chọn file</span>
+                  </div>
+                  <div class="dropzone-file" id="dropzone-file" hidden>
+                    <span class="ws-file-icon" aria-hidden="true">▤</span>
+                    <p class="file-name" id="file-name-text"></p>
+                    <p class="file-meta" id="file-meta-text"></p>
+                    <span class="ft-dropzone-hint">Bấm để chọn file khác</span>
+                  </div>
+                </label>
+                <input type="file" id="file-input" accept=".csv,.xlsx,.xls" hidden />
+              </div>
+              <p class="hint-note" id="upload-notice">Đang kiểm tra kết nối tới backend…</p>
+              <div class="panel-actions">
+                <button class="btn btn-primary" id="upload-btn" disabled>Tải lên &amp; tiếp tục →</button>
+                <span class="status-text" id="upload-status"></span>
+              </div>
+            </div>
+          </section>
+          <section class="convert-panel ft-panel">
+            <div class="ft-panel-head"><span class="ft-eyebrow-tag">02 · Sau khi tải lên</span></div>
+            <div class="ft-panel-body">
+              <div class="ft-result-zone">
+                <div class="ft-result-skeleton">
+                  <div class="ft-result-skeleton-box">
+                    <span class="ft-result-skeleton-tag">Đang chờ file</span>
+                    <div class="ft-result-skeleton-rows" aria-hidden="true">
+                      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                    </div>
+                    <p class="ft-result-skeleton-sub">Đọc tên cột · đoán kiểu dữ liệu · không ghi ra đĩa</p>
+                  </div>
+                  <p class="ft-result-skeleton-caption">Tải xong, Denoise đoán kiểu từng cột rồi đưa bạn sang Bước 2.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ===== Bước 2: hướng xử lý -- 2 thẻ vuông nối liền, chọn = nền đen ===== -->
+      <section class="panel" id="panel-2">
+        <p class="eyebrow">[ Bước 2 / 5 ]</p>
+        <h2 class="panel-title">Chọn hướng xử lý</h2>
+        <p class="panel-desc">Nhiễu trong dữ liệu chia làm hai hướng, mỗi hướng có cách phát hiện và xử lý riêng.</p>
+
+        <div class="direction-grid">
+          <div class="direction-card" data-direction="attribute" tabindex="0" role="button">
+            <span class="dir-num">/01</span>
+            <h3>Attribute Noise</h3>
+            <p>Lỗi ở từng ô: thiếu giá trị, sai định dạng, ngoài khoảng, giá trị bất thường, không nhất quán, khoảng trắng thừa, dòng trùng, cộng rule mâu thuẫn giữa hai cột.</p>
+            <small class="dir-meta">7 loại lỗi · 4 rule liên cột · xử lý từng dòng</small>
+          </div>
+          <div class="direction-card" data-direction="class" tabindex="0" role="button">
+            <span class="dir-num">/02</span>
+            <h3>Class Noise</h3>
+            <p>Nhãn phân loại bị gán sai. Chọn một cột làm nhãn, các cột số làm đặc trưng, rồi chọn một trong ba thuật toán bên dưới để tìm dòng nghi ngờ.</p>
+            <small class="dir-meta">3 thuật toán độc lập · có chẩn đoán độ tin cậy</small>
+          </div>
+        </div>
+
+        <!-- Chỉ hiện khi đã chọn thẻ Class Noise: 3 nhóm phương pháp theo
+             Bảng 6, Gupta & Gupta (2019). Chọn đúng 1 để chạy thật. -->
+        <div class="sub-section" id="class-method-section" hidden>
+          <h3 class="sub-title">Phương pháp phát hiện Class Noise</h3>
+          <p class="panel-desc">Ba nhóm theo Bảng 6, Gupta &amp; Gupta (2019). Chọn đúng một phương pháp để chạy.</p>
+          <div class="direction-grid method-grid" id="class-method-grid">
+            <div class="direction-card" data-method="distance_based" tabindex="0" role="button">
+              <span class="dir-num">N13</span>
+              <h3>Distance-based</h3>
+              <p>Mutual k-Nearest Neighbor. Dựa thuần vào khoảng cách giữa các dòng, không train model nào. Nhanh.</p>
+            </div>
+            <div class="direction-card" data-method="single_learning" tabindex="0" role="button">
+              <span class="dir-num">CL</span>
+              <h3>Single learning-based</h3>
+              <p>Confident Learning với Random Forest. Dùng xác suất dự đoán của một model để tìm dòng nghi ngờ. Có thể mất vài phút.</p>
+            </div>
+            <div class="direction-card" data-method="ensemble_based" tabindex="0" role="button">
+              <span class="dir-num">N29</span>
+              <h3>Ensemble-based</h3>
+              <p>Ba classifier khác họ (Logistic Regression, Naive Bayes, Linear SVM) biểu quyết. Dòng nào đa số bất đồng với nhãn ghi thì nghi ngờ.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="continue-step2-btn" disabled>Tiếp tục →</button>
+        </div>
+      </section>
+
+      <!-- ===== Bước 3: cấu hình ===== -->
+      <section class="panel" id="panel-3">
+        <p class="eyebrow" id="panel-3-eyebrow">[ Bước 3 / 5 ]</p>
+        <h2 class="panel-title" id="panel-3-title">Cấu hình noise cho từng cột</h2>
+
+        <!-- Nhánh ATTRIBUTE NOISE -->
+        <div id="panel-3-attribute">
+          <p class="panel-desc">
+            Với mỗi cột, kiểm tra kiểu dữ liệu (Denoise đã đoán sẵn, sửa được) rồi bật các loại nhiễu cần dò. Tham số
+            (min/max, ngưỡng outlier, danh sách giá trị chuẩn...) chỉ hiện khi hợp với kiểu đã chọn.
+          </p>
+
+          <p class="empty-state" id="col-list-empty" hidden>Chưa có dữ liệu. Quay lại Bước 1 để tải file.</p>
+          <div class="col-list" id="col-list"></div>
+
+          <div class="sub-section duplicate-row-config">
+            <h3 class="sub-title">Dòng trùng</h3>
+            <p class="panel-desc">Nhiễu cấp dòng: so cả dòng (hoặc một nhóm cột chỉ định) với các dòng khác, không thuộc riêng cột nào.</p>
+            <label class="switch-row">
+              <input type="checkbox" id="dup-enable" />
+              <span>Kiểm tra dòng trùng</span>
+            </label>
+            <div class="field field-grow">
+              <label>Chỉ so theo các cột này (để trống = so toàn bộ), cách nhau bởi dấu phẩy</label>
+              <input type="text" class="input" id="dup-subset-columns" placeholder="vd id" />
+            </div>
+          </div>
+
+          <div class="sub-section">
+            <h3 class="sub-title">Rule liên cột (tuỳ chọn)</h3>
+            <p class="panel-desc">
+              Kiểm tra mâu thuẫn logic giữa hai cột, ví dụ "ngày bắt đầu phải trước ngày kết thúc" hay "mã nhân viên luôn gắn với đúng một tên".
+              Bạn tự chọn cột và quan hệ vì mỗi file có ý nghĩa khác nhau.
+            </p>
+            <div class="rules-list" id="rules-list"></div>
+            <button class="btn btn-ghost" id="add-rule-btn" type="button">+ Thêm rule</button>
+          </div>
+
+          <div class="panel-actions">
+            <button class="btn btn-primary" id="detect-btn" type="button">Phát hiện nhiễu →</button>
+            <span class="status-text" id="detect-status"></span>
+          </div>
+        </div>
+
+        <!-- Nhánh CLASS NOISE -->
+        <div id="panel-3-class" hidden>
+          <p class="panel-desc" id="panel-3-class-desc">
+            Chọn một cột làm <strong>nhãn</strong> và các cột <strong>số</strong> làm đặc trưng. Cột không ép được thành số
+            tự động bị loại lúc chạy. Trước khi chạy, các cột đặc trưng được tự động cap outlier về biên IQR và biến đổi
+            logarit (cột không âm), không xoá dữ liệu nào.
+          </p>
+
+          <div class="field field-grow">
+            <label>Cột nhãn (label)</label>
+            <select class="select" id="class-label-select"></select>
+          </div>
+
+          <div class="sub-section">
+            <h3 class="sub-title">Giảm cột tự động (tuỳ chọn)</h3>
+            <p class="panel-desc">
+              Xếp hạng mức liên quan tới nhãn (Feature Importance), tìm điểm "gãy" để giữ nhóm cột quan trọng nhất, rồi lọc
+              cột thừa thông tin lẫn nhau (tương quan ≥ 0.8). Kết quả tự tick vào danh sách bên dưới, vẫn sửa tay được.
+            </p>
+            <div class="panel-actions">
+              <button class="btn btn-ghost" id="class-reduce-btn" type="button">Chạy giảm cột tự động</button>
+              <span class="status-text" id="class-reduce-status"></span>
+            </div>
+            <div id="class-reduce-result" hidden></div>
+          </div>
+
+          <div class="sub-section">
+            <div class="sub-title-row">
+              <h3 class="sub-title">Cột đặc trưng (feature)</h3>
+              <div class="feature-bulk-actions">
+                <button type="button" class="btn btn-ghost btn-small" id="class-feature-select-all">Tích tất cả</button>
+                <button type="button" class="btn btn-ghost btn-small" id="class-feature-select-none">Bỏ tích tất cả</button>
+              </div>
+            </div>
+            <div class="feature-check-list" id="class-feature-list"></div>
+          </div>
+
+          <div class="sub-section" id="class-params-single">
+            <h3 class="sub-title">Tham số nâng cao (tuỳ chọn)</h3>
+            <div class="field-row">
+              <div class="field">
+                <label>Số cây (n_estimators)</label>
+                <input type="number" class="input" id="class-n-estimators" value="300" min="10" step="10" />
+              </div>
+              <div class="field">
+                <label>Số fold (cv_folds)</label>
+                <input type="number" class="input" id="class-cv-folds" value="5" min="2" max="10" />
+              </div>
+            </div>
+          </div>
+
+          <div class="sub-section" id="class-params-distance" hidden>
+            <h3 class="sub-title">Tham số nâng cao (tuỳ chọn)</h3>
+            <div class="field-row">
+              <div class="field">
+                <label>Số láng giềng (k)</label>
+                <input type="number" class="input" id="class-k-neighbors" value="5" min="1" max="50" />
+              </div>
+            </div>
+            <p class="panel-desc">
+              Mutual k-NN không train model nào, chỉ xét k láng giềng gần nhất của mỗi dòng sau khi chuẩn hoá z-score,
+              nên thường nhanh hơn Single learning-based với cùng kích thước file.
+            </p>
+          </div>
+
+          <div class="sub-section" id="class-params-ensemble" hidden>
+            <h3 class="sub-title">Tham số nâng cao (tuỳ chọn)</h3>
+            <div class="field-row">
+              <div class="field">
+                <label>Số fold (cv_folds)</label>
+                <input type="number" class="input" id="class-ensemble-cv-folds" value="5" min="2" max="10" />
+              </div>
+            </div>
+            <p class="panel-desc">
+              Train ba classifier khác họ qua Cross-Validation, dòng nào bị đa số (≥ 2/3) classifier dự đoán khác nhãn ghi thì
+              gắn cờ. Nhẹ hơn nhiều so với Random Forest 300 cây.
+            </p>
+          </div>
+
+          <p class="hint-note" id="class-wait-hint">
+            Huấn luyện qua Cross-Validation có thể mất từ vài giây đến vài phút tuỳ kích thước file. Trang không phản hồi gì
+            trong lúc chờ, đừng tắt tab.
+          </p>
+
+          <div class="panel-actions">
+            <button class="btn btn-primary" id="class-detect-btn" type="button">Phát hiện Class Noise →</button>
+            <span class="status-text" id="class-detect-status"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Bước 4: kết quả ===== -->
+      <section class="panel" id="panel-4">
+        <p class="eyebrow">[ Bước 4 / 5 ]</p>
+        <h2 class="panel-title" id="panel-4-title">Kết quả phát hiện</h2>
+
+        <!-- Nhánh ATTRIBUTE NOISE -->
+        <div id="panel-4-attribute">
+          <p class="panel-desc">Rà soát các dòng và ô bị gắn cờ trước khi sang bước xử lý. Mỗi ô tô màu theo đúng loại lỗi.</p>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-value mono" id="stat-total-rows">0</span>
+              <span class="stat-label">Tổng số dòng</span>
+            </div>
+            <div class="stat-card stat-amber">
+              <span class="stat-value mono" id="stat-flagged-rows">0</span>
+              <span class="stat-label">Dòng có nhiễu</span>
+            </div>
+            <div class="stat-card stat-crimson">
+              <span class="stat-value mono" id="stat-total-findings">0</span>
+              <span class="stat-label">Ô lỗi phát hiện</span>
+            </div>
+          </div>
+
+          <div class="chart-card" id="noise-chart-card" hidden>
+            <h3 class="sub-title">Phân bố theo loại nhiễu</h3>
+            <div class="noise-chart" id="noise-chart"></div>
+          </div>
+
+          <div class="toolbar">
+            <input type="search" class="input search-input" id="search-input" placeholder="Tìm theo giá trị hoặc loại lỗi…" />
+            <div class="filter-chips" id="filter-chips"></div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="results-table" id="result-table">
+              <thead id="result-table-head"></thead>
+              <tbody id="result-table-body"></tbody>
+            </table>
+          </div>
+          <p id="result-empty" class="empty-state" hidden>Không phát hiện nhiễu nào.</p>
+
+          <div class="pagination" id="pagination" hidden>
+            <button class="btn btn-ghost btn-small" id="page-prev" type="button">← Trước</button>
+            <span id="page-indicator" class="mono"></span>
+            <button class="btn btn-ghost btn-small" id="page-next" type="button">Sau →</button>
+          </div>
+
+          <div class="panel-actions">
+            <button class="btn btn-primary" id="goto-handling-btn" type="button" disabled>Tiếp tục: xử lý &amp; xuất file →</button>
+          </div>
+        </div>
+
+        <!-- Nhánh CLASS NOISE -->
+        <div id="panel-4-class" hidden>
+          <p class="panel-desc">Độ tin cậy của phương pháp. Xem trước khi tin bất kỳ dòng nghi ngờ nào bên dưới.</p>
+
+          <div class="stats-grid" id="class-stats-grid"></div>
+
+          <div class="chart-card" id="class-warning-card" hidden></div>
+
+          <div class="chart-card" id="class-report-card">
+            <h3 class="sub-title" id="class-report-title">Precision / Recall / F1 từng lớp</h3>
+            <div class="table-wrap">
+              <table class="results-table" id="class-report-table"></table>
+            </div>
+          </div>
+
+          <div class="chart-card" id="class-confusion-card">
+            <h3 class="sub-title" id="class-confusion-title">Ma trận đếm (hàng = nhãn ghi, cột = nhãn model tự tin)</h3>
+            <div class="table-wrap">
+              <table class="results-table" id="class-confusion-table"></table>
+            </div>
+          </div>
+
+          <h3 class="sub-title">Danh sách dòng nghi ngờ (mức đáng ngờ giảm dần)</h3>
+          <div class="toolbar">
+            <input type="search" class="input search-input" id="class-findings-search" placeholder="Tìm theo số dòng hoặc nhãn…" />
+          </div>
+          <div class="table-wrap">
+            <table class="results-table" id="class-findings-table"></table>
+          </div>
+          <div class="pagination" id="class-findings-pagination" hidden>
+            <button class="btn btn-ghost btn-small" id="class-page-prev" type="button">← Trước</button>
+            <span id="class-page-indicator" class="mono"></span>
+            <button class="btn btn-ghost btn-small" id="class-page-next" type="button">Sau →</button>
+          </div>
+
+          <div class="panel-actions">
+            <button class="btn btn-primary" id="class-goto-handling-btn" type="button">Tiếp tục: xử lý &amp; xuất file →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Bước 5: xử lý & xuất file ===== -->
+      <section class="panel" id="panel-5">
+        <p class="eyebrow">[ Bước 5 / 5 ]</p>
+        <h2 class="panel-title">Xử lý &amp; xuất file</h2>
+
+        <!-- Nhánh ATTRIBUTE NOISE -->
+        <div id="panel-5-attribute">
+          <p class="panel-desc">
+            Bấm tên mỗi nhóm để xem từng dòng, tick dòng muốn xử lý, chọn cách xử lý cho từng dòng rồi bấm "Áp dụng".
+            Không cần xử lý hết các nhóm cùng lúc. Xoá dòng luôn được chạy thử và hỏi lại; mọi bước đều hoàn tác được.
+            Rule liên cột chưa hỗ trợ xử lý tự động. Xong thì bấm "Xuất file CSV" ở cuối trang.
+          </p>
+
+          <div class="history-bar" id="history-bar">
+            <div class="history-bar-top">
+              <strong class="history-bar-title">Lịch sử xử lý</strong>
+              <span class="status-text" id="history-hint"></span>
+              <button class="btn btn-ghost btn-small" id="undo-btn" type="button" disabled>↶ Hoàn tác</button>
+              <button class="btn btn-ghost btn-small" id="reset-btn" type="button" disabled>⟲ Về dữ liệu gốc</button>
+            </div>
+            <div class="handling-confirm" id="history-confirm" role="alert" hidden></div>
+            <p class="status-text history-status" id="history-status" aria-live="polite"></p>
+            <ol class="history-log" id="history-log"></ol>
+          </div>
+
+          <div id="handling-list" class="handling-list"></div>
+          <div class="panel-actions">
+            <button class="btn btn-primary" id="apply-handling-btn" type="button">Xuất file CSV ↓</button>
+            <span class="status-text" id="handling-status"></span>
+          </div>
+        </div>
+
+        <!-- Nhánh CLASS NOISE: chưa có xử lý (xem roadmap CLAUDE.md) -->
+        <div id="panel-5-class" hidden>
+          <div class="tx-note"><span class="tx-note-tag">Đang phát triển</span>
+            <p>Xử lý cho Class Noise chưa có trong bản này. Danh sách dòng nghi ngờ ở Bước 4 vẫn dùng được để rà soát tay.</p>
+          </div>
+          <div class="panel-actions">
+            <button class="btn btn-ghost" id="class-back-to-results-btn" type="button">← Quay lại Bước 4</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel "Xem sau xử lý": màn phụ mở từ Bước 5, không nằm trong thanh 5 bước. -->
+      <section class="panel" id="panel-preview">
+        <p class="eyebrow">[ Xem trước ]</p>
+        <h2 class="panel-title">Dữ liệu sau xử lý</h2>
+        <p class="panel-desc">Toàn bộ dữ liệu ở trạng thái hiện tại. Ô còn tô màu là còn lỗi chưa xử lý.</p>
+        <div class="table-wrap">
+          <table class="results-table" id="preview-table">
+            <thead id="preview-table-head"></thead>
+            <tbody id="preview-table-body"></tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <button class="btn btn-ghost btn-small" id="preview-page-prev" type="button">← Trước</button>
+          <span id="preview-page-indicator" class="mono"></span>
+          <button class="btn btn-ghost btn-small" id="preview-page-next" type="button">Sau →</button>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="preview-back-btn" type="button">← Quay lại xử lý</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============================================================
+         KHỐI: HỒ SƠ TÀI KHOẢN (bước 6) -- chuyển từ #panel-profile của
+         index.html sang: xem tên / ngày tạo + đổi mật khẩu
+         (POST /api/auth/change-password). Logic ở workspace.js. Cần đăng nhập.
+         ============================================================ -->
+    <div id="section-profile" hidden>
+      <div class="ft-topbar">
+        <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i><b>Hồ sơ</b></span>
+        <span class="ft-meta">
+          <span>Lưu trữ<strong>SQLite trên server</strong></span>
+          <span>Mật khẩu<strong>Chỉ lưu bản băm</strong></span>
+        </span>
+      </div>
+      <section class="tx-hero pf-hero">
+        <div>
+          <p class="hm-eyebrow">[ Tài khoản ]</p>
+          <h1 class="tx-title">Hồ sơ<br>của bạn</h1>
+          <p class="tx-desc">Denoise chỉ giữ ba thứ về bạn: tên đăng nhập, mật khẩu đã băm và thời điểm tạo tài khoản. File bạn tải lên không nằm trong hồ sơ.</p>
+        </div>
+        <table class="hm-spec pf-spec">
+          <tr><th>Tên đăng nhập</th><td class="mono" id="profile-username">—</td></tr>
+          <tr><th>Tạo lúc</th><td class="mono" id="profile-created-at">—</td></tr>
+          <tr><th>File đang giữ</th><td>Trong bộ nhớ server, mất khi khởi động lại</td></tr>
+        </table>
+      </section>
+
+      <div class="convert-grid pf-grid">
+        <section class="convert-panel ft-panel">
+          <div class="ft-panel-head"><span class="ft-eyebrow-tag">Đổi mật khẩu</span></div>
+          <div class="ft-panel-body">
+            <form id="change-password-form" class="auth-form" novalidate>
+              <div class="ws-auth-field">
+                <label for="old-password">Mật khẩu hiện tại</label>
+                <input type="password" class="input" id="old-password" autocomplete="current-password" required />
+              </div>
+              <div class="ws-auth-field">
+                <label for="new-password">Mật khẩu mới (ít nhất 6 ký tự)</label>
+                <input type="password" class="input" id="new-password" autocomplete="new-password" required />
+              </div>
+              <p class="form-error" id="change-password-error" hidden></p>
+              <p class="status-text is-ok" id="change-password-success" hidden>Đổi mật khẩu thành công.</p>
+              <div class="panel-actions">
+                <button class="btn btn-primary" type="submit" id="change-password-btn">Đổi mật khẩu</button>
+              </div>
+            </form>
+          </div>
+        </section>
+        <section class="convert-panel ft-panel">
+          <div class="ft-panel-head"><span class="ft-eyebrow-tag">Phiên làm việc</span></div>
+          <div class="ft-panel-body">
+            <ul class="tx-list pf-list">
+              <li>Đăng xuất xoá phiên ngay trên server. Không có "ghi nhớ đăng nhập" dài hạn.</li>
+              <li>Khởi động lại server là mọi người phải đăng nhập lại và file trong bộ nhớ biến mất.</li>
+              <li>Chưa có nút tự xoá tài khoản; người quản trị server xoá trực tiếp trong SQLite.</li>
+            </ul>
+            <div class="panel-actions">
+              <a class="btn btn-ghost" href="#" data-section="workspace">← Về Workspace</a>
+              <button class="btn btn-ghost" id="profile-logout-btn" type="button">Đăng xuất</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         KHỐI: Free Tools -- cần đăng nhập. Bố cục = 1 trang tool
          của CYD. ID phần tử dùng tiền tố "ft-" ở chỗ trùng tên với khối Convert.
          ============================================================ -->
     <div id="section-free-tools">
@@ -1149,8 +1646,8 @@
         <div class="ws-footer-col">
           <h4>Sản phẩm</h4>
           <a href="#" data-section="home">Trang chủ</a>
-          <span>Workspace (đang xây)</span>
-          <span>Class Noise (đang xây)</span>
+          <a href="#" data-section="workspace">Workspace 5 bước</a>
+          <a href="#" data-section="workspace" data-direction="class">Class Noise</a>
         </div>
         <div class="ws-footer-col">
           <h4>Free Tools</h4>
@@ -1174,7 +1671,7 @@
         <div class="ws-footer-col">
           <h4>Tài khoản</h4>
           <!-- .ws-only-user chỉ hiện khi đã đăng nhập, .ws-only-guest khi chưa. -->
-          <a class="ws-only-user" href="index.html?open=profile">Hồ sơ</a>
+          <a class="ws-only-user" href="#" data-section="profile">Hồ sơ</a>
           <a class="ws-only-user" href="#" id="footer-logout-link">Đăng xuất</a>
           <a class="ws-only-guest" href="#" id="footer-login-link">Đăng nhập</a>
           <a class="ws-only-guest" href="#" id="footer-register-link">Tạo tài khoản</a>
@@ -1191,5 +1688,7 @@
   </footer>
 
   <script src="workspace.js"></script>
+  <!-- Luồng 5 bước (bản sao script.js, bọc IIFE) -- nạp SAU workspace.js. -->
+  <script src="workspace-flow.js"></script>
 </body>
 </html>

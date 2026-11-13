@@ -1,0 +1,2543 @@
+"use strict";
+
+/* ============================================================
+   workspace-flow.js -- logic LUỒNG 5 BƯỚC (Attribute Noise + Class Noise)
+   chạy bên trong khối #section-workspace của workspace.html (bước 6 của
+   việc dựng lại giao diện Denoise).
+
+   NGUỒN GỐC: đây là script.js (trang index.html cũ) sao chép sang, GIỮ
+   NGUYÊN toàn bộ logic đã test kỹ (upload, chip cấu hình, rule liên cột,
+   detect, xử lý từng dòng, chạy thử, hoàn tác, class noise 3 thuật toán),
+   chỉ khác 3 điểm:
+   1. BỌC TRONG 1 HÀM (IIFE) -- workspace.js cũng khai báo `state`, `$`,
+      `escapeHtml`... ở mức toàn cục; 2 file cùng nạp vào 1 trang mà cùng
+      khai báo `const state` là trình duyệt báo lỗi "đã khai báo rồi". Bọc
+      lại thì mọi biến ở đây là biến cục bộ, không đụng gì tới workspace.js.
+   2. BỎ phần đăng nhập/đăng ký/đăng xuất/hồ sơ -- workspace.js đã lo
+      (#ws-auth, #section-profile). Chấm tròn trạng thái backend ở header
+      cũng do workspace.js vẽ.
+   3. Lộ ra 1 "cửa" nhỏ `window.DenoiseFlow` để workspace.js gọi vào (vd
+      pill "Class Noise" ở header chọn sẵn hướng Class Noise).
+
+   QUAN TRỌNG (giữ nguyên từ script.js): file này KHÔNG có chế độ "phân tích
+   cục bộ trong trình duyệt". Mọi detect/xử lý đều gọi backend Flask thật
+   (attribute_noise/, class_noise/), backend chưa chạy thì báo rõ, không
+   âm thầm tính bằng JS.
+   ============================================================ */
+(function () {
+
+const API_BASE = ""; // cùng origin với Flask (Flask tự phục vụ frontend), xem CLAUDE.md
+
+const $ = (id) => document.getElementById(id);
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+const escapeAttr = escapeHtml;
+function cssEscape(s) {
+  return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, "\\$&");
+}
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+function setButtonLoading(button, isLoading, loadingText, normalText) {
+  button.disabled = isLoading;
+  button.textContent = isLoading ? loadingText : normalText;
+}
+
+// ====== Bảng metadata 11 loại (7 attribute noise + 4 rule liên cột) ======
+// Dùng chung cho badge/tag/chip lọc/tô màu ô trong bảng kết quả -- family
+// phải khớp đúng tên trong style.css (.tag-<family>, .cell-flag-<family>).
+const NOISE_TYPE_META = {
+  missing_value: { label: "Thiếu giá trị", family: "slate" },
+  format_noise: { label: "Sai định dạng", family: "amber" },
+  out_of_range: { label: "Ngoài khoảng", family: "crimson" },
+  outlier: { label: "Giá trị bất thường", family: "violet" },
+  inconsistent_category: { label: "Không nhất quán", family: "teal" },
+  whitespace_noise: { label: "Khoảng trắng thừa", family: "rose" },
+  duplicate_row: { label: "Trùng dòng", family: "maroon" },
+  "rule:compare": { label: "Rule so sánh", family: "indigo" },
+  "rule:conditional": { label: "Rule điều kiện", family: "brown" },
+  "rule:formula": { label: "Rule công thức", family: "orange" },
+  "rule:functional_dependency": { label: "Rule phụ thuộc hàm", family: "green" },
+};
+function noiseMeta(noiseType) {
+  return NOISE_TYPE_META[noiseType] || { label: noiseType, family: "slate" };
+}
+function tagHTML(column, noiseType) {
+  const meta = noiseMeta(noiseType);
+  return `<span class="tag tag-${meta.family}">${escapeHtml(column)} <b>${meta.label}</b></span>`;
+}
+
+// 7 dtype thật của backend (attribute_noise/config.py::ColumnDType) -> nhãn
+// hiển thị + danh sách noise_type khả dụng cho dtype đó (khớp CLAUDE.md mục 6:
+// hành động HANDLE chỉ định nghĩa cho các cặp cụ thể, nên DETECT cũng chỉ nên
+// cho chọn những loại thực sự hợp lý với dtype, tránh người dùng tick nhầm).
+const COLUMN_TYPES = {
+  text: { label: "Văn bản (text)", noises: ["missing_value", "format_noise", "whitespace_noise"] },
+  integer: { label: "Số nguyên (integer)", noises: ["missing_value", "format_noise", "out_of_range", "outlier"] },
+  float: { label: "Số thực (float)", noises: ["missing_value", "format_noise", "out_of_range", "outlier"] },
+  email: { label: "Email", noises: ["missing_value", "format_noise"] },
+  phone: { label: "Số điện thoại", noises: ["missing_value", "format_noise"] },
+  date: { label: "Ngày tháng (date)", noises: ["missing_value", "format_noise"] },
+  category: { label: "Phân loại (category)", noises: ["missing_value", "format_noise", "inconsistent_category"] },
+};
+
+// dtype mặc định ĐƯỢC BACKEND ĐOÁN SẴN (guess_column_dtype(), xem
+// attribute_noise/pipeline.py) dựa trên GIÁ TRỊ THẬT của cột -- đỡ người
+// dùng phải tự đổi dropdown cho từng cột một khi file nhiều cột. Chỉ là gợi
+// ý mặc định, người dùng vẫn đổi lại bình thường qua đúng dropdown đã có.
+function defaultColumnConfig(dtype = "text") {
+  return {
+    dtype,
+    missing_value: true,
+    format_noise: true,
+    out_of_range: { enabled: false, min: "", max: "" },
+    outlier: { enabled: false, method: "iqr", coef: 1.5 },
+    inconsistent_category: { enabled: false, standard: "", threshold: 0.85 },
+    whitespace_noise: { enabled: false, regex: "" },
+    date_format: "%Y-%m-%d",
+  };
+}
+
+// ====== State chung của trang (giống "state" trong React nhưng viết tay) ======
+const state = {
+  selectedFile: null,
+  fileId: null,
+  headers: [],
+  columnConfig: {}, // { [tên cột]: cấu hình -- xem defaultColumnConfig() }
+  direction: null,
+  backendAvailable: false,
+  currentStep: 1,
+  maxReached: 1,
+  // Nhớ lại đúng config + kết quả lần detect gần nhất -- Bước 5 (xử lý) cần
+  // dùng lại NGUYÊN VẸN config này (backend tự chạy lại detect_noise() với
+  // đúng config đó để đảm bảo xử lý khớp với những gì người dùng đã thấy).
+  lastColumnConfigs: [],
+  lastDuplicateConfig: null, // { subset_columns } hoặc null
+  lastFindings: [],
+  lastFlaggedRows: [],
+  rowFindingsMap: new Map(), // row_number -> [{column, noise_type, value}, ...]
+  resultsPage: 1,
+  resultsPerPage: 20,
+  resultsFilter: { text: "", types: new Set() },
+  // Bước 5 (xử lý từng phần): true khi đã có ít nhất 1 lần Apply thành công
+  // (tức backend đã tạo "bản đang làm việc" riêng, khác file gốc).
+  hasWorkingCopy: false,
+  // Các nhóm (key "cột|loại noise", hoặc "duplicate_row") ĐÃ được Apply ít
+  // nhất 1 lần -- dùng để biết nút "Xem sau xử lý" của nhóm nào nên hiện sẵn
+  // ngay khi renderHandlingSection() DỰNG LẠI TOÀN BỘ DOM (mỗi lần dựng lại
+  // các nút đều bắt đầu từ mặc định "ẩn", nên phải tự nhớ lại qua state này).
+  appliedGroups: new Set(),
+  // Lịch sử các lần Áp dụng ở Bước 5 (server giữ bản thật, đây là bản sao để
+  // vẽ thanh "Lịch sử" + biết nút Hoàn tác có bấm được không) -- dạng
+  // { entries: [...], can_undo: bool, undo_limit: số }, xem _history_payload()
+  // trong app.py. Rỗng khi chưa xử lý gì hoặc vừa upload file mới.
+  history: { entries: [], can_undo: false, undo_limit: 5 },
+  // true khi Bước 5 đang chờ server trả lời 1 lệnh (chạy thử / áp dụng / hoàn tác /
+  // về dữ liệu gốc) -- xem withHandlingLock(): trong lúc đó mọi lệnh khác bị chặn.
+  handlingBusy: false,
+
+  // ---- Riêng cho hướng Class Noise (song song, KHÔNG dùng chung state
+  // attribute ở trên vì cấu trúc dữ liệu hoàn toàn khác) ----
+  classLabelColumn: null,
+  classFeatureColumns: new Set(),
+  // "distance_based" | "single_learning" | "ensemble_based" (chưa khả dụng) --
+  // chọn ở Bước 2 ngay sau khi bấm thẻ Class Noise, xem Bảng 6 Gupta & Gupta
+  // 2019 (3 nhóm phương pháp phát hiện class noise).
+  classMethod: null,
+  classDiagnostics: null,
+  // Method ĐÃ DÙNG để tạo ra classDiagnostics/classFindings hiện tại -- tách
+  // riêng khỏi classMethod (lựa chọn Ở BƯỚC 2) vì classMethod có thể bị đổi
+  // sau khi đã có kết quả cũ (chưa detect lại), renderClassResults() phải
+  // render theo đúng method CỦA KẾT QUẢ đang có, không phải lựa chọn hiện tại.
+  classResultMethod: null,
+  classFindings: [],
+  classFindingsPage: 1,
+  classFindingsPerPage: 20,
+  classFindingsFilterText: "",
+};
+
+// ====== Stepper (5 bước) ======
+function renderStepper() {
+  document.querySelectorAll(".step").forEach((el) => {
+    const n = parseInt(el.dataset.step, 10);
+    const complete = n < state.maxReached;
+    const active = n === state.currentStep;
+    const reachable = n <= state.maxReached;
+    el.classList.toggle("is-complete", complete);
+    el.classList.toggle("is-active", active);
+    el.classList.toggle("is-reachable", reachable);
+    el.querySelector(".step-circle").textContent = complete && !active ? "✓" : String(n);
+  });
+}
+function goStep(n) {
+  if (n > state.maxReached) return;
+  state.currentStep = n;
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
+  $("panel-" + n).classList.add("is-active");
+  // Rời Bước 5 thì đóng mọi hộp xác nhận đang mở (xoá nhóm / về dữ liệu gốc): con số
+  // trong hộp chỉ đúng tại thời điểm tính, quay lại sau đó có thể đã cũ.
+  if (n !== 5) {
+    dismissResetConfirm();
+    dismissAllHandlingConfirms();
+  }
+  // Bước 3/4/5 có 2 khung con (attribute/class) nằm chung trong cùng 1
+  // panel -- luôn gọi lại hàm chuyển nhánh mỗi lần VÀO bước đó, bất kể đi
+  // tới bằng cách nào (bấm "Tiếp tục" hay bấm thẳng vào stepper phía trên),
+  // để không bao giờ hiện sai nhánh.
+  if (n === 3) toggleStep3Direction();
+  if (n === 4) toggleStep4Direction();
+  if (n === 5) toggleStep5Direction();
+  renderStepper();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function unlockStep(n) {
+  if (n > state.maxReached) state.maxReached = n;
+  renderStepper();
+}
+$("stepper").addEventListener("click", (e) => {
+  const el = e.target.closest(".step");
+  if (!el) return;
+  const n = parseInt(el.dataset.step, 10);
+  if (n <= state.maxReached) goStep(n);
+});
+
+// ====== BƯỚC 1: kiểm tra backend + upload ======
+function renderBackendStatus() {
+  // Chấm tròn trạng thái ở header do workspace.js lo (checkBackendHealth()
+  // bên đó) -- ở đây chỉ cập nhật dòng ghi chú dưới ô kéo-thả của Bước 1.
+  const notice = $("upload-notice");
+  if (state.backendAvailable) {
+    notice.textContent = "Đã kết nối backend Flask.";
+  } else {
+    notice.textContent =
+      `Không kết nối được backend. Hãy chạy "python3 app.py" ở 1 terminal riêng rồi thử lại ` +
+      `-- trang này không có chế độ phân tích cục bộ, mọi phép detect/xử lý đều phải qua backend thật (attribute_noise/).`;
+  }
+}
+function updateUploadButtonState() {
+  $("upload-btn").disabled = !(state.selectedFile && state.backendAvailable);
+}
+async function checkBackendHealth() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 1500);
+    const res = await fetch(`${API_BASE}/`, { method: "GET", signal: ctrl.signal });
+    clearTimeout(t);
+    state.backendAvailable = !!res; // chỉ cần server phản hồi (kể cả 404) là coi như "đang chạy"
+  } catch (err) {
+    state.backendAvailable = false;
+  }
+  renderBackendStatus();
+  updateUploadButtonState();
+}
+
+const dropzone = $("dropzone");
+const fileInput = $("file-input");
+dropzone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropzone.classList.add("is-dragover");
+});
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("is-dragover"));
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("is-dragover");
+  if (e.dataTransfer.files.length > 0) handleFileSelected(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length > 0) handleFileSelected(fileInput.files[0]);
+});
+
+function handleFileSelected(file) {
+  state.selectedFile = file;
+  $("dropzone-idle").hidden = true;
+  $("dropzone-file").hidden = false;
+  $("file-name-text").textContent = file.name;
+  $("file-meta-text").textContent = `${(file.size / 1024).toFixed(1)} KB`;
+  checkBackendHealth(); // re-check phòng khi user vừa bật backend lên
+}
+
+$("upload-btn").addEventListener("click", async () => {
+  const file = state.selectedFile;
+  if (!file) return;
+
+  setButtonLoading($("upload-btn"), true, "Đang upload...", "Tải lên & tiếp tục");
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/upload`, { method: "POST", body: formData });
+  } catch (err) {
+    setStatusMessage($("upload-status"), "Không gọi được backend. Kiểm tra xem python3 app.py có đang chạy không.", "error");
+    setButtonLoading($("upload-btn"), false, "Đang upload...", "Tải lên & tiếp tục");
+    return;
+  }
+  setButtonLoading($("upload-btn"), false, "Đang upload...", "Tải lên & tiếp tục");
+
+  if (!response.ok) {
+    let msg = "Upload thất bại, kiểm tra lại file hoặc log của backend.";
+    try { const err = await response.json(); if (err && err.error) msg = err.error; } catch (e) { /* giữ msg mặc định */ }
+    setStatusMessage($("upload-status"), msg, "error");
+    return;
+  }
+
+  const data = await response.json(); // { file_id, columns, row_count, guessed_dtypes }
+  state.fileId = data.file_id;
+  state.headers = data.columns;
+  state.columnConfig = {};
+  // guessed_dtypes: backend đã tự đoán kiểu dữ liệu hợp lý nhất cho từng cột
+  // dựa trên giá trị thật (xem guess_column_dtype() trong app.py) -- dùng
+  // làm dtype KHỞI ĐẦU cho mỗi cột, người dùng vẫn đổi lại được bình thường.
+  state.headers.forEach(
+    (h) => (state.columnConfig[h] = defaultColumnConfig((data.guessed_dtypes && data.guessed_dtypes[h]) || "text"))
+  );
+  $("rules-list").innerHTML = ""; // reset rule liên cột khi upload file mới
+  state.hasWorkingCopy = false;
+  state.appliedGroups = new Set();
+  state.history = { entries: [], can_undo: false, undo_limit: 5 };
+  // Upload file MỚI = bắt đầu lại từ đầu: phải xoá hết kết quả/cấu hình/lịch sử của
+  // file CŨ và KHOÁ lại các bước phía sau (maxReached). Trước đây quên 2 việc này nên
+  // bấm thẳng vào thanh bước 5 vẫn thấy nhóm lỗi + lịch sử của file cũ, và bấm
+  // "Áp dụng" sẽ sửa nhầm lên dữ liệu file mới (cùng số dòng nhưng khác nội dung).
+  state.maxReached = 1;
+  state.lastColumnConfigs = [];
+  state.lastDuplicateConfig = null;
+  state.lastFindings = [];
+  state.lastFlaggedRows = [];
+  state.rowFindingsMap = new Map();
+  state.handlingBusy = false;
+  $("handling-list").innerHTML = "";
+  dismissResetConfirm();
+  setStatusMessage($("history-status"), "", "");
+  renderHistoryBar();
+
+  // Reset TOÀN BỘ state riêng của Class Noise khi upload file MỚI -- nếu
+  // không, cột đã tích (classFeatureColumns) hoặc cột nhãn (classLabelColumn)
+  // của file CŨ sẽ sót lại nguyên vẹn (vd "V44" của bộ dữ liệu thầy) và bị
+  // gửi nhầm lên server khi detect trên file MỚI, dù UI không hề hiện nó
+  // trong danh sách (chỉ các cột của file mới mới được vẽ ra) -- nhẹ thì bị
+  // chặn báo lỗi "cột không tồn tại", nặng hơn là ÂM THẦM dùng nhầm lựa chọn
+  // cũ nếu 2 file tình cờ trùng tên cột, cho kết quả sai mà không ai biết.
+  state.classLabelColumn = null;
+  state.classFeatureColumns = new Set();
+  state.classMethod = null;
+  state.classDiagnostics = null;
+  state.classResultMethod = null;
+  state.classFindings = [];
+  state.classFindingsPage = 1;
+  state.classFindingsFilterText = "";
+  $("class-reduce-result").hidden = true;
+  $("class-reduce-result").innerHTML = "";
+  $("class-method-section").hidden = true;
+  document.querySelectorAll("#class-method-grid .direction-card").forEach((c) => c.classList.remove("is-selected"));
+
+  setStatusMessage($("upload-status"), `Đã tải lên: ${data.row_count} dòng, ${data.columns.length} cột.`, "ok");
+  unlockStep(2);
+  goStep(2);
+});
+
+// ====== BƯỚC 2: chọn hướng xử lý ======
+function updateContinueStep2Button() {
+  const ready = state.direction === "attribute" || (state.direction === "class" && state.classMethod);
+  $("continue-step2-btn").disabled = !ready;
+}
+document.querySelectorAll(".direction-grid:not(#class-method-grid) .direction-card").forEach((card) => {
+  card.addEventListener("click", () => {
+    if (card.classList.contains("is-disabled")) return;
+    document.querySelectorAll(".direction-grid:not(#class-method-grid) .direction-card").forEach((c) => c.classList.remove("is-selected"));
+    card.classList.add("is-selected");
+    state.direction = card.dataset.direction;
+    // Chỉ hướng Class Noise mới cần chọn thêm phương pháp (Bảng 6, Gupta &
+    // Gupta 2019) -- Attribute Noise giữ nguyên luồng cũ, không có bước này.
+    $("class-method-section").hidden = state.direction !== "class";
+    updateContinueStep2Button();
+  });
+});
+document.querySelectorAll("#class-method-grid .direction-card").forEach((card) => {
+  card.addEventListener("click", () => {
+    if (card.classList.contains("is-disabled")) return;
+    document.querySelectorAll("#class-method-grid .direction-card").forEach((c) => c.classList.remove("is-selected"));
+    card.classList.add("is-selected");
+    state.classMethod = card.dataset.method;
+    updateContinueStep2Button();
+  });
+});
+$("continue-step2-btn").addEventListener("click", () => {
+  if (!state.direction) return;
+  if (state.direction === "class" && !state.classMethod) return;
+  unlockStep(3);
+  if (state.direction === "attribute") renderColumnList();
+  goStep(3); // goStep() tự gọi toggleStep3Direction() -> dựng form class nếu cần
+});
+
+// ====== BƯỚC 3: cấu hình noise theo cột (chip UI, đủ 7 loại) ======
+function paramTemplate(noiseKey, c) {
+  switch (noiseKey) {
+    case "format_noise":
+      if (c.dtype !== "date") return "";
+      return `<div class="field"><label>Định dạng chuẩn</label><input type="text" class="input mono" data-role="dateFormat" value="${escapeAttr(c.date_format)}" placeholder="%Y-%m-%d" /></div>`;
+    case "out_of_range":
+      return `<div class="field-row">
+        <div class="field"><label>Min</label><input type="number" class="input" data-role="orMin" value="${escapeAttr(c.out_of_range.min)}" /></div>
+        <div class="field"><label>Max</label><input type="number" class="input" data-role="orMax" value="${escapeAttr(c.out_of_range.max)}" /></div>
+      </div>`;
+    case "outlier":
+      return `<div class="field-row">
+        <div class="field"><label>Phương pháp</label>
+          <select class="select" data-role="outMethod">
+            <option value="iqr" ${c.outlier.method === "iqr" ? "selected" : ""}>IQR</option>
+            <option value="zscore" ${c.outlier.method === "zscore" ? "selected" : ""}>Z-score</option>
+          </select>
+        </div>
+        <div class="field"><label>Hệ số</label><input type="number" step="0.1" class="input" data-role="outCoef" value="${escapeAttr(c.outlier.coef)}" /></div>
+      </div>`;
+    case "inconsistent_category":
+      return `<div class="field-row">
+        <div class="field field-grow"><label>Giá trị chuẩn (cách nhau bởi dấu phẩy)</label><input type="text" class="input" data-role="incStandard" value="${escapeAttr(c.inconsistent_category.standard)}" placeholder="vd Male,Female" /></div>
+        <div class="field"><label>Ngưỡng giống</label><input type="number" step="0.05" min="0" max="1" class="input" data-role="incThreshold" value="${escapeAttr(c.inconsistent_category.threshold)}" /></div>
+      </div>`;
+    case "whitespace_noise":
+      return `<div class="field"><label>Ký tự cấm (regex, tuỳ chọn)</label><input type="text" class="input mono" data-role="wsRegex" value="${escapeAttr(c.whitespace_noise.regex)}" placeholder="vd [#@$%]" /></div>`;
+    default:
+      return "";
+  }
+}
+function chipChecked(c, noiseKey) {
+  if (noiseKey === "missing_value") return c.missing_value;
+  if (noiseKey === "format_noise") return c.format_noise;
+  return c[noiseKey] && c[noiseKey].enabled;
+}
+function chipTemplate(noiseKey, c) {
+  const meta = noiseMeta(noiseKey);
+  const checked = chipChecked(c, noiseKey);
+  const paramHtml = paramTemplate(noiseKey, c);
+  return `<div class="chip-wrap">
+    <label class="chip tag-${meta.family} ${checked ? "is-checked" : ""}">
+      <input type="checkbox" data-role="noise" data-noise="${noiseKey}" ${checked ? "checked" : ""} />
+      <span>${meta.label}</span>
+    </label>
+    ${paramHtml ? `<div class="param-panel ${checked ? "is-open" : ""}" data-role="param-${noiseKey}">${paramHtml}</div>` : ""}
+  </div>`;
+}
+function columnRowTemplate(h) {
+  const c = state.columnConfig[h];
+  const typeOptions = Object.keys(COLUMN_TYPES)
+    .map((t) => `<option value="${t}" ${c.dtype === t ? "selected" : ""}>${COLUMN_TYPES[t].label}</option>`)
+    .join("");
+  const chips = COLUMN_TYPES[c.dtype].noises.map((nKey) => chipTemplate(nKey, c)).join("");
+  return `<div class="col-row" data-col="${escapeAttr(h)}">
+    <div class="col-row-head">
+      <span class="col-name mono">${escapeHtml(h)}</span>
+      <select class="select col-type-select" data-role="dtype">${typeOptions}</select>
+    </div>
+    <div class="chip-row" data-role="chips">${chips}</div>
+  </div>`;
+}
+function renderColumnList() {
+  const wrap = $("col-list");
+  const empty = $("col-list-empty");
+  if (!state.headers.length) {
+    wrap.innerHTML = "";
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  wrap.innerHTML = state.headers.map((h) => columnRowTemplate(h)).join("");
+}
+function renderSingleColumnRow(h) {
+  const wrap = $("col-list");
+  const old = wrap.querySelector(`.col-row[data-col="${cssEscape(h)}"]`);
+  if (!old) return;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = columnRowTemplate(h).trim();
+  old.replaceWith(tmp.firstElementChild);
+}
+$("col-list").addEventListener("change", (e) => {
+  const row = e.target.closest(".col-row");
+  if (!row) return;
+  const h = row.dataset.col;
+  const c = state.columnConfig[h];
+  const role = e.target.dataset.role;
+
+  if (role === "dtype") {
+    c.dtype = e.target.value;
+    renderSingleColumnRow(h);
+    return;
+  }
+  if (role === "noise") {
+    const nKey = e.target.dataset.noise;
+    const checked = e.target.checked;
+    if (nKey === "missing_value") c.missing_value = checked;
+    else if (nKey === "format_noise") c.format_noise = checked;
+    else c[nKey].enabled = checked;
+    e.target.closest(".chip").classList.toggle("is-checked", checked);
+    const panel = row.querySelector(`[data-role="param-${nKey}"]`);
+    if (panel) panel.classList.toggle("is-open", checked);
+    return;
+  }
+  if (role === "dateFormat") c.date_format = e.target.value;
+  else if (role === "orMin") c.out_of_range.min = e.target.value;
+  else if (role === "orMax") c.out_of_range.max = e.target.value;
+  else if (role === "outMethod") c.outlier.method = e.target.value;
+  else if (role === "outCoef") c.outlier.coef = e.target.value;
+  else if (role === "wsRegex") c.whitespace_noise.regex = e.target.value;
+  else if (role === "incStandard") c.inconsistent_category.standard = e.target.value;
+  else if (role === "incThreshold") c.inconsistent_category.threshold = e.target.value;
+});
+
+function buildColumnConfigsFromState() {
+  const configs = [];
+  state.headers.forEach((h) => {
+    const c = state.columnConfig[h];
+    const noiseTypes = [];
+    if (c.missing_value) noiseTypes.push("missing_value");
+    if (c.format_noise) noiseTypes.push("format_noise");
+    if (c.out_of_range.enabled) noiseTypes.push("out_of_range");
+    if (c.outlier.enabled) noiseTypes.push("outlier");
+    if (c.inconsistent_category.enabled) noiseTypes.push("inconsistent_category");
+    if (c.whitespace_noise.enabled) noiseTypes.push("whitespace_noise");
+    if (noiseTypes.length === 0) return; // cột không tick gì -> không gửi lên backend
+
+    configs.push({
+      column: h,
+      dtype: c.dtype,
+      noise_types: noiseTypes,
+      min_value: c.out_of_range.min === "" ? null : parseFloat(c.out_of_range.min),
+      max_value: c.out_of_range.max === "" ? null : parseFloat(c.out_of_range.max),
+      date_format: c.date_format || null,
+      outlier_method: c.outlier.method,
+      outlier_threshold: parseFloat(c.outlier.coef) || 1.5,
+      valid_categories: c.inconsistent_category.standard
+        ? c.inconsistent_category.standard.split(",").map((s) => s.trim()).filter(Boolean)
+        : null,
+      category_similarity_threshold: parseFloat(c.inconsistent_category.threshold) || 0.85,
+      disallowed_chars_pattern: c.whitespace_noise.regex || null,
+    });
+  });
+  return configs;
+}
+
+// ====== Trùng dòng (duplicate_row) -- noise cấp DÒNG, đọc trực tiếp từ DOM ======
+function buildDuplicateConfig() {
+  if (!$("dup-enable").checked) return null;
+  const raw = $("dup-subset-columns").value.trim();
+  const subsetColumns = raw ? raw.split(",").map((s) => s.trim()).filter(Boolean) : null;
+  return { subset_columns: subsetColumns };
+}
+
+// ====== Rule liên cột (4 loại: compare / conditional / functional_dependency / formula) ======
+const OPERATOR_OPTIONS_HTML = `
+  <option value="<=">&le; (nhỏ hơn hoặc bằng)</option>
+  <option value="<">&lt; (nhỏ hơn)</option>
+  <option value=">=">&ge; (lớn hơn hoặc bằng)</option>
+  <option value=">">&gt; (lớn hơn)</option>
+  <option value="==">= (bằng)</option>
+  <option value="!=">&ne; (khác)</option>
+`;
+function columnOptionsHTML(columns) {
+  return columns.map((c) => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join("");
+}
+
+function createRuleRow(columns) {
+  const row = document.createElement("div");
+  row.className = "rule-row";
+  const colOptions = columnOptionsHTML(columns);
+
+  row.innerHTML = `
+    <div class="rule-row-header">
+      <select class="select rule-type-select">
+        <option value="compare">So sánh 2 cột (A lớn hơn/nhỏ hơn/bằng B)</option>
+        <option value="conditional">Điều kiện (NẾU cột này... THÌ cột kia...)</option>
+        <option value="functional_dependency">1 cột luôn xác định đúng 1 cột kia (functional dependency)</option>
+        <option value="formula">Công thức tính toán (vd C = A × B)</option>
+      </select>
+      <input type="text" class="input rule-label" placeholder="Tên rule (tuỳ chọn)" />
+      <button type="button" class="btn-icon remove-rule-btn" title="Xoá rule này">✕</button>
+    </div>
+
+    <div class="rule-fields rule-fields-compare">
+      <p class="rule-hint">So sánh giá trị giữa 2 cột trên CÙNG 1 dòng. Vd: cột "ngày bắt đầu làm" phải ≤ cột "ngày nghỉ việc".</p>
+      <div class="rule-fields-row">
+        <select class="select column-a">${colOptions}</select>
+        <select class="select compare-operator">${OPERATOR_OPTIONS_HTML}</select>
+        <select class="select column-b">${colOptions}</select>
+        <label>Kiểu so sánh:
+          <select class="select value-type">
+            <option value="number">Số</option>
+            <option value="date">Ngày</option>
+            <option value="text">Chữ</option>
+          </select>
+        </label>
+        <input type="text" class="input date-format" placeholder="Format ngày, vd %Y-%m-%d" value="%Y-%m-%d" hidden />
+      </div>
+    </div>
+
+    <div class="rule-fields rule-fields-conditional" hidden>
+      <p class="rule-hint">Chỉ kiểm tra vế "THÌ" khi vế "NẾU" đúng. Vd: NẾU chức_vụ = "Giám đốc" THÌ tuổi phải ≥ 25.</p>
+      <div class="rule-fields-row">
+        <span class="rule-word">NẾU</span>
+        <select class="select if-column">${colOptions}</select>
+        <select class="select if-operator">${OPERATOR_OPTIONS_HTML}</select>
+        <input type="text" class="input if-value" placeholder="giá trị" />
+        <select class="select if-value-type">
+          <option value="text">Chữ</option>
+          <option value="number">Số</option>
+        </select>
+      </div>
+      <div class="rule-fields-row">
+        <span class="rule-word">THÌ</span>
+        <select class="select then-column">${colOptions}</select>
+        <select class="select then-operator">${OPERATOR_OPTIONS_HTML}</select>
+        <input type="text" class="input then-value" placeholder="giá trị" />
+        <select class="select then-value-type">
+          <option value="text">Chữ</option>
+          <option value="number">Số</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="rule-fields rule-fields-functional_dependency" hidden>
+      <p class="rule-hint">Mỗi giá trị của cột thứ 1 chỉ nên gắn với ĐÚNG 1 giá trị của cột thứ 2 trong toàn bộ file. Vd: mỗi "mã nhân viên" chỉ nên ứng với 1 "tên nhân viên" duy nhất — nếu cùng mã mà tên khác nhau ở 2 dòng thì bị tính là lỗi.</p>
+      <div class="rule-fields-row">
+        <label>Cột thứ 1: <select class="select determinant-column">${colOptions}</select></label>
+        <span class="rule-word">→ luôn tương ứng đúng 1 giá trị của →</span>
+        <label>Cột thứ 2: <select class="select dependent-column">${colOptions}</select></label>
+      </div>
+    </div>
+
+    <div class="rule-fields rule-fields-formula" hidden>
+      <p class="rule-hint">Biểu thức TOÁN HỌC so sánh giữa các cột SỐ (chỉ dùng +, -, *, / và tên cột). Vd: "thanh_tien == so_luong * don_gia".</p>
+      <div class="rule-fields-row">
+        <input type="text" class="input formula-input" placeholder="vd: thanh_tien == so_luong * don_gia" />
+        <label>Sai số cho phép:
+          <input type="number" class="input formula-tolerance" value="0.01" step="0.01" />
+        </label>
+      </div>
+    </div>
+  `;
+
+  const typeSelect = row.querySelector(".rule-type-select");
+  function toggleRuleFields() {
+    const selected = typeSelect.value;
+    row.querySelectorAll(".rule-fields").forEach((div) => {
+      div.hidden = !div.classList.contains(`rule-fields-${selected}`);
+    });
+  }
+  typeSelect.addEventListener("change", toggleRuleFields);
+  toggleRuleFields();
+
+  const valueTypeSelect = row.querySelector(".value-type");
+  const dateFormatInput = row.querySelector(".date-format");
+  valueTypeSelect.addEventListener("change", () => {
+    dateFormatInput.hidden = valueTypeSelect.value !== "date";
+  });
+
+  row.querySelector(".remove-rule-btn").addEventListener("click", () => row.remove());
+
+  return row;
+}
+$("add-rule-btn").addEventListener("click", () => {
+  $("rules-list").appendChild(createRuleRow(state.headers));
+});
+
+function buildCrossFieldRules() {
+  const rules = [];
+  document.querySelectorAll(".rule-row").forEach((row) => {
+    const ruleType = row.querySelector(".rule-type-select").value;
+    const label = row.querySelector(".rule-label").value || null;
+    const base = { rule_type: ruleType, label };
+
+    if (ruleType === "compare") {
+      rules.push({
+        ...base,
+        column_a: row.querySelector(".column-a").value,
+        operator: row.querySelector(".compare-operator").value,
+        column_b: row.querySelector(".column-b").value,
+        value_type: row.querySelector(".value-type").value,
+        date_format: row.querySelector(".date-format").value || null,
+      });
+    } else if (ruleType === "conditional") {
+      rules.push({
+        ...base,
+        if_column: row.querySelector(".if-column").value,
+        if_operator: row.querySelector(".if-operator").value,
+        if_value: row.querySelector(".if-value").value,
+        if_value_type: row.querySelector(".if-value-type").value,
+        then_column: row.querySelector(".then-column").value,
+        then_operator: row.querySelector(".then-operator").value,
+        then_value: row.querySelector(".then-value").value,
+        then_value_type: row.querySelector(".then-value-type").value,
+      });
+    } else if (ruleType === "functional_dependency") {
+      rules.push({
+        ...base,
+        determinant_column: row.querySelector(".determinant-column").value,
+        dependent_column: row.querySelector(".dependent-column").value,
+      });
+    } else if (ruleType === "formula") {
+      const formula = row.querySelector(".formula-input").value.trim();
+      if (!formula) return;
+      rules.push({
+        ...base,
+        formula,
+        tolerance: parseFloat(row.querySelector(".formula-tolerance").value) || 0.01,
+      });
+    }
+  });
+  return rules;
+}
+
+// ====== Gọi backend detect ======
+function buildRowFindingsMap(findings) {
+  const map = new Map();
+  findings.forEach((f) => {
+    if (!map.has(f.row_number)) map.set(f.row_number, []);
+    map.get(f.row_number).push(f);
+  });
+  return map;
+}
+
+$("detect-btn").addEventListener("click", async () => {
+  const columnConfigs = buildColumnConfigsFromState();
+  const crossFieldRules = buildCrossFieldRules();
+  const duplicateConfig = buildDuplicateConfig();
+  if (columnConfigs.length === 0 && crossFieldRules.length === 0 && !duplicateConfig) {
+    alert("Hãy chọn ít nhất 1 loại noise cho 1 cột, thêm 1 rule liên cột, hoặc bật kiểm tra trùng dòng");
+    return;
+  }
+
+  const btn = $("detect-btn");
+  setButtonLoading(btn, true, "Đang detect...", "🔍 Detect Noise");
+  $("detect-status").textContent = "";
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/detect-noise`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        file_id: state.fileId,
+        column_configs: columnConfigs,
+        cross_field_rules: crossFieldRules,
+        check_duplicate_row: duplicateConfig !== null,
+        duplicate_subset_columns: duplicateConfig ? duplicateConfig.subset_columns : null,
+      }),
+    });
+  } catch (err) {
+    alert("Không gọi được backend.");
+    setButtonLoading(btn, false, "Đang detect...", "🔍 Detect Noise");
+    return;
+  }
+  setButtonLoading(btn, false, "Đang detect...", "🔍 Detect Noise");
+
+  if (!response.ok) {
+    let message = "Detect thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      /* backend không trả JSON -- giữ message mặc định */
+    }
+    alert(message);
+    return;
+  }
+
+  const data = await response.json();
+  state.lastColumnConfigs = columnConfigs;
+  state.lastDuplicateConfig = duplicateConfig;
+  state.lastFindings = data.findings;
+  state.lastFlaggedRows = data.flagged_rows;
+  state.rowFindingsMap = buildRowFindingsMap(data.findings);
+  state.resultsPage = 1;
+  state.resultsFilter = { text: "", types: new Set() };
+  $("search-input").value = "";
+
+  unlockStep(4);
+  renderStep4(data);
+  goStep(4);
+  $("goto-handling-btn").disabled = data.findings.length === 0;
+});
+
+// ====== BƯỚC 4: kết quả (tìm kiếm + lọc theo loại + phân trang) ======
+function renderFilterChips() {
+  const present = new Set();
+  state.lastFindings.forEach((f) => present.add(f.noise_type));
+  // Bỏ khỏi bộ lọc các loại đã biến mất (vd vừa xoá hết dòng trùng ở Bước 5): nếu không,
+  // bảng cứ trống vì lọc theo 1 loại mà chip của loại đó không còn để bấm bỏ lọc.
+  state.resultsFilter.types.forEach((t) => {
+    if (!present.has(t)) state.resultsFilter.types.delete(t);
+  });
+  const wrap = $("filter-chips");
+  wrap.innerHTML = Array.from(present)
+    .map((t) => {
+      const meta = noiseMeta(t);
+      const checked = state.resultsFilter.types.has(t);
+      return `<label class="filter-chip tag-${meta.family} ${checked ? "is-checked" : ""}"><input type="checkbox" value="${escapeAttr(t)}" ${checked ? "checked" : ""}/><span>${meta.label}</span></label>`;
+    })
+    .join("");
+}
+$("filter-chips").addEventListener("change", (e) => {
+  if (e.target.type !== "checkbox") return;
+  if (e.target.checked) state.resultsFilter.types.add(e.target.value);
+  else state.resultsFilter.types.delete(e.target.value);
+  e.target.closest(".filter-chip").classList.toggle("is-checked", e.target.checked);
+  state.resultsPage = 1;
+  renderResultsTable();
+});
+$("search-input").addEventListener(
+  "input",
+  debounce((e) => {
+    state.resultsFilter.text = e.target.value;
+    state.resultsPage = 1;
+    renderResultsTable();
+  }, 200)
+);
+
+function getFilteredRows() {
+  const text = state.resultsFilter.text.trim().toLowerCase();
+  const types = state.resultsFilter.types;
+  return state.lastFlaggedRows.filter((row) => {
+    const rowFindings = state.rowFindingsMap.get(row.row_number) || [];
+    if (types.size) {
+      const matched = rowFindings.some((f) => types.has(f.noise_type));
+      if (!matched) return false;
+    }
+    if (text) {
+      const hay = (JSON.stringify(row) + " " + rowFindings.map((f) => f.column + " " + f.noise_type).join(" ")).toLowerCase();
+      if (!hay.includes(text)) return false;
+    }
+    return true;
+  });
+}
+
+// Cột hiển thị: dùng đúng thứ tự key backend trả (row_number, các cột gốc,
+// noise_reasons) -- bỏ noise_reasons thô, tự render lại thành tag màu.
+// Dùng chung cho cả bảng Kết quả (Bước 4) lẫn bảng chi tiết xổ ra ở Bước 5.
+function getDataColumns() {
+  return state.lastFlaggedRows.length
+    ? Object.keys(state.lastFlaggedRows[0]).filter((k) => k !== "noise_reasons")
+    : [];
+}
+
+function rowToTableRowHTML(row, dataColumns) {
+  const rowFindings = state.rowFindingsMap.get(row.row_number) || [];
+  const flagByColumn = {};
+  rowFindings.forEach((f) => {
+    if (!flagByColumn[f.column]) flagByColumn[f.column] = f.noise_type;
+  });
+  const cells = dataColumns
+    .map((c) => {
+      const type = flagByColumn[c];
+      const cls = type ? ` class="cell-flag-${noiseMeta(type).family}"` : "";
+      const value = row[c] === undefined || row[c] === null ? "" : row[c];
+      return `<td${cls}>${escapeHtml(String(value))}</td>`;
+    })
+    .join("");
+  const tags = rowFindings.map((f) => tagHTML(f.column, f.noise_type)).join(" ");
+  return `<tr>${cells}<td class="reasons-cell">${tags}</td></tr>`;
+}
+
+function renderResultsTable() {
+  const table = $("result-table");
+  const emptyMsg = $("result-empty");
+  const pagination = $("pagination");
+
+  if (!state.lastFlaggedRows.length) {
+    table.hidden = true;
+    pagination.hidden = true;
+    emptyMsg.hidden = false;
+    return;
+  }
+  emptyMsg.hidden = true;
+  table.hidden = false;
+  pagination.hidden = false;
+
+  const dataColumns = getDataColumns();
+  $("result-table-head").innerHTML =
+    "<tr>" + dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") + "<th>noise_reasons</th></tr>";
+
+  const filtered = getFilteredRows();
+  const perPage = state.resultsPerPage;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  if (state.resultsPage > totalPages) state.resultsPage = totalPages;
+  const start = (state.resultsPage - 1) * perPage;
+  const pageRows = filtered.slice(start, start + perPage);
+  const tbody = $("result-table-body");
+
+  if (!pageRows.length) {
+    tbody.innerHTML = `<tr><td colspan="${dataColumns.length + 1}" class="empty-cell">Không có dòng nào khớp bộ lọc.</td></tr>`;
+  } else {
+    tbody.innerHTML = pageRows.map((row) => rowToTableRowHTML(row, dataColumns)).join("");
+  }
+
+  $("page-indicator").textContent = `Trang ${state.resultsPage}/${totalPages} · ${filtered.length} dòng`;
+  $("page-prev").disabled = state.resultsPage <= 1;
+  $("page-next").disabled = state.resultsPage >= totalPages;
+}
+$("page-prev").addEventListener("click", () => {
+  if (state.resultsPage > 1) {
+    state.resultsPage--;
+    renderResultsTable();
+  }
+});
+$("page-next").addEventListener("click", () => {
+  state.resultsPage++;
+  renderResultsTable();
+});
+
+function renderStep4(data) {
+  $("stat-total-rows").textContent = data.total_rows;
+  $("stat-flagged-rows").textContent = data.total_flagged_rows;
+  $("stat-total-findings").textContent = data.findings.length;
+  renderFilterChips();
+  renderNoiseTypeChart(data.findings);
+  renderResultsTable();
+}
+
+// Biểu đồ cột ngang: đếm số finding theo từng loại noise, sắp xếp giảm dần.
+// CHỈ đọc lại data.findings đã có sẵn trong bộ nhớ (không gọi thêm API nào,
+// không thay đổi logic detect/xử lý) -- thuần hiển thị trực quan hơn.
+function renderNoiseTypeChart(findings) {
+  const card = $("noise-chart-card");
+  const wrap = $("noise-chart");
+  if (!findings.length) {
+    card.hidden = true;
+    wrap.innerHTML = "";
+    return;
+  }
+
+  const counts = new Map();
+  findings.forEach((f) => counts.set(f.noise_type, (counts.get(f.noise_type) || 0) + 1));
+  const rows = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  const maxCount = rows[0][1];
+
+  wrap.innerHTML = rows
+    .map(([type, count]) => {
+      const meta = noiseMeta(type);
+      const pct = Math.max(4, Math.round((count / maxCount) * 100));
+      return `
+        <div class="chart-row">
+          <span class="chart-label">${meta.label}</span>
+          <span class="chart-bar-track"><span class="chart-bar-fill" style="width:${pct}%; background: var(--${meta.family}-border);"></span></span>
+          <span class="chart-count">${count}</span>
+        </div>`;
+    })
+    .join("");
+  card.hidden = false;
+}
+
+$("goto-handling-btn").addEventListener("click", () => {
+  unlockStep(5);
+  renderHandlingSection();
+  setStatusMessage($("history-status"), "", ""); // thông báo "Đã hoàn tác..." của lần trước không còn nghĩa nữa
+  renderHistoryBar();
+  goStep(5);
+});
+
+// ====== BƯỚC 5: xử lý noise + tải file đã làm sạch ======
+// Bảng quyết định (dtype, noise_type) -> hành động khả dụng -- PHẢI khớp
+// đúng _ACTION_TABLE trong attribute_noise/attribute_handling.py (xem
+// CLAUDE.md mục 6). Trùng lặp bảng TĨNH này ở FE là chấp nhận được (chỉ dùng
+// để dựng dropdown, KHÔNG tự thực thi xử lý) -- backend vẫn là nơi DUY NHẤT
+// thực sự áp dụng thay đổi lên dữ liệu.
+const ACTION_TABLE = {
+  "integer|missing_value": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "integer|format_noise": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "integer|out_of_range": ["remove_row", "cap_to_range", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "integer|outlier": ["remove_row", "cap_to_range", "impute_mean", "impute_median", "impute_knn", "keep"],
+  "float|missing_value": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "float|format_noise": ["remove_row", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "float|out_of_range": ["remove_row", "cap_to_range", "impute_mean", "impute_median", "impute_knn", "fixed_value"],
+  "float|outlier": ["remove_row", "cap_to_range", "impute_mean", "impute_median", "impute_knn", "keep"],
+  "category|missing_value": ["remove_row", "impute_mode", "fixed_value"],
+  "category|inconsistent_category": ["auto_normalize_category"],
+  "text|whitespace_noise": ["auto_clean_whitespace"],
+  "email|missing_value": ["remove_row", "fixed_value"],
+  "email|format_noise": ["remove_row", "fixed_value"],
+  "phone|missing_value": ["remove_row", "fixed_value"],
+  "phone|format_noise": ["remove_row", "fixed_value"],
+  "date|missing_value": ["remove_row", "fixed_value"],
+  "date|format_noise": ["remove_row", "fixed_value"],
+};
+const ACTION_LABELS = {
+  remove_row: "Xoá cả dòng",
+  impute_mean: "Điền = trung bình (mean)",
+  impute_median: "Điền = trung vị (median)",
+  impute_knn: "Điền = KNN (dựa vào dòng gần giống nhất)",
+  impute_mode: "Điền = giá trị phổ biến nhất (mode)",
+  fixed_value: "✏️ Tự nhập tay (giá trị cố định)",
+  cap_to_range: "Cắt về biên hợp lệ (cap)",
+  auto_normalize_category: "Tự động chuẩn hoá về giá trị chuẩn",
+  auto_clean_whitespace: "Tự động dọn khoảng trắng/ký tự lạ",
+  keep: "Giữ nguyên (không sửa)",
+};
+
+// ---- Bước 5 AN TOÀN: không có hành động mặc định nguy hiểm ----
+// Trước đây dropdown luôn lấy hành động ĐẦU TIÊN trong ACTION_TABLE, tức
+// "Xoá cả dòng" (remove_row) -- cộng với việc mọi checkbox đều tick sẵn, chỉ
+// 1 cú bấm "Áp dụng" là xoá sạch cả nhóm. Giờ dropdown mặc định là lựa chọn
+// trống "— Chọn cách xử lý —" (value rỗng, bị disabled nên không chọn lại
+// được sau khi đã chọn); người dùng PHẢI chọn rõ ràng thì mới Áp dụng được.
+// NGOẠI LỆ: hành động tự động an toàn (auto_*, vd dọn khoảng trắng, chuẩn hoá
+// category) thì chọn sẵn -- theo quyết định #6 trong CLAUDE.md đó là xử lý
+// "an toàn, mặc định luôn bật", không xoá dữ liệu.
+function pickDefaultAction(availableActions) {
+  return availableActions.find((a) => a.startsWith("auto_")) || "";
+}
+function actionOptionsHTML(availableActions, selectedAction) {
+  const placeholder = `<option value="" disabled ${selectedAction ? "" : "selected"}>— Chọn cách xử lý —</option>`;
+  const options = availableActions
+    .map((a) => `<option value="${a}" ${a === selectedAction ? "selected" : ""}>${ACTION_LABELS[a]}</option>`)
+    .join("");
+  return placeholder + options;
+}
+
+function renderHandlingSection() {
+  const container = $("handling-list");
+  container.innerHTML = "";
+
+  const configByColumn = {};
+  state.lastColumnConfigs.forEach((cfg) => (configByColumn[cfg.column] = cfg));
+
+  const counts = new Map();
+  let duplicateCount = 0;
+  state.lastFindings.forEach((f) => {
+    if (f.noise_type === "duplicate_row") {
+      duplicateCount += 1;
+      return;
+    }
+    if (f.noise_type.startsWith("rule:")) return;
+    const key = `${f.column}|${f.noise_type}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+
+  counts.forEach((count, key) => {
+    // key = "tên cột|loại noise". Tên CỘT có thể chứa "|" (vd "a|b") còn loại noise thì
+    // không bao giờ chứa -> cắt tại dấu "|" CUỐI CÙNG, không phải dấu đầu tiên (cắt ở dấu
+    // đầu làm nhóm của cột đó biến mất khỏi Bước 5, không xử lý được).
+    const sep = key.lastIndexOf("|");
+    const column = key.slice(0, sep);
+    const noiseType = key.slice(sep + 1);
+    const dtype = configByColumn[column] ? configByColumn[column].dtype : null;
+    const availableActions = ACTION_TABLE[`${dtype}|${noiseType}`] || [];
+    if (availableActions.length === 0) return;
+
+    const meta = noiseMeta(noiseType);
+    const alreadyApplied = state.appliedGroups.has(key);
+    const row = document.createElement("div");
+    row.className = "handling-row";
+    row.dataset.column = column;
+    row.dataset.noiseType = noiseType;
+    row.innerHTML = `
+      <div class="handling-row-top">
+        <button type="button" class="handling-row-summary" aria-expanded="false">
+          <span class="handling-toggle-icon">▸</span>
+          <strong>${escapeHtml(column)}</strong>
+          <span class="tag tag-${meta.family}">${meta.label}</span>
+          <span class="status-text">(${count} ô — bấm để xem/tick từng dòng)</span>
+        </button>
+        <label class="handling-bulk-label">Đặt hàng loạt:
+          <select class="select handling-action">
+            ${actionOptionsHTML(availableActions, pickDefaultAction(availableActions))}
+          </select>
+        </label>
+        <button type="button" class="btn btn-ghost handling-apply-btn">Áp dụng</button>
+        <button type="button" class="btn btn-ghost handling-preview-btn" ${alreadyApplied ? "" : "hidden"}>👁 Xem sau xử lý</button>
+      </div>
+      <p class="status-text handling-row-status" aria-live="polite"></p>
+      <div class="handling-detail" hidden></div>
+    `;
+    container.appendChild(row);
+  });
+
+  if (duplicateCount > 0) {
+    const meta = noiseMeta("duplicate_row");
+    const dupAlreadyApplied = state.appliedGroups.has("duplicate_row");
+    const row = document.createElement("div");
+    row.className = "handling-row";
+    row.dataset.duplicateRow = "true";
+    row.innerHTML = `
+      <div class="handling-row-top">
+        <button type="button" class="handling-row-summary" aria-expanded="false">
+          <span class="handling-toggle-icon">▸</span>
+          <strong>Duplicate row</strong>
+          <span class="tag tag-${meta.family}">${meta.label}</span>
+          <span class="status-text">(${duplicateCount} dòng — mặc định tick sẵn các bản TRÙNG SAU, bỏ tick bản bạn muốn giữ)</span>
+        </button>
+        <button type="button" class="btn btn-ghost handling-apply-btn">Xoá các dòng đã tick</button>
+        <button type="button" class="btn btn-ghost handling-preview-btn" ${dupAlreadyApplied ? "" : "hidden"}>👁 Xem sau xử lý</button>
+      </div>
+      <p class="status-text handling-row-status" aria-live="polite"></p>
+      <div class="handling-detail" hidden></div>
+    `;
+    container.appendChild(row);
+  }
+
+  if (!container.children.length) {
+    const message = state.hasWorkingCopy
+      ? 'Đã xử lý hết mọi loại noise có thể xử lý được ở đây! Bấm "Xuất file CSV" bên dưới để tải kết quả, hoặc xem lại trước.'
+      : "Không có loại noise nào (ngoài rule liên cột) có hành động xử lý khả dụng.";
+    container.innerHTML = `<p class="empty-state">${message}</p>`;
+    if (state.hasWorkingCopy) {
+      // Dùng CHUNG class .handling-preview-btn -- listener delegate trên
+      // #handling-list đã bắt sẵn class này, không cần wire thêm gì.
+      container.innerHTML += '<button type="button" class="btn btn-ghost handling-preview-btn">👁 Xem dữ liệu sau xử lý</button>';
+    }
+  }
+}
+
+// Lấy đúng các dòng (từ state.lastFlaggedRows) đang bị 1 cặp (cột, loại
+// noise) cụ thể -- dùng để xổ ra bảng chi tiết khi người dùng bấm vào 1 dòng
+// xử lý ở Bước 5, để họ tự xem lại dữ liệu thật rồi TỰ TICK CHỌN dòng muốn xử lý.
+function rowsForHandlingKey(column, noiseType) {
+  const rowNumbers = new Set(
+    state.lastFindings.filter((f) => f.column === column && f.noise_type === noiseType).map((f) => f.row_number)
+  );
+  return state.lastFlaggedRows.filter((r) => rowNumbers.has(r.row_number));
+}
+function rowsForDuplicateHandling() {
+  const rowNumbers = new Set(
+    state.lastFindings.filter((f) => f.noise_type === "duplicate_row").map((f) => f.row_number)
+  );
+  return state.lastFlaggedRows.filter((r) => rowNumbers.has(r.row_number));
+}
+
+// Với riêng duplicate_row: mặc định TICK các bản trùng đến SAU (sẽ bị xoá),
+// bỏ tick bản ĐẦU TIÊN của mỗi nhóm trùng (giữ lại) -- người dùng vẫn tự
+// tick/bỏ tick lại từng dòng để tuỳ chỉnh, đây chỉ là gợi ý mặc định hợp lý.
+function computeDuplicateDefaultChecks(rows) {
+  const subsetCols =
+    state.lastDuplicateConfig && state.lastDuplicateConfig.subset_columns
+      ? state.lastDuplicateConfig.subset_columns
+      : getDataColumns().filter((c) => c !== "row_number");
+  const seen = new Set();
+  const checkByRowNumber = new Map();
+  rows.forEach((r) => {
+    const key = subsetCols.map((c) => r[c]).join("␟");
+    if (seen.has(key)) checkByRowNumber.set(r.row_number, true); // bản trùng sau -> tick để xoá
+    else {
+      seen.add(key);
+      checkByRowNumber.set(r.row_number, false); // bản đầu tiên -> giữ lại
+    }
+  });
+  return checkByRowNumber;
+}
+
+// Bảng chi tiết ở Bước 5 khác bảng Kết quả (Bước 4) ở 2 chỗ:
+//   1. Có thêm 1 cột CHECKBOX bên trái mỗi dòng -- chọn CHÍNH XÁC dòng nào
+//      muốn xử lý, không bắt buộc cả nhóm 1 lượt.
+//   2. Có thêm 1 cột "Tự điều chỉnh" bên PHẢI noise_reasons -- mỗi dòng có 1
+//      dropdown hành động RIÊNG (không dùng chung 1 hành động cho cả nhóm
+//      như trước), để 2 dòng cùng loại lỗi vẫn có thể xử lý khác nhau trong
+//      CÙNG 1 lần bấm Áp dụng -- kể cả sửa TAY (chọn "Tự nhập tay" rồi gõ
+//      thẳng giá trị cho riêng dòng đó). Cột này CỐ ĐỊNH bên phải
+//      (position: sticky, xem .handling-action-col trong style.css) để luôn
+//      nhìn thấy được mà không cần cuộn ngang qua hết chục cột dữ liệu --
+//      trước đó bị khuất bên phải khiến người dùng tưởng chưa có tính năng
+//      này. availableActions = null (dùng cho duplicate_row) thì bỏ hẳn cột
+//      này -- trùng dòng chỉ có đúng 1 việc hợp lý là xoá.
+function pendingRowHTML(r, dataColumns, availableActions, defaultChecked, defaultAction) {
+  const checkboxCell = `<td><input type="checkbox" class="handling-row-check" data-row-number="${r.row_number}" ${defaultChecked ? "checked" : ""} /></td>`;
+  let html = rowToTableRowHTML(r, dataColumns).replace(
+    "<tr>",
+    `<tr data-row-number="${r.row_number}">${checkboxCell}`
+  );
+  if (availableActions) {
+    const options = actionOptionsHTML(availableActions, defaultAction);
+    const actionCell = `<td class="handling-action-col">
+      <select class="select handling-row-action">${options}</select>
+      <input type="text" class="input handling-row-fixed-value" placeholder="giá trị" ${defaultAction === "fixed_value" ? "" : "hidden"} />
+    </td>`;
+    html = html.replace("</tr>", `${actionCell}</tr>`);
+  }
+  return html;
+}
+function handlingDetailTableHTML(rows, availableActions, defaultChecks, defaultAction) {
+  if (!rows.length) return '<p class="empty-state">Không có dòng nào.</p>';
+  const dataColumns = getDataColumns();
+  const head =
+    '<tr><th><input type="checkbox" class="handling-check-all" checked /></th>' +
+    dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") +
+    "<th>noise_reasons</th>" +
+    (availableActions ? '<th class="handling-action-col">Tự điều chỉnh</th>' : "") +
+    "</tr>";
+  const body = rows
+    .map((r) =>
+      pendingRowHTML(r, dataColumns, availableActions, defaultChecks ? defaultChecks.get(r.row_number) : true, defaultAction)
+    )
+    .join("");
+  return `<div class="table-wrap handling-detail-table"><table class="results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+function renderHandlingDetail(row) {
+  const detail = row.querySelector(".handling-detail");
+  const isDuplicate = row.dataset.duplicateRow === "true";
+  if (isDuplicate) {
+    const rows = rowsForDuplicateHandling();
+    detail.innerHTML = handlingDetailTableHTML(rows, null, computeDuplicateDefaultChecks(rows));
+  } else {
+    const column = row.dataset.column;
+    const noiseType = row.dataset.noiseType;
+    // Bỏ lựa chọn trống "— Chọn cách xử lý —" (value rỗng) khỏi danh sách hành động thật.
+    const availableActions = Array.from(row.querySelectorAll(".handling-action option"))
+      .map((o) => o.value)
+      .filter(Boolean);
+    const defaultAction = row.querySelector(".handling-action").value; // "" nếu người dùng chưa chọn hàng loạt
+    detail.innerHTML = handlingDetailTableHTML(rowsForHandlingKey(column, noiseType), availableActions, null, defaultAction);
+  }
+  detail.dataset.rendered = "true";
+}
+function openHandlingDetail(row) {
+  const detail = row.querySelector(".handling-detail");
+  if (!detail.dataset.rendered) renderHandlingDetail(row);
+  detail.hidden = false;
+  const btn = row.querySelector(".handling-row-summary");
+  btn.setAttribute("aria-expanded", "true");
+  btn.querySelector(".handling-toggle-icon").textContent = "▾";
+}
+
+// Bấm vào tên cột/loại noise (nút .handling-row-summary) -> xổ/thu gọn bảng
+// chi tiết ngay bên dưới. Chỉ render nội dung bảng LẦN ĐẦU mở ra (lazy), lần
+// sau chỉ ẩn/hiện lại cho nhanh. "Chọn tất cả" ở đầu bảng bật/tắt hết checkbox.
+$("handling-list").addEventListener("click", async (e) => {
+  const summaryBtn = e.target.closest(".handling-row-summary");
+  if (summaryBtn) {
+    const row = summaryBtn.closest(".handling-row");
+    const detail = row.querySelector(".handling-detail");
+    const expanded = summaryBtn.getAttribute("aria-expanded") === "true";
+    if (expanded) {
+      detail.hidden = true;
+      summaryBtn.setAttribute("aria-expanded", "false");
+      summaryBtn.querySelector(".handling-toggle-icon").textContent = "▸";
+    } else {
+      openHandlingDetail(row);
+    }
+    return;
+  }
+
+  const applyBtn = e.target.closest(".handling-apply-btn");
+  if (applyBtn) {
+    await handleGroupApply(applyBtn.closest(".handling-row"));
+    return;
+  }
+
+  const previewBtn = e.target.closest(".handling-preview-btn");
+  if (previewBtn) {
+    openPreviewPanel();
+    return;
+  }
+});
+$("handling-list").addEventListener("change", (e) => {
+  // Người dùng vừa đổi tick/dropdown trong 1 nhóm -> hộp "Sẽ xoá N dòng..." đang
+  // hiện (nếu có) đã tính cho lựa chọn CŨ, không còn đúng nữa -> đóng lại, bắt
+  // buộc bấm "Áp dụng" lần nữa để xem con số mới (tránh xác nhận nhầm số cũ).
+  const changedGroup = e.target.closest(".handling-row");
+  if (changedGroup) {
+    dismissHandlingConfirm(changedGroup);
+    clearGroupError(changedGroup);
+  }
+
+  if (e.target.classList.contains("handling-check-all")) {
+    const table = e.target.closest("table");
+    table.querySelectorAll(".handling-row-check").forEach((cb) => (cb.checked = e.target.checked));
+    return;
+  }
+
+  if (e.target.classList.contains("handling-action")) {
+    // Dropdown "Đặt hàng loạt" ở đầu nhóm đổi -- áp hành động này cho MỌI
+    // dòng đang có trong bảng chi tiết (tiện cho case "xử lý cả đống giống
+    // nhau"), từng dòng sau đó vẫn tự đổi lại dropdown RIÊNG của nó được.
+    const groupRow = e.target.closest(".handling-row");
+    const detail = groupRow.querySelector(".handling-detail");
+    detail.querySelectorAll(".handling-row-action").forEach((sel) => {
+      sel.value = e.target.value;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    return;
+  }
+
+  if (e.target.classList.contains("handling-row-action")) {
+    // Dropdown RIÊNG của 1 dòng trong bảng chi tiết -- chỉ hiện ô "giá trị"
+    // khi chính dòng đó chọn hành động "Điền giá trị cố định".
+    const tr = e.target.closest("tr");
+    tr.querySelector(".handling-row-fixed-value").hidden = e.target.value !== "fixed_value";
+    e.target.classList.remove("is-invalid"); // đã chọn rồi -> bỏ viền đỏ "chưa chọn"
+    tr.querySelector(".handling-row-fixed-value").classList.remove("is-invalid"); // đổi hành động thì ô giá trị không còn bị tính là "thiếu"
+  }
+});
+// Gõ vào ô "giá trị" của 1 dòng: bỏ viền đỏ "chưa nhập" và đóng hộp xác nhận cũ.
+$("handling-list").addEventListener("input", (e) => {
+  if (!e.target.classList.contains("handling-row-fixed-value")) return;
+  e.target.classList.remove("is-invalid");
+  const group = e.target.closest(".handling-row");
+  if (group) {
+    dismissHandlingConfirm(group);
+    clearGroupError(group);
+  }
+});
+
+// Sau khi Apply thành công, lấy lại dữ liệu MỚI của đúng các dòng vừa xử lý
+// (qua /api/working-data, đã có sẵn) rồi cập nhật NGAY TẠI CHỖ trong bảng chi
+// tiết đang mở -- dòng nào bị XOÁ (remove_row/duplicate) thì gỡ khỏi bảng,
+// dòng nào chỉ sửa GIÁ TRỊ thì hiện giá trị mới + đánh dấu "Đã xử lý", thay vì
+// rebuild lại cả nhóm khiến người dùng có cảm giác "cả nhóm biến mất".
+async function refreshHandledRowsInPlace(row, rowNumbers) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/working-data/${state.fileId}`);
+  } catch (err) {
+    return;
+  }
+  if (!response.ok) return;
+  const data = await response.json();
+  const byRowNumber = new Map(data.rows.map((r) => [r.row_number, r]));
+  applyFreshRowsToGroupTable(row, rowNumbers, byRowNumber);
+
+  // 1 dòng có thể dính NHIỀU loại lỗi khác nhau -> xuất hiện ở NHIỀU khung
+  // riêng biệt cùng lúc (xem rowsForHandlingKey()). Khung vừa Áp dụng đã cập
+  // nhật ở trên rồi, nhưng các khung KHÁC đang mở sẵn (đã render từ trước)
+  // nếu cũng đang hiện CHÍNH các dòng vừa xử lý thì bảng của chúng sẽ bị "cũ"
+  // (vẫn hiện dòng đã xoá/giá trị cũ) -- quét qua, CHỈ cập nhật đúng những
+  // khung thật sự có liên quan (dò bằng querySelector `tr[data-row-number]`),
+  // KHÔNG rebuild/tính lại các khung không dính dáng gì, và dùng lại ĐÚNG 1
+  // lần gọi API ở trên (byRowNumber) thay vì gọi lại cho từng khung -- đỡ tốn
+  // tài nguyên cả phía trình duyệt lẫn server.
+  document.querySelectorAll("#handling-list > .handling-row").forEach((otherRow) => {
+    if (otherRow === row) return;
+    const otherDetail = otherRow.querySelector(".handling-detail");
+    if (!otherDetail || otherDetail.dataset.rendered !== "true") return; // chưa mở -> lần mở đầu tiên sẽ tự đọc state mới nhất, không cần đụng vào
+    const touchesSharedRow = rowNumbers.some((rn) => otherDetail.querySelector(`tr[data-row-number="${rn}"]`));
+    if (!touchesSharedRow) return;
+    applyFreshRowsToGroupTable(otherRow, rowNumbers, byRowNumber);
+    updateGroupSummaryAfterApply(otherRow);
+  });
+}
+
+// Phần "ghi dữ liệu mới vào đúng các <tr> trong 1 bảng chi tiết" -- tách
+// riêng khỏi refreshHandledRowsInPlace() để dùng lại được cho CẢ khung vừa
+// Áp dụng LẪN các khung khác đang mở sẵn có chung dòng, mà chỉ cần 1 lần gọi
+// API (xem comment ở refreshHandledRowsInPlace()).
+function applyFreshRowsToGroupTable(row, rowNumbers, byRowNumber) {
+  const detail = row.querySelector(".handling-detail");
+  const dataColumns = getDataColumns();
+  const isDuplicate = row.dataset.duplicateRow === "true";
+
+  rowNumbers.forEach((rn) => {
+    const tr = detail.querySelector(`tr[data-row-number="${rn}"]`);
+    if (!tr) return;
+    const freshRow = byRowNumber.get(rn);
+    if (!freshRow) {
+      tr.remove(); // dòng đã bị XOÁ hẳn (remove_row hoặc duplicate) -- gỡ khỏi bảng
+      return;
+    }
+    const stillFlagged =
+      !isDuplicate &&
+      (state.rowFindingsMap.get(rn) || []).some(
+        (f) => f.column === row.dataset.column && f.noise_type === row.dataset.noiseType
+      );
+    // Vẫn còn bị gắn cờ ĐÚNG loại lỗi của CHÍNH khung này (vd dòng này dính
+    // cả age lẫn gender, vừa xử lý xong age thì khung age đánh dấu "đã xử
+    // lý", nhưng khung gender vẫn phải giữ checkbox/dropdown hoạt động bình
+    // thường vì gender CHƯA được xử lý) -- không đánh dấu "Đã xử lý" vội.
+    if (stillFlagged) return;
+    const cells = dataColumns
+      .map((c) => `<td>${escapeHtml(String(freshRow[c] === undefined || freshRow[c] === null ? "" : freshRow[c]))}</td>`)
+      .join("");
+    const trailingCell = isDuplicate ? "" : '<td class="handling-action-col"></td>'; // giữ đúng số cột + đúng vị trí dính bên phải với cột "Tự điều chỉnh" (nếu có)
+    tr.className = "handling-row-done";
+    tr.innerHTML = `<td>✓</td>${cells}<td class="reasons-cell"><span class="tag tag-teal">Đã xử lý</span></td>${trailingCell}`;
+  });
+}
+
+// Sau khi Apply, cập nhật lại chữ đếm ở đầu nhóm dựa trên SỐ CHECKBOX CÒN LẠI
+// trong bảng chi tiết (không cần hỏi lại server) -- hết checkbox nghĩa là
+// nhóm đã xử lý xong toàn bộ, khoá nốt nút Áp dụng/dropdown hàng loạt lại.
+function updateGroupSummaryAfterApply(row) {
+  const detail = row.querySelector(".handling-detail");
+  const remaining = detail.querySelectorAll(".handling-row-check").length;
+  const summaryText = row.querySelector(".handling-row-summary .status-text");
+  const isDuplicate = row.dataset.duplicateRow === "true";
+  if (remaining === 0) {
+    summaryText.textContent = "(Đã xử lý xong toàn bộ ✓)";
+    row.querySelector(".handling-apply-btn").disabled = true;
+    const bulkSelect = row.querySelector(".handling-action");
+    if (bulkSelect) bulkSelect.disabled = true;
+  } else {
+    summaryText.textContent = isDuplicate
+      ? `(còn ${remaining} dòng — mặc định tick sẵn các bản TRÙNG SAU, bỏ tick bản bạn muốn giữ)`
+      : `(còn ${remaining} ô — bấm để xem/tick từng dòng)`;
+  }
+}
+
+// ---- Thông báo inline cho từng nhóm (thay cho alert() của trình duyệt) ----
+// kind: "error" (chữ đỏ) | "ok" (chữ teal) | "" (mặc định, xám). Hiện ngay
+// trong nhóm gây ra thông báo nên người dùng không phải đóng hộp thoại nào,
+// và vẫn nhìn thấy bảng + dòng bị lỗi khi đọc.
+function setStatusMessage(el, text, kind) {
+  el.textContent = text;
+  el.classList.toggle("is-error", kind === "error");
+  el.classList.toggle("is-ok", kind === "ok");
+}
+
+// Bước 5 AN TOÀN, lớp 1 (xem pickDefaultAction): trước khi gửi bất cứ thứ gì
+// lên server, kiểm tra MỌI dòng đang tick đã chọn cách xử lý chưa, và nếu chọn
+// "Tự nhập tay" thì đã gõ giá trị chưa (giá trị rỗng sẽ GHI ĐÈ ô thành chuỗi
+// rỗng -- tức là âm thầm biến ô thành "thiếu giá trị"). Dòng nào thiếu thì
+// tô viền đỏ ô đó. Trả về số lỗi + ô đầu tiên bị thiếu (để focus).
+function validateRowActions(checkedTrs) {
+  let missingAction = 0;
+  let missingValue = 0;
+  let firstInvalid = null;
+  checkedTrs.forEach((tr) => {
+    const actionSelect = tr.querySelector(".handling-row-action");
+    const valueInput = tr.querySelector(".handling-row-fixed-value");
+    actionSelect.classList.remove("is-invalid");
+    valueInput.classList.remove("is-invalid");
+    if (!actionSelect.value) {
+      actionSelect.classList.add("is-invalid");
+      missingAction += 1;
+      firstInvalid = firstInvalid || actionSelect;
+    } else if (actionSelect.value === "fixed_value" && valueInput.value.trim() === "") {
+      valueInput.classList.add("is-invalid");
+      missingValue += 1;
+      firstInvalid = firstInvalid || valueInput;
+    }
+  });
+  return { missingAction, missingValue, firstInvalid };
+}
+
+// Body gửi lên /api/apply-handling-partial -- dùng CHUNG cho lượt chạy thử
+// (dry_run: true, chỉ tính "sẽ xoá bao nhiêu") lẫn lượt chạy thật, để 2 lượt
+// luôn gửi đúng cùng 1 nội dung và con số xem trước khớp với kết quả thật.
+function buildApplyBody(row, rowsPayload, isDuplicate, dryRun) {
+  return {
+    file_id: state.fileId,
+    column_configs: state.lastColumnConfigs,
+    cross_field_rules: [],
+    duplicate_row: state.lastDuplicateConfig,
+    column: isDuplicate ? null : row.dataset.column,
+    noise_type: isDuplicate ? "duplicate_row" : row.dataset.noiseType,
+    rows: rowsPayload,
+    dry_run: dryRun,
+  };
+}
+
+// Gọi /api/apply-handling-partial, trả về { data } nếu thành công hoặc { error }
+// (chuỗi thông báo đã sẵn sàng hiện cho người dùng) nếu lỗi mạng/backend.
+async function postApplyHandling(body) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/apply-handling-partial`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { error: "Không gọi được backend. Kiểm tra xem python3 app.py có đang chạy không." };
+  }
+  if (!response.ok) {
+    let message = "Xử lý thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      /* giữ message mặc định */
+    }
+    return { error: message };
+  }
+  return { data: await response.json() };
+}
+
+// ---- Khoá thao tác khi server đang bận ----
+// Mọi lệnh làm đổi dữ liệu ở Bước 5 (chạy thử, áp dụng, hoàn tác, về dữ liệu gốc) chạy
+// TUẦN TỰ từng lệnh một: bấm lệnh thứ hai khi lệnh đầu chưa xong sẽ bị bỏ qua. Nếu cho
+// chạy chồng nhau thì 2 phản hồi có thể về lệch thứ tự và giao diện hiện trạng thái khác
+// hẳn server (vd bấm Hoàn tác lúc Áp dụng còn đang chờ -> giao diện hiện 2 bước lịch
+// sử trong khi server chỉ có 1). Class `is-busy` (xem style.css) chặn thêm chuột; còn
+// phím Enter/Space vẫn bấm được nút nên PHẢI chặn cả ở đây bằng cờ state.handlingBusy.
+async function withHandlingLock(task) {
+  if (state.handlingBusy) return undefined;
+  state.handlingBusy = true;
+  $("panel-5-attribute").classList.add("is-busy");
+  try {
+    return await task();
+  } finally {
+    state.handlingBusy = false;
+    $("panel-5-attribute").classList.remove("is-busy");
+  }
+}
+
+// Các <tr> đang được tick trong bảng chi tiết của 1 nhóm + payload gửi server tương ứng
+// (mỗi dòng 1 hành động riêng). Tách riêng để có thể TÍNH LẠI sau khi chạy thử và so
+// với lúc bấm (xem applyGroupFlow()).
+function getCheckedRows(row) {
+  return Array.from(row.querySelectorAll(".handling-detail .handling-row-check:checked")).map((cb) =>
+    cb.closest("tr")
+  );
+}
+function buildRowsPayload(checkedTrs, isDuplicate) {
+  return checkedTrs.map((tr) => {
+    const rowNumber = parseInt(tr.dataset.rowNumber, 10);
+    if (isDuplicate) return { row_number: rowNumber, action: "remove_row" };
+    const action = tr.querySelector(".handling-row-action").value;
+    const item = { row_number: rowNumber, action };
+    if (action === "fixed_value") item.fixed_value = tr.querySelector(".handling-row-fixed-value").value;
+    return item;
+  });
+}
+
+// ---- Bước 5 AN TOÀN, lớp 2: xem trước tác động rồi mới xác nhận ----
+// Hộp "Sẽ xoá N dòng (a → b). [Xác nhận xoá] [Huỷ]" hiện NGAY TRONG nhóm vừa
+// bấm Áp dụng, chỉ xuất hiện khi hành động thật sự xoá dòng (sửa giá trị thì
+// chạy luôn, vì đã có nút Hoàn tác và dòng "Đã xử lý").
+function dismissHandlingConfirm(row) {
+  const box = row.querySelector(".handling-confirm");
+  if (box) box.remove();
+}
+// Đóng hộp xác nhận của MỌI nhóm -- gọi sau khi dữ liệu đã đổi (do nhóm khác Áp dụng):
+// con số "313 → 309" trong các hộp còn lại đã cũ, xác nhận theo số cũ sẽ gây hiểu nhầm.
+function dismissAllHandlingConfirms() {
+  document.querySelectorAll("#handling-list .handling-confirm").forEach((box) => box.remove());
+}
+// Xoá thông báo LỖI cũ của nhóm khi người dùng bắt đầu sửa lựa chọn (thông báo thành
+// công/trung tính thì giữ nguyên).
+function clearGroupError(group) {
+  const statusEl = group.querySelector(".handling-row-status");
+  if (statusEl && statusEl.classList.contains("is-error")) setStatusMessage(statusEl, "", "");
+}
+
+function showHandlingConfirm(row, preview, rowsPayload, isDuplicate) {
+  dismissHandlingConfirm(row);
+  const rowsRemoved = Number(preview.rows_removed);
+  const cellsChanged = Number(preview.cells_changed);
+  const effects = [`xoá <strong>${rowsRemoved}</strong> dòng`];
+  if (cellsChanged > 0) effects.push(`sửa <strong>${cellsChanged}</strong> ô`);
+
+  const box = document.createElement("div");
+  box.className = "handling-confirm";
+  box.setAttribute("role", "alert");
+  box.innerHTML = `
+    <span class="handling-confirm-text">⚠ Sẽ ${effects.join(" và ")}
+      (${Number(preview.rows_before)} → ${Number(preview.rows_after)} dòng).</span>
+    <button type="button" class="btn btn-danger btn-small handling-confirm-yes">Xác nhận xoá</button>
+    <button type="button" class="btn btn-ghost btn-small handling-confirm-no">Huỷ</button>
+  `;
+  row.querySelector(".handling-row-top").insertAdjacentElement("afterend", box);
+
+  const yesBtn = box.querySelector(".handling-confirm-yes");
+  const noBtn = box.querySelector(".handling-confirm-no");
+  noBtn.addEventListener("click", () => dismissHandlingConfirm(row));
+  yesBtn.addEventListener("click", async () => {
+    if (state.handlingBusy) return; // có lệnh khác đang chạy -> bỏ qua cú bấm này
+    yesBtn.disabled = true;
+    noBtn.disabled = true;
+    await withHandlingLock(() => runGroupApply(row, rowsPayload, isDuplicate));
+    dismissHandlingConfirm(row);
+  });
+  noBtn.focus(); // focus vào "Huỷ" (lựa chọn an toàn) -- muốn xoá phải chủ động bấm "Xác nhận xoá"
+}
+
+// Bấm "Áp dụng" trên 1 nhóm cụ thể -- CHỈ xử lý các dòng đang được tick trong
+// bảng chi tiết của CHÍNH nhóm đó (mở ra hộ nếu đang đóng), MỖI DÒNG dùng
+// đúng hành động dropdown RIÊNG của chính nó (không còn dùng chung 1 hành
+// động cho cả nhóm). Luồng an toàn (xem pickDefaultAction):
+//   1. mọi dòng tick phải ĐÃ chọn cách xử lý (validateRowActions), thiếu thì dừng;
+//   2. nếu có hành động XOÁ dòng (hoặc là nhóm trùng dòng) -> chạy thử (dry_run)
+//      để hiện "Sẽ xoá N dòng", chỉ chạy thật khi người dùng bấm "Xác nhận xoá";
+//   3. sửa giá trị thì chạy thật luôn.
+// Cả luồng chạy trong withHandlingLock() nên không bị lệnh khác chen vào giữa.
+async function handleGroupApply(row) {
+  await withHandlingLock(() => applyGroupFlow(row));
+}
+
+async function applyGroupFlow(row) {
+  const isDuplicate = row.dataset.duplicateRow === "true";
+  const statusEl = row.querySelector(".handling-row-status");
+  dismissHandlingConfirm(row);
+  setStatusMessage(statusEl, "", "");
+  if (row.querySelector(".handling-detail").hidden) openHandlingDetail(row);
+
+  const checkedTrs = getCheckedRows(row);
+  if (checkedTrs.length === 0) {
+    setStatusMessage(statusEl, "Hãy tick ít nhất 1 dòng để xử lý.", "error");
+    return;
+  }
+
+  if (!isDuplicate) {
+    const check = validateRowActions(checkedTrs);
+    if (check.missingAction + check.missingValue > 0) {
+      const problems = [];
+      if (check.missingAction > 0) {
+        problems.push(
+          `còn ${check.missingAction} dòng chưa chọn cách xử lý (chọn ở cột "Tự điều chỉnh" hoặc dùng "Đặt hàng loạt")`
+        );
+      }
+      if (check.missingValue > 0) {
+        problems.push(`${check.missingValue} dòng chọn "Tự nhập tay" nhưng chưa nhập giá trị`);
+      }
+      setStatusMessage(statusEl, `⚠ Chưa thể áp dụng: ${problems.join("; ")}.`, "error");
+      check.firstInvalid.focus();
+      return;
+    }
+  }
+
+  const rowsPayload = buildRowsPayload(checkedTrs, isDuplicate);
+  const needsConfirm = isDuplicate || rowsPayload.some((r) => r.action === "remove_row");
+  if (!needsConfirm) {
+    await runGroupApply(row, rowsPayload, isDuplicate);
+    return;
+  }
+
+  // Có xoá dòng -> chạy thử trước. Lượt chạy thử KHÔNG ghi gì lên server.
+  const applyBtn = row.querySelector(".handling-apply-btn");
+  const normalLabel = applyBtn.textContent;
+  setButtonLoading(applyBtn, true, "Đang kiểm tra...", normalLabel);
+  const result = await postApplyHandling(buildApplyBody(row, rowsPayload, isDuplicate, true));
+  setButtonLoading(applyBtn, false, "Đang kiểm tra...", normalLabel);
+  if (result.error) {
+    setStatusMessage(statusEl, result.error, "error");
+    return;
+  }
+
+  // Trong lúc chờ chạy thử, người dùng vẫn có thể đổi tick/dropdown bằng bàn phím. Con số
+  // vừa tính là cho lựa chọn CŨ -> nếu lựa chọn đã khác thì bỏ, bắt bấm Áp dụng lại, để
+  // nút "Xác nhận xoá" không bao giờ xoá khác với điều người dùng đang thấy trên màn hình.
+  const nowPayload = buildRowsPayload(getCheckedRows(row), isDuplicate);
+  if (JSON.stringify(nowPayload) !== JSON.stringify(rowsPayload)) {
+    setStatusMessage(statusEl, 'Lựa chọn đã thay đổi trong lúc kiểm tra — hãy bấm "Áp dụng" lại.', "error");
+    return;
+  }
+
+  const preview = result.data;
+  if (preview.rows_removed === 0 && preview.cells_changed === 0) {
+    setStatusMessage(statusEl, "Không có thay đổi nào để áp dụng (các dòng đã chọn không còn trong dữ liệu).", "");
+    return;
+  }
+  if (preview.rows_removed === 0) {
+    // Có hành động "xoá" nhưng dòng đó đã bị xoá từ trước -> thực tế chỉ sửa ô, không mất dòng nào.
+    await runGroupApply(row, rowsPayload, isDuplicate);
+    return;
+  }
+  showHandlingConfirm(row, preview, rowsPayload, isDuplicate);
+}
+
+// Cập nhật chữ đếm ở đầu các nhóm CHƯA MỞ bảng chi tiết, dựa trên kết quả detect mới nhất
+// (state.lastFindings). Nhóm đã mở có đường cập nhật riêng (updateGroupSummaryAfterApply);
+// còn nhóm chưa mở sẽ hiện số cũ nếu không làm bước này (vd dòng của nó vừa bị xoá ở nhóm khác).
+function refreshUnopenedGroupSummaries() {
+  document.querySelectorAll("#handling-list > .handling-row").forEach((groupRow) => {
+    const detail = groupRow.querySelector(".handling-detail");
+    if (detail && detail.dataset.rendered === "true") return;
+    const isDuplicate = groupRow.dataset.duplicateRow === "true";
+    const count = state.lastFindings.filter((f) =>
+      isDuplicate
+        ? f.noise_type === "duplicate_row"
+        : f.column === groupRow.dataset.column && f.noise_type === groupRow.dataset.noiseType
+    ).length;
+    const summaryText = groupRow.querySelector(".handling-row-summary .status-text");
+    if (count === 0) {
+      summaryText.textContent = "(Đã xử lý xong toàn bộ ✓)";
+      groupRow.querySelector(".handling-apply-btn").disabled = true;
+      const bulkSelect = groupRow.querySelector(".handling-action");
+      if (bulkSelect) bulkSelect.disabled = true;
+    } else {
+      summaryText.textContent = isDuplicate
+        ? `(${count} dòng — mặc định tick sẵn các bản TRÙNG SAU, bỏ tick bản bạn muốn giữ)`
+        : `(${count} ô — bấm để xem/tick từng dòng)`;
+    }
+  });
+}
+
+// Gửi lệnh Áp dụng THẬT lên server rồi cập nhật giao diện tại chỗ. Luôn gọi bên trong
+// withHandlingLock().
+async function runGroupApply(row, rowsPayload, isDuplicate) {
+  const applyBtn = row.querySelector(".handling-apply-btn");
+  const statusEl = row.querySelector(".handling-row-status");
+  const normalLabel = applyBtn.textContent;
+  setButtonLoading(applyBtn, true, "Đang xử lý...", normalLabel);
+  setStatusMessage(statusEl, "", "");
+  setStatusMessage($("history-status"), "", ""); // thông báo "Đã hoàn tác..." cũ hết nghĩa khi có thao tác mới
+
+  const result = await postApplyHandling(buildApplyBody(row, rowsPayload, isDuplicate, false));
+  setButtonLoading(applyBtn, false, "Đang xử lý...", normalLabel);
+  if (result.error) {
+    setStatusMessage(statusEl, result.error, "error");
+    return;
+  }
+
+  const data = result.data;
+  // Server báo tác động THẬT của lần này. Nếu cả 2 đều bằng 0 (vd chọn "Giữ nguyên", hoặc
+  // các dòng đã được xử lý từ trước) thì KHÔNG được báo "✅ Đã xử lý" -- sai sự thật.
+  // Server cũ không có field này -> coi như có thay đổi để giữ hành vi cũ.
+  const applied = data.applied || { rows_removed: 1, cells_changed: 0 };
+  const changedAnything = applied.rows_removed > 0 || applied.cells_changed > 0;
+
+  state.lastFindings = data.findings;
+  state.lastFlaggedRows = data.flagged_rows;
+  state.rowFindingsMap = buildRowFindingsMap(data.findings);
+  if (data.history) state.history = data.history;
+  if (changedAnything) {
+    state.hasWorkingCopy = true;
+    state.appliedGroups.add(isDuplicate ? "duplicate_row" : `${row.dataset.column}|${row.dataset.noiseType}`);
+    dismissAllHandlingConfirms(); // dữ liệu đã đổi -> số liệu trong hộp xác nhận của nhóm khác đã cũ
+  }
+  renderHistoryBar();
+
+  await refreshHandledRowsInPlace(row, rowsPayload.map((r) => r.row_number));
+  updateGroupSummaryAfterApply(row);
+  refreshUnopenedGroupSummaries();
+
+  if (changedAnything) {
+    const effects = [];
+    if (applied.rows_removed > 0) effects.push(`xoá ${applied.rows_removed} dòng`);
+    if (applied.cells_changed > 0) effects.push(`sửa ${applied.cells_changed} ô`);
+    setStatusMessage(statusEl, `✅ Đã áp dụng: ${effects.join(", ")}.`, "ok");
+    row.querySelector(".handling-preview-btn").hidden = false;
+  } else {
+    setStatusMessage(
+      statusEl,
+      'Không có thay đổi nào được ghi (vd chọn "Giữ nguyên", hoặc các dòng đã chọn đã được xử lý trước đó).',
+      ""
+    );
+  }
+
+  // Chỉ cập nhật số liệu Bước 4 (để xem lại vẫn đúng), KHÔNG rebuild lại
+  // Bước 5 -- bảng chi tiết vừa cập nhật ở trên vẫn giữ nguyên, không "biến mất".
+  renderStep4({ total_rows: data.total_rows, total_flagged_rows: data.total_flagged_rows, findings: data.findings });
+}
+
+// ---- Bước 5 AN TOÀN, lớp 3: thanh "Lịch sử" + Hoàn tác + Về dữ liệu gốc ----
+// Mô tả 1 bước trong nhật ký bằng chữ dễ đọc, vd "age (Thiếu giá trị): xoá 4 dòng".
+// Mọi chuỗi từ server đều đi qua escapeHtml() trước khi chèn vào HTML.
+function describeHistoryEntry(entry) {
+  const target = entry.column
+    ? `<strong>${escapeHtml(entry.column)}</strong> (${escapeHtml(noiseMeta(entry.noise_type).label)})`
+    : "<strong>Trùng dòng</strong>";
+  const effects = [];
+  if (entry.rows_removed > 0) effects.push(`xoá ${Number(entry.rows_removed)} dòng`);
+  if (entry.cells_changed > 0) effects.push(`sửa ${Number(entry.cells_changed)} ô`);
+  const actions = Object.entries(entry.actions || {})
+    .map(([action, count]) => `${escapeHtml(ACTION_LABELS[action] || action)} ×${Number(count)}`)
+    .join("; ");
+  return `${target}: ${effects.join(", ")} <span class="history-actions">— ${actions}</span>`;
+}
+
+function renderHistoryBar() {
+  // Lịch sử vừa đổi (áp dụng thêm, hoàn tác, upload file mới...) -> hộp xác nhận "Về dữ
+  // liệu gốc" đang mở (nếu có) đã ghi số bước cũ, đóng lại cho khỏi xác nhận nhầm số cũ.
+  dismissResetConfirm();
+  const entries = state.history.entries;
+  const list = $("history-log");
+  if (entries.length === 0) {
+    list.innerHTML = '<li class="history-log-empty">Chưa có thay đổi nào — dữ liệu đang là bản gốc.</li>';
+  } else {
+    // Mới nhất ở trên cùng; bước trên cùng chính là bước nút "Hoàn tác" sẽ lùi lại.
+    list.innerHTML = entries
+      .slice()
+      .reverse()
+      .map((entry, i) => {
+        const note = entry.undoable ? "" : ' <span class="history-actions">(không hoàn tác được)</span>';
+        return `<li class="history-log-item${i === 0 ? " is-latest" : ""}">${describeHistoryEntry(entry)}${note}</li>`;
+      })
+      .join("");
+  }
+  $("undo-btn").disabled = !state.history.can_undo;
+  $("reset-btn").disabled = entries.length === 0;
+  // Còn bước trong nhật ký mà hết hoàn tác được (quá 5 bước, hoặc bảng quá lớn) -> nói rõ
+  // lý do nút Hoàn tác bị tắt thay vì để người dùng tự đoán.
+  $("history-hint").textContent =
+    entries.length > 0 && !state.history.can_undo
+      ? 'Không hoàn tác thêm được (chỉ nhớ ' + state.history.undo_limit + ' bước gần nhất, hoặc bảng quá lớn) — dùng "Về dữ liệu gốc".'
+      : `Hoàn tác được ${state.history.undo_limit} bước gần nhất.`;
+}
+
+function dismissResetConfirm() {
+  $("history-confirm").hidden = true;
+  $("history-confirm").innerHTML = "";
+}
+
+// Gọi 1 trong 2 route lùi lại (/api/undo-handling hoặc /api/reset-working). Server
+// trả về kết quả detect trên dữ liệu SAU khi lùi lại + lịch sử mới -> dựng lại
+// toàn bộ danh sách nhóm ở Bước 5 và số liệu Bước 4 cho khớp (khác "Áp dụng" là
+// chỉ cập nhật tại chỗ, vì lùi lại có thể làm 1 nhóm đã "xong" có lỗi trở lại).
+// Chạy trong withHandlingLock() nên không bị Áp dụng/lệnh khác chen vào giữa.
+async function runHistoryAction(path, successMessage) {
+  await withHandlingLock(async () => {
+    const statusEl = $("history-status");
+    $("undo-btn").disabled = true;
+    $("reset-btn").disabled = true;
+    setStatusMessage(statusEl, "Đang xử lý...", "");
+
+    let response;
+    try {
+      response = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file_id: state.fileId,
+          column_configs: state.lastColumnConfigs,
+          cross_field_rules: [],
+          duplicate_row: state.lastDuplicateConfig,
+        }),
+      });
+    } catch (err) {
+      setStatusMessage(statusEl, "Không gọi được backend.", "error");
+      renderHistoryBar();
+      return;
+    }
+    if (!response.ok) {
+      let message = "Thao tác thất bại, kiểm tra console/backend log.";
+      try {
+        const errorData = await response.json();
+        if (errorData.error) message = errorData.error;
+      } catch (parseErr) {
+        /* giữ message mặc định */
+      }
+      setStatusMessage(statusEl, message, "error");
+      renderHistoryBar();
+      return;
+    }
+
+    const data = await response.json();
+    state.lastFindings = data.findings;
+    state.lastFlaggedRows = data.flagged_rows;
+    state.rowFindingsMap = buildRowFindingsMap(data.findings);
+    state.history = data.history;
+    state.hasWorkingCopy = data.history.entries.length > 0;
+    // Nhóm nào còn nằm trong lịch sử thì vẫn coi là "đã xử lý" (hiện nút "Xem sau xử lý").
+    state.appliedGroups = new Set(data.history.entries.map((e) => e.group_key));
+
+    renderStep4({ total_rows: data.total_rows, total_flagged_rows: data.total_flagged_rows, findings: data.findings });
+    renderHandlingSection();
+    renderHistoryBar();
+    setStatusMessage(statusEl, successMessage, "ok");
+  });
+}
+
+$("undo-btn").addEventListener("click", () => {
+  if (state.handlingBusy) return;
+  dismissResetConfirm();
+  runHistoryAction("/api/undo-handling", "✅ Đã hoàn tác 1 bước.");
+});
+$("reset-btn").addEventListener("click", () => {
+  if (state.handlingBusy) return;
+  const box = $("history-confirm");
+  const count = state.history.entries.length;
+  box.innerHTML = `
+    <span class="handling-confirm-text">⚠ Bỏ toàn bộ <strong>${count}</strong> bước xử lý và quay về dữ liệu gốc đã upload?</span>
+    <button type="button" class="btn btn-danger btn-small" id="reset-confirm-yes">Xác nhận</button>
+    <button type="button" class="btn btn-ghost btn-small" id="reset-confirm-no">Huỷ</button>
+  `;
+  box.hidden = false;
+  $("reset-confirm-no").addEventListener("click", dismissResetConfirm);
+  $("reset-confirm-yes").addEventListener("click", async () => {
+    if (state.handlingBusy) return;
+    dismissResetConfirm();
+    await runHistoryAction("/api/reset-working", "✅ Đã quay về dữ liệu gốc.");
+  });
+  $("reset-confirm-no").focus(); // focus vào "Huỷ" (lựa chọn an toàn)
+});
+
+// ====== Xem dữ liệu sau xử lý (panel riêng, không nằm trong 5 bước) ======
+state.previewRows = [];
+state.previewPage = 1;
+state.previewPerPage = 30;
+
+async function openPreviewPanel() {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/working-data/${state.fileId}`);
+  } catch (err) {
+    alert("Không gọi được backend.");
+    return;
+  }
+  if (!response.ok) {
+    alert("Không lấy được dữ liệu xem trước.");
+    return;
+  }
+  const data = await response.json();
+  state.previewRows = data.rows;
+  state.previewPage = 1;
+  renderPreviewTable();
+
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("is-active"));
+  $("panel-preview").classList.add("is-active");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function closePreviewPanel() {
+  goStep(5);
+}
+function renderPreviewTable() {
+  const dataColumns = state.previewRows.length ? Object.keys(state.previewRows[0]) : [];
+  $("preview-table-head").innerHTML = "<tr>" + dataColumns.map((c) => `<th>${escapeHtml(c)}</th>`).join("") + "</tr>";
+
+  const perPage = state.previewPerPage;
+  const totalPages = Math.max(1, Math.ceil(state.previewRows.length / perPage));
+  if (state.previewPage > totalPages) state.previewPage = totalPages;
+  const start = (state.previewPage - 1) * perPage;
+  const pageRows = state.previewRows.slice(start, start + perPage);
+
+  $("preview-table-body").innerHTML = pageRows
+    .map((row) => {
+      const rowFindings = state.rowFindingsMap.get(row.row_number) || [];
+      const flagByColumn = {};
+      rowFindings.forEach((f) => {
+        if (!flagByColumn[f.column]) flagByColumn[f.column] = f.noise_type;
+      });
+      const cells = dataColumns
+        .map((c) => {
+          const type = flagByColumn[c];
+          const cls = type ? ` class="cell-flag-${noiseMeta(type).family}"` : "";
+          const value = row[c] === undefined || row[c] === null ? "" : row[c];
+          return `<td${cls}>${escapeHtml(String(value))}</td>`;
+        })
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+
+  $("preview-page-indicator").textContent = `Trang ${state.previewPage}/${totalPages} · ${state.previewRows.length} dòng`;
+  $("preview-page-prev").disabled = state.previewPage <= 1;
+  $("preview-page-next").disabled = state.previewPage >= totalPages;
+}
+$("preview-page-prev").addEventListener("click", () => {
+  if (state.previewPage > 1) {
+    state.previewPage--;
+    renderPreviewTable();
+  }
+});
+$("preview-page-next").addEventListener("click", () => {
+  state.previewPage++;
+  renderPreviewTable();
+});
+$("preview-back-btn").addEventListener("click", closePreviewPanel);
+
+// ====== Xuất file CSV cuối cùng (dùng bản đang làm việc hiện tại) ======
+$("apply-handling-btn").addEventListener("click", async () => {
+  const btn = $("apply-handling-btn");
+  const statusEl = $("handling-status");
+  setButtonLoading(btn, true, "Đang xuất file...", "✅ Xuất file CSV");
+  statusEl.textContent = "";
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/export-working`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_id: state.fileId }),
+    });
+  } catch (err) {
+    alert("Không gọi được backend.");
+    setButtonLoading(btn, false, "Đang xuất file...", "✅ Xuất file CSV");
+    return;
+  }
+  setButtonLoading(btn, false, "Đang xuất file...", "✅ Xuất file CSV");
+
+  if (!response.ok) {
+    let message = "Xuất file thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      /* giữ message mặc định */
+    }
+    alert(message);
+    return;
+  }
+
+  const data = await response.json();
+  statusEl.textContent = `✅ File hiện có ${data.final_row_count} dòng. Đang tải...`;
+
+  const downloadResponse = await fetch(`${API_BASE}/api/download/${data.download_id}`);
+  const blob = await downloadResponse.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "spark_cleaned.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+});
+
+// ================================================================
+// HƯỚNG CLASS NOISE (Bước 3-4-5) -- song song với nhánh attribute phía
+// trên, dùng CHUNG file_id/headers đã có từ Bước 1, nhưng cấu hình +
+// hiển thị kết quả hoàn toàn khác (không có cột/noise_type, chỉ có
+// label_column/feature_columns + diagnostics + findings xếp theo margin).
+// Gọi backend thật qua /api/class-noise/detect (class_noise/confident_learning.py),
+// không tính toán gì ở JS -- đúng nguyên tắc chung của toàn trang.
+// ================================================================
+
+// ---- Bước 3: chọn nhãn + đặc trưng ----
+const CLASS_METHOD_LABELS = {
+  distance_based: "Distance-based (Mutual k-NN)",
+  single_learning: "Single learning-based (Confident Learning + Random Forest)",
+  ensemble_based: "Ensemble-based",
+};
+
+function toggleStep3Direction() {
+  const isClass = state.direction === "class";
+  $("panel-3-attribute").hidden = isClass;
+  $("panel-3-class").hidden = !isClass;
+  // Tiêu đề to viết hoa (Denoise) nên giữ ngắn; tên phương pháp Class Noise
+  // đưa lên dòng nhãn nhỏ "[ Bước 3 / 5 · ... ]" phía trên thay vì nối vào tiêu đề.
+  $("panel-3-title").textContent = isClass ? "Chọn nhãn & đặc trưng" : "Cấu hình noise cho từng cột";
+  $("panel-3-eyebrow").textContent = isClass
+    ? `[ Bước 3 / 5 · ${CLASS_METHOD_LABELS[state.classMethod] || "Class Noise"} ]`
+    : "[ Bước 3 / 5 ]";
+  if (isClass) renderClassNoiseConfigForm();
+}
+
+function renderClassNoiseConfigForm() {
+  const labelSelect = $("class-label-select");
+  labelSelect.innerHTML = state.headers
+    .map((h) => `<option value="${escapeAttr(h)}">${escapeHtml(h)}</option>`)
+    .join("");
+  // Mặc định chọn CỘT CUỐI làm nhãn -- quy ước phổ biến của nhiều bộ dữ
+  // liệu phân loại (label thường là cột cuối cùng), người dùng đổi lại
+  // được ngay nếu file của họ không theo quy ước này.
+  if (!state.classLabelColumn || !state.headers.includes(state.classLabelColumn)) {
+    state.classLabelColumn = state.headers[state.headers.length - 1];
+  }
+  labelSelect.value = state.classLabelColumn;
+  renderClassFeatureList();
+
+  // Mỗi method có khối tham số nâng cao RIÊNG (n_estimators/cv_folds cho
+  // single_learning, k cho distance_based, cv_folds cho ensemble_based) --
+  // ẩn/hiện đúng khối theo lựa chọn ở Bước 2. distance_based không train
+  // model nên câu cảnh báo "có thể mất vài phút" cũng không áp dụng.
+  $("class-params-single").hidden = state.classMethod !== "single_learning";
+  $("class-params-distance").hidden = state.classMethod !== "distance_based";
+  $("class-params-ensemble").hidden = state.classMethod !== "ensemble_based";
+  $("class-wait-hint").hidden = state.classMethod === "distance_based";
+}
+
+function renderClassFeatureList() {
+  const wrap = $("class-feature-list");
+  const label = state.classLabelColumn;
+  const candidates = state.headers.filter((h) => h !== label);
+  if (!candidates.length) {
+    wrap.innerHTML = `<p class="empty-state">File chỉ có 1 cột, không còn cột nào để làm đặc trưng.</p>`;
+    return;
+  }
+  wrap.innerHTML = candidates
+    .map((h) => {
+      const checked = state.classFeatureColumns.has(h);
+      return `<label class="switch-row"><input type="checkbox" data-feature="${escapeAttr(h)}" ${checked ? "checked" : ""}/> <span class="mono">${escapeHtml(h)}</span></label>`;
+    })
+    .join("");
+}
+
+$("class-label-select").addEventListener("change", (e) => {
+  state.classLabelColumn = e.target.value;
+  state.classFeatureColumns.delete(e.target.value); // nhãn không được trùng đặc trưng
+  renderClassFeatureList();
+  // Đổi nhãn thì kết quả "Giảm cột tự động" cũ (tính theo nhãn CŨ) không còn
+  // đúng nữa -- ẩn đi, tránh hiểu nhầm là kết quả ứng với nhãn đang chọn.
+  $("class-reduce-result").hidden = true;
+  $("class-reduce-result").innerHTML = "";
+});
+
+// Nút "Tích tất cả"/"Bỏ tích tất cả" -- tiện cho file nhiều cột (vd Credit
+// Card Fraud 29 cột), đỡ phải bấm từng ô 1 như trước.
+$("class-feature-select-all").addEventListener("click", () => {
+  state.headers.filter((h) => h !== state.classLabelColumn).forEach((h) => state.classFeatureColumns.add(h));
+  renderClassFeatureList();
+});
+$("class-feature-select-none").addEventListener("click", () => {
+  state.classFeatureColumns.clear();
+  renderClassFeatureList();
+});
+
+$("class-feature-list").addEventListener("change", (e) => {
+  const h = e.target.dataset.feature;
+  if (!h) return;
+  if (e.target.checked) state.classFeatureColumns.add(h);
+  else state.classFeatureColumns.delete(h);
+});
+
+// Biểu đồ cột ngang cho kết quả "Giảm cột tự động" -- tái dùng ĐÚNG pattern
+// .chart-row/.chart-bar-fill của renderNoiseTypeChart() ở Bước 4, không viết
+// cơ chế vẽ mới. Dùng 1 MÀU DUY NHẤT (--signal) nhưng 3 MỨC ĐỘ ĐẬM khác nhau
+// để thể hiện cột đó "đi được bao xa" qua pipeline 2 bước -- đậm nhất (1.0) =
+// qua được cả 2 bước (giữ lại thật sự); vừa (0.5) = qua Bước 1 nhưng bị loại
+// ở Bước 2 (thừa thông tin với cột khác); nhạt nhất (0.18) = bị loại ngay
+// Bước 1 (ít liên quan tới nhãn).
+function renderFeatureReductionChart(ranked, afterImportance, afterCorrelation) {
+  const wrap = $("class-reduce-result");
+  wrap.hidden = false;
+  const maxImportance = ranked[0]?.importance || 1;
+
+  const summary = `
+    <p class="hint-note">
+      <strong>${ranked.length}</strong> cột gốc → giữ <strong>${afterImportance.length}</strong> cột
+      (Bước 1 — Feature Importance + Elbow) → còn <strong>${afterCorrelation.length}</strong> cột
+      (Bước 2 — lọc tương quan ≥ 0.8). Đã tự tick ${afterCorrelation.length} cột này ở danh sách bên dưới.
+    </p>`;
+
+  const rows = ranked
+    .map((r) => {
+      const pct = Math.max(4, Math.round((r.importance / maxImportance) * 100));
+      let opacity = 0.18;
+      if (afterCorrelation.includes(r.column)) opacity = 1;
+      else if (afterImportance.includes(r.column)) opacity = 0.5;
+      return `
+        <div class="chart-row">
+          <span class="chart-label mono">${escapeHtml(r.column)}</span>
+          <span class="chart-bar-track"><span class="chart-bar-fill" style="width:${pct}%; background: var(--signal); opacity: ${opacity};"></span></span>
+          <span class="chart-count">${(r.importance * 100).toFixed(1)}%</span>
+        </div>`;
+    })
+    .join("");
+
+  wrap.innerHTML = `${summary}<div class="chart-card">${rows}</div>`;
+}
+
+$("class-reduce-btn").addEventListener("click", async () => {
+  const btn = $("class-reduce-btn");
+  const statusEl = $("class-reduce-status");
+
+  if (!state.classLabelColumn) {
+    alert("Hãy chọn cột nhãn trước.");
+    return;
+  }
+
+  setButtonLoading(btn, true, "Đang chạy...", "🪄 Chạy giảm cột tự động");
+  statusEl.textContent = "Đang train Random Forest để xếp hạng cột, có thể mất chút thời gian…";
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/class-noise/reduce-features`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        file_id: state.fileId,
+        label_column: state.classLabelColumn,
+        n_estimators: parseInt($("class-n-estimators").value, 10) || 300,
+      }),
+    });
+  } catch (err) {
+    alert("Không gọi được backend.");
+    setButtonLoading(btn, false, "Đang chạy...", "🪄 Chạy giảm cột tự động");
+    statusEl.textContent = "";
+    return;
+  }
+  setButtonLoading(btn, false, "Đang chạy...", "🪄 Chạy giảm cột tự động");
+  statusEl.textContent = "";
+
+  if (!response.ok) {
+    let message = "Giảm cột thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      /* giữ message mặc định */
+    }
+    alert(message);
+    return;
+  }
+
+  const data = await response.json();
+
+  // Tự tick lại danh sách feature theo đúng kết quả Bước 2 -- người dùng vẫn
+  // sửa tay thêm được sau đó, không bị khoá cứng theo kết quả tự động này.
+  state.classFeatureColumns = new Set(data.after_correlation);
+  renderClassFeatureList();
+  renderFeatureReductionChart(data.ranked, data.after_importance, data.after_correlation);
+});
+
+$("class-detect-btn").addEventListener("click", async () => {
+  const btn = $("class-detect-btn");
+  const statusEl = $("class-detect-status");
+  const featureColumns = Array.from(state.classFeatureColumns);
+
+  if (!state.classLabelColumn) {
+    alert("Hãy chọn cột nhãn.");
+    return;
+  }
+  if (featureColumns.length === 0) {
+    alert("Hãy chọn ít nhất 1 cột đặc trưng.");
+    return;
+  }
+
+  const isDistance = state.classMethod === "distance_based";
+  setButtonLoading(btn, true, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
+  statusEl.textContent = isDistance
+    ? "Đang tính khoảng cách giữa các dòng…"
+    : "Có thể mất vài giây đến vài phút tuỳ kích thước file, vui lòng chờ…";
+
+  const requestBody = {
+    file_id: state.fileId,
+    label_column: state.classLabelColumn,
+    feature_columns: featureColumns,
+    method: state.classMethod,
+  };
+  if (state.classMethod === "distance_based") {
+    requestBody.k = parseInt($("class-k-neighbors").value, 10) || 5;
+  } else if (state.classMethod === "ensemble_based") {
+    requestBody.cv_folds = parseInt($("class-ensemble-cv-folds").value, 10) || 5;
+  } else {
+    requestBody.n_estimators = parseInt($("class-n-estimators").value, 10) || 300;
+    requestBody.cv_folds = parseInt($("class-cv-folds").value, 10) || 5;
+  }
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/class-noise/detect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (err) {
+    alert("Không gọi được backend.");
+    setButtonLoading(btn, false, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
+    statusEl.textContent = "";
+    return;
+  }
+  setButtonLoading(btn, false, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
+  statusEl.textContent = "";
+
+  if (!response.ok) {
+    let message = "Phát hiện thất bại, kiểm tra console/backend log.";
+    try {
+      const errorData = await response.json();
+      if (errorData.error) message = errorData.error;
+    } catch (parseErr) {
+      /* giữ message mặc định */
+    }
+    alert(message);
+    return;
+  }
+
+  const data = await response.json();
+  state.classDiagnostics = data.diagnostics;
+  state.classResultMethod = data.method;
+  state.classFindings = data.findings;
+  state.classFindingsPage = 1;
+  state.classFindingsFilterText = "";
+  $("class-findings-search").value = "";
+
+  unlockStep(4);
+  goStep(4); // goStep() tự gọi toggleStep4Direction() -> renderClassResults()
+});
+
+// ---- Bước 4: chẩn đoán độ tin cậy + danh sách dòng nghi ngờ ----
+function toggleStep4Direction() {
+  const isClass = state.direction === "class";
+  $("panel-4-attribute").hidden = isClass;
+  $("panel-4-class").hidden = !isClass;
+  if (isClass && state.classDiagnostics) renderClassResults();
+}
+
+// Dispatch theo method CỦA KẾT QUẢ đang có (classResultMethod, không phải
+// classMethod đang chọn ở Bước 2 -- 2 cái có thể lệch nhau nếu người dùng đổi
+// lựa chọn sau khi đã detect xong) -- 2 phương pháp có hình dạng diagnostics
+// KHÁC NHAU hẳn (distance-based không train model nên không có cv_accuracy/
+// per_class_report/confusion_matrix), nên không gộp chung 1 hàm render được.
+function renderClassResults() {
+  const diag = state.classDiagnostics;
+  if (!diag) return;
+  if (state.classResultMethod === "distance_based") {
+    renderClassResultsDistance(diag);
+  } else if (state.classResultMethod === "ensemble_based") {
+    renderClassResultsEnsemble(diag);
+  } else {
+    renderClassResultsSingleLearning(diag);
+  }
+  renderClassFindingsTable();
+}
+
+// ---- Distance-based (Mutual k-NN): không train model -> không có
+// cv_accuracy/baseline/per_class_report/confusion_matrix để chẩn đoán, thay
+// bằng chỉ số "độ phủ" (bao nhiêu dòng có láng giềng lẫn nhau) -- xem
+// DistanceNoiseDiagnostics trong class_noise/distance_based.py. ----
+function renderClassResultsDistance(diag) {
+  const coveragePct = diag.n_rows_used > 0 ? (diag.n_rows_with_mutual_neighbors / diag.n_rows_used) * 100 : 0;
+  const isLowCoverage = coveragePct < 50;
+
+  $("class-stats-grid").innerHTML = `
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng dùng được / ${diag.n_rows_total.toLocaleString("vi-VN")} tổng</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.k}</span>
+      <span class="stat-label">Số láng giềng (k)</span>
+    </div>
+    <div class="stat-card ${isLowCoverage ? "stat-crimson" : "stat-teal"}">
+      <span class="stat-value mono">${coveragePct.toFixed(1)}%</span>
+      <span class="stat-label">Dòng có láng giềng lẫn nhau</span>
+      <span class="stat-sub mono">${diag.n_rows_with_mutual_neighbors.toLocaleString("vi-VN")} / ${diag.n_rows_used.toLocaleString("vi-VN")} dòng</span>
+    </div>
+    <div class="stat-card stat-amber">
+      <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
+    </div>
+  `;
+
+  const warnCard = $("class-warning-card");
+  if (isLowCoverage) {
+    warnCard.hidden = false;
+    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
+      ⚠️ Chỉ ${coveragePct.toFixed(1)}% số dòng có "láng giềng lẫn nhau" (2 chiều) -- dữ liệu có thể quá thưa
+      hoặc k đang quá nhỏ so với số đặc trưng. Phần lớn dòng KHÔNG kết luận được gì, danh sách nghi ngờ bên
+      dưới có thể bỏ sót nhiều noise thật. Thử tăng k hoặc chọn lại cột đặc trưng.</p>`;
+  } else {
+    warnCard.hidden = true;
+  }
+
+  // Distance-based không có bảng precision/recall hay ma trận đếm (không
+  // train model nào để tính) -- ẩn hẳn 2 khối đó, chỉ Single learning-based
+  // mới hiện.
+  $("class-report-card").hidden = true;
+  $("class-confusion-card").hidden = true;
+}
+
+// ---- Ensemble-based (N29 -- LogisticRegression + GaussianNB + LinearSVC
+// biểu quyết): không có 1 cv_accuracy duy nhất (3 model riêng biệt), thay
+// bằng accuracy RIÊNG của từng classifier (per_classifier_accuracy) --
+// PHẢI xem cả 3 trước khi tin findings, giống hệt lý do cv_accuracy bên
+// Single learning-based. Không có ma trận đếm (không có 1 "model" duy nhất
+// để tính ma trận nhãn-ghi-vs-dự-đoán theo đúng nghĩa). ----
+function renderClassResultsEnsemble(diag) {
+  $("class-report-card").hidden = false;
+  $("class-confusion-card").hidden = true;
+  $("class-report-title").textContent = "Accuracy từng classifier (so với nhãn ghi)";
+
+  const baseline = diag.majority_baseline_accuracy;
+  const entries = diag.classifier_names.map((name) => ({
+    name,
+    acc: diag.per_classifier_accuracy[name],
+    diff: diag.per_classifier_accuracy[name] - baseline,
+  }));
+  const bestDiff = Math.max(...entries.map((e) => e.diff));
+  // "Yếu" = ngay cả classifier TỐT NHẤT trong 3 cái cũng chỉ nhỉnh hơn
+  // baseline rất ít (<=2 điểm %) -- không classifier nào học được gì đáng
+  // kể từ feature_columns.
+  const isWeak = bestDiff <= 0.02;
+
+  $("class-stats-grid").innerHTML = `
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng dùng được / ${diag.n_rows_total.toLocaleString("vi-VN")} tổng</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.classifier_names.length}</span>
+      <span class="stat-label">Số classifier biểu quyết</span>
+    </div>
+    <div class="stat-card ${isWeak ? "stat-crimson" : "stat-teal"}">
+      <span class="stat-value mono">${(baseline * 100).toFixed(2)}%</span>
+      <span class="stat-label">Baseline (đoán bừa lớp đa số)</span>
+      <span class="stat-sub mono">Tốt nhất: ${bestDiff > 0 ? "+" : ""}${(bestDiff * 100).toFixed(2)} điểm %</span>
+    </div>
+    <div class="stat-card stat-amber">
+      <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
+    </div>
+  `;
+
+  const warnCard = $("class-warning-card");
+  if (isWeak) {
+    warnCard.hidden = false;
+    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
+      ⚠️ Cả 3 classifier đều chỉ nhỉnh hơn baseline rất ít (tốt nhất chỉ ${(bestDiff * 100).toFixed(2)} điểm %)
+      — không classifier nào học được gì đáng kể từ các cột đặc trưng đã chọn. Các dòng bị gắn cờ bên dưới
+      RẤT KHÔNG đáng tin, cân nhắc chọn lại cột đặc trưng khác trước khi kết luận.</p>`;
+  } else {
+    warnCard.hidden = true;
+  }
+
+  $("class-report-table").innerHTML = `
+    <thead><tr><th>Classifier</th><th>Accuracy</th><th>Chênh lệch baseline</th></tr></thead>
+    <tbody>${entries
+      .map((e) => {
+        const sign = e.diff >= 0 ? "+" : "";
+        return `<tr><td>${escapeHtml(e.name)}</td><td class="mono">${(e.acc * 100).toFixed(2)}%</td><td class="mono">${sign}${(e.diff * 100).toFixed(2)} điểm %</td></tr>`;
+      })
+      .join("")}</tbody>`;
+}
+
+// ---- Single learning-based (Confident Learning + Random Forest): giữ
+// nguyên logic gốc, đầy đủ cv_accuracy/baseline/per_class_report/
+// confusion_matrix để chẩn đoán độ tin cậy trước khi tin findings. ----
+function renderClassResultsSingleLearning(diag) {
+  $("class-report-card").hidden = false;
+  $("class-confusion-card").hidden = false;
+  $("class-report-title").textContent = "Precision / Recall / F1 từng lớp";
+  $("class-confusion-title").textContent = "Ma trận đếm (hàng = nhãn ghi, cột = nhãn model tự tin)";
+
+  const diffPct = diag.cv_accuracy - diag.majority_baseline_accuracy;
+
+  // "Trần" tối đa CÓ THỂ đạt được = 100% - baseline (accuracy không thể vượt
+  // quá 100%) -- % trần cho biết model đã khai thác được bao nhiêu phần của
+  // mức cải thiện tối đa lý thuyết, tránh bị đánh lừa bởi chênh lệch thô khi
+  // baseline đã gần 100% (xem giải thích đầy đủ đã trao đổi với người dùng).
+  const maxPossibleGap = 1 - diag.majority_baseline_accuracy;
+  const ceilingPct = maxPossibleGap > 0 ? (diffPct / maxPossibleGap) * 100 : 0;
+  const diffSign = diffPct > 0 ? "+" : "";
+
+  // "Yếu" = CẢ 2 điều kiện cùng đúng: điểm % thô nhỏ (<=2) VÀ tỉ lệ so với
+  // trần cũng nhỏ (<30%). Chỉ xét điểm % thô (như trước đây) sẽ bị "bẫy
+  // trần hẹp": baseline càng gần 100% (vd Credit Card Fraud 99.83%) thì dù
+  // model học RẤT TỐT, điểm % thô tối đa có thể đạt cũng chỉ còn vài phần
+  // trăm, khiến bị báo "yếu" oan dù % trần thực tế rất cao.
+  const isWeak = diffPct <= 0.02 && ceilingPct < 30;
+
+  $("class-stats-grid").innerHTML = `
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng dùng được / ${diag.n_rows_total.toLocaleString("vi-VN")} tổng</span>
+    </div>
+    <div class="stat-card ${isWeak ? "stat-crimson" : ""}">
+      <span class="stat-value mono">${(diag.cv_accuracy * 100).toFixed(2)}%</span>
+      <span class="stat-label">CV accuracy</span>
+    </div>
+    <div class="stat-card ${isWeak ? "stat-crimson" : ""}">
+      <span class="stat-value mono">${(diag.majority_baseline_accuracy * 100).toFixed(2)}%</span>
+      <span class="stat-label">Baseline (đoán bừa lớp đa số)</span>
+    </div>
+    <div class="stat-card ${isWeak ? "stat-crimson" : "stat-teal"}">
+      <span class="stat-value mono">${diffSign}${(diffPct * 100).toFixed(2)}</span>
+      <span class="stat-label">Chênh lệch (điểm %)</span>
+      <span class="stat-sub mono">${diffSign}${ceilingPct.toFixed(1)}% mức trần tối đa</span>
+    </div>
+    <div class="stat-card stat-amber">
+      <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
+      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
+    </div>
+  `;
+
+  const warnCard = $("class-warning-card");
+  if (isWeak) {
+    warnCard.hidden = false;
+    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
+      ⚠️ CV accuracy chỉ nhỉnh hơn (hoặc thấp hơn) baseline rất ít (chênh lệch ${(diffPct * 100).toFixed(2)} điểm %,
+      chỉ đạt ${ceilingPct.toFixed(1)}% mức trần tối đa có thể) — model gần như không học được gì từ các cột đặc
+      trưng đã chọn. Các dòng bị gắn cờ bên dưới RẤT KHÔNG đáng tin, cân nhắc chọn lại cột đặc trưng khác trước
+      khi kết luận.</p>`;
+  } else {
+    warnCard.hidden = true;
+  }
+
+  $("class-report-table").innerHTML = `
+    <thead><tr><th>Lớp</th><th>Precision</th><th>Recall</th><th>F1</th><th>n</th></tr></thead>
+    <tbody>${diag.class_names
+      .map((cls) => {
+        const r = diag.per_class_report[cls];
+        return `<tr><td>${escapeHtml(cls)}</td><td class="mono">${r.precision.toFixed(3)}</td><td class="mono">${r.recall.toFixed(3)}</td><td class="mono">${r["f1-score"].toFixed(3)}</td><td class="mono">${r.support}</td></tr>`;
+      })
+      .join("")}</tbody>`;
+
+  const cm = diag.confusion_count_matrix;
+  $("class-confusion-table").innerHTML = `
+    <thead><tr><th>Nhãn ghi \\ Model tự tin</th>${cm.class_names.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+    <tbody>${cm.class_names
+      .map((rowName, i) => `<tr><td>${escapeHtml(rowName)}</td>${cm.rows[i].map((v) => `<td class="mono">${v}</td>`).join("")}</tr>`)
+      .join("")}</tbody>`;
+}
+
+// Findings đã được backend CHUẨN HOÁ chung tên trường cho cả 2 method
+// (suggested_label, score) -- xem app.py::class_noise_detect_api(). Chỉ CHỮ
+// hiển thị (header, nhãn cột điểm số) khác nhau theo method.
+function getFilteredClassFindings() {
+  const text = state.classFindingsFilterText.trim().toLowerCase();
+  if (!text) return state.classFindings;
+  return state.classFindings.filter((f) =>
+    `${f.row_number} ${f.recorded_label} ${f.suggested_label}`.toLowerCase().includes(text)
+  );
+}
+
+const CLASS_SCORE_LABELS = {
+  distance_based: { suggested: "Gợi ý nhãn (đa số láng giềng)", score: "Tỉ lệ láng giềng bất đồng" },
+  single_learning: { suggested: "Model tự tin", score: "Margin" },
+  ensemble_based: { suggested: "Gợi ý nhãn (đa số classifier)", score: "Tỉ lệ classifier bất đồng" },
+};
+
+function renderClassFindingsTable() {
+  const all = getFilteredClassFindings();
+  const perPage = state.classFindingsPerPage;
+  const totalPages = Math.max(1, Math.ceil(all.length / perPage));
+  state.classFindingsPage = Math.min(state.classFindingsPage, totalPages);
+  const start = (state.classFindingsPage - 1) * perPage;
+  const pageRows = all.slice(start, start + perPage);
+
+  const labels = CLASS_SCORE_LABELS[state.classResultMethod] || CLASS_SCORE_LABELS.single_learning;
+  const table = $("class-findings-table");
+  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${labels.suggested}</th><th>${labels.score}</th></tr></thead>`;
+  if (!pageRows.length) {
+    table.innerHTML = `${headHtml}<tbody><tr><td colspan="4" class="empty-cell">Không có dòng nào khớp.</td></tr></tbody>`;
+  } else {
+    table.innerHTML = `${headHtml}<tbody>${pageRows
+      .map(
+        (f) =>
+          `<tr><td class="mono">${f.row_number}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label)}</td><td class="mono">${f.score.toFixed(4)}</td></tr>`
+      )
+      .join("")}</tbody>`;
+  }
+
+  const pag = $("class-findings-pagination");
+  pag.hidden = totalPages <= 1;
+  $("class-page-indicator").textContent = `Trang ${state.classFindingsPage}/${totalPages}`;
+}
+
+$("class-findings-search").addEventListener(
+  "input",
+  debounce((e) => {
+    state.classFindingsFilterText = e.target.value;
+    state.classFindingsPage = 1;
+    renderClassFindingsTable();
+  }, 200)
+);
+$("class-page-prev").addEventListener("click", () => {
+  if (state.classFindingsPage > 1) {
+    state.classFindingsPage--;
+    renderClassFindingsTable();
+  }
+});
+$("class-page-next").addEventListener("click", () => {
+  state.classFindingsPage++;
+  renderClassFindingsTable();
+});
+
+$("class-goto-handling-btn").addEventListener("click", () => {
+  unlockStep(5);
+  goStep(5); // goStep() tự gọi toggleStep5Direction()
+});
+
+// ---- Bước 5: placeholder (xử lý Class Noise chưa làm, xem CLAUDE.md) ----
+function toggleStep5Direction() {
+  const isClass = state.direction === "class";
+  $("panel-5-attribute").hidden = isClass;
+  $("panel-5-class").hidden = !isClass;
+}
+$("class-back-to-results-btn").addEventListener("click", () => goStep(4));
+
+// ====== "Cửa" cho workspace.js gọi vào ======
+// presetDirection(dir): chọn sẵn thẻ hướng ở Bước 2 (pill "Class Noise" trên
+// header, mục "Cần cấu hình" trong menu Product) -- bấm đúng thẻ như người
+// dùng bấm, nên mọi hiệu ứng kèm theo (hiện khối chọn phương pháp, mở nút
+// Tiếp tục) đều y hệt. Nếu đã có file và đang ở Bước 2 thì thấy ngay; chưa
+// có file thì lựa chọn được nhớ sẵn, tải file lên là thấy thẻ đã chọn.
+window.DenoiseFlow = {
+  presetDirection(dir) {
+    const card = document.querySelector(`.direction-grid:not(#class-method-grid) .direction-card[data-direction="${dir}"]`);
+    if (card) card.click();
+  },
+  currentStep() { return state.currentStep; },
+};
+
+// ====== Khởi động ======
+renderStepper();
+checkBackendHealth();
+
+})();
