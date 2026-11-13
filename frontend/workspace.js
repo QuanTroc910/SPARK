@@ -3,8 +3,9 @@
 /* ============================================================
    workspace.js -- logic cho trang workspace.html.
 
-   ĐÃ GỘP (xem comment đầu workspace.html): phần thân trang giờ có 2 KHỐI
-   cùng tồn tại trên 1 trang -- #section-free-tools (trước ở tools.js) và
+   ĐÃ GỘP (xem comment đầu workspace.html): phần thân trang giờ có 6 KHỐI
+   cùng tồn tại trên 1 trang -- trang chủ, Guide, Bảo mật, Quyền riêng tư
+   (bước 5, công khai), #section-free-tools (trước ở tools.js) và
    #section-convert (trước ở convert.js) -- chuyển khối bằng switchSection(),
    KHÔNG còn điều hướng sang trang khác nữa. Nhờ gộp vào 1 trang, cơ chế
    "nối tiếp" sang Convert (trước phải gửi qua sessionStorage + query param
@@ -108,8 +109,13 @@ function wireInputToggle(toggleEl, dropzoneEl, pasteEl, onModeChange) {
   });
 }
 
+// Danh sách khối trong <main>, đúng thứ tự xuất hiện. 4 khối đầu là trang
+// CÔNG KHAI (bước 5): chưa đăng nhập vẫn xem được. 2 khối sau cần đăng nhập.
+const SECTIONS = ["home", "guide", "security", "privacy", "free-tools", "convert"];
+const PUBLIC_SECTIONS = new Set(["home", "guide", "security", "privacy"]);
+
 const state = {
-  section: "free-tools", // "free-tools" | "convert" -- khối đang hiện
+  section: "home", // 1 trong SECTIONS -- khối đang hiện (mặc định: trang chủ)
   ft: {
     tool: "remove-duplicates", // khớp ĐÚNG hậu tố route /api/noise-tools/<tool>
     inputMode: "file",
@@ -136,17 +142,53 @@ const state = {
 // ====== Đăng nhập / tạo tài khoản (bước 4) -- trang này TỰ lo, không đá về
 // index.html nữa. Cùng session cookie với index.html (cùng origin) nên đăng
 // nhập ở đây thì sang index.html cũng đã đăng nhập và ngược lại. ======
-const authState = { mode: "login" }; // "login" | "register"
+const authState = {
+  mode: "login",      // "login" | "register" -- chế độ của form
+  user: null,         // {id, username, created_at} khi đã đăng nhập
+  checked: false,     // đã có kết quả GET /api/auth/me chưa (trước đó body.ws-auth-pending che hết)
+  forceAuth: false,   // true khi khách TỰ bấm "Đăng nhập"/"Bắt đầu" dù đang ở trang công khai
+  afterLogin: null,   // khối cần mở ngay sau khi đăng nhập xong (vd "free-tools" cho nút "Bắt đầu")
+};
 
-function showAuthView() {
+// Quyết định màn hình nào đang hiện, gọi lại mỗi khi đổi khối hoặc đổi trạng
+// thái đăng nhập. Quy tắc (bước 5, giống CYD): trang công khai (PUBLIC_SECTIONS)
+// ai cũng xem được; khối cần đăng nhập mà chưa đăng nhập thì form đăng nhập
+// (#ws-auth) hiện đè lên; khách đang xem trang công khai thấy 2 nút "Đăng
+// nhập"/"Bắt đầu" ở header thay cho khối tài khoản (body.ws-guest).
+function applyAuthView() {
+  if (!authState.checked) return; // chưa biết đã đăng nhập hay chưa -> giữ nguyên màn chờ
+  const loggedIn = !!authState.user;
+  const needLogin = !loggedIn && (authState.forceAuth || !PUBLIC_SECTIONS.has(state.section));
   document.body.classList.remove("ws-auth-pending");
-  document.body.classList.add("ws-auth-mode");
-  $("account-area").hidden = true;
+  document.body.classList.toggle("ws-auth-mode", needLogin);
+  document.body.classList.toggle("ws-guest", !loggedIn);
+  $("account-area").hidden = !loggedIn;
+  $("ws-guest-area").hidden = loggedIn;
+}
+// Khách tự mở form (nút "Đăng nhập"/"Bắt đầu" ở header, link ở chân trang).
+function openAuth(mode, afterLogin) {
+  setAuthMode(mode);
+  authState.forceAuth = true;
+  authState.afterLogin = afterLogin || null;
+  applyAuthView();
+  window.scrollTo(0, 0);
 }
 function onLoggedIn(user) {
-  document.body.classList.remove("ws-auth-pending", "ws-auth-mode");
-  $("account-area").hidden = false;
+  authState.user = user;
+  authState.checked = true;
+  authState.forceAuth = false;
   $("account-username-text").textContent = `👤 ${user.username}`;
+  const next = authState.afterLogin;
+  authState.afterLogin = null;
+  if (next) switchSection(next); // switchSection() tự gọi applyAuthView()
+  else applyAuthView();
+}
+function onLoggedOut() {
+  authState.user = null;
+  authState.checked = true;
+  authState.forceAuth = false;
+  authState.afterLogin = null;
+  applyAuthView();
 }
 // 1 form dùng cho cả 2 chế độ -- chỉ đổi chữ (tiêu đề, nút, dòng chuyển chế
 // độ, gợi ý độ dài) để không phải nhân đôi HTML.
@@ -207,7 +249,7 @@ async function checkAuth() {
     // Không gọi được backend -- checkBackendHealth() bên dưới tự báo rõ.
   }
   if (!data.user) {
-    showAuthView();
+    onLoggedOut(); // chưa đăng nhập: trang công khai vẫn hiện, khối cần đăng nhập thì ra form
     return;
   }
   onLoggedIn(data.user);
@@ -218,13 +260,23 @@ $("logout-btn").addEventListener("click", async () => {
   } catch (err) {
     // vẫn hiện form đăng nhập dù gọi API lỗi -- không giữ người dùng kẹt lại.
   }
+  // Đăng xuất xong về trang chủ ở trạng thái khách (giống CYD), không hiện
+  // thẳng form đăng nhập nữa -- muốn đăng nhập lại thì bấm nút ở header.
   setAuthMode("login");
-  showAuthView();
+  authState.user = null;
+  switchSection("home");
+  onLoggedOut();
   window.scrollTo(0, 0);
 });
 $("open-profile-btn").addEventListener("click", () => {
   window.location.href = "index.html?open=profile";
 });
+// Nút cho KHÁCH ở header + link ở chân trang: mở form ở đúng chế độ. "Bắt
+// đầu" = tạo tài khoản rồi vào thẳng Free Tools sau khi xong.
+$("ws-guest-login-btn").addEventListener("click", () => openAuth("login"));
+$("ws-guest-start-btn").addEventListener("click", () => openAuth("register", "free-tools"));
+$("footer-login-link").addEventListener("click", (e) => { e.preventDefault(); openAuth("login"); });
+$("footer-register-link").addEventListener("click", (e) => { e.preventDefault(); openAuth("register", "free-tools"); });
 
 async function checkBackendHealth() {
   // Header chỉ còn 1 chấm tròn màu, không có chữ đi kèm -- giữ thông tin đó
@@ -247,11 +299,60 @@ async function checkBackendHealth() {
 // sang trang khác trước đây. Cuộn lên đầu trang để người dùng không bị lạc
 // khi nội dung đổi hẳn bên dưới header. ======
 function switchSection(section) {
+  if (!SECTIONS.includes(section)) section = "home";
   state.section = section;
-  $("section-free-tools").hidden = section !== "free-tools";
-  $("section-convert").hidden = section !== "convert";
+  SECTIONS.forEach((name) => { $("section-" + name).hidden = name !== section; });
+  // Viền màu nhấn (.is-current) cho pill của "vùng" đang mở: Product chứa
+  // Free Tools + Convert, Guide là pill riêng. Trang chủ/Bảo mật/Riêng tư:
+  // không pill nào sáng.
+  $("ws-product-btn").classList.toggle("is-current", section === "free-tools" || section === "convert");
+  $("ws-nav-guide").classList.toggle("is-current", section === "guide");
+  // Đổi khối là thoát trạng thái "khách tự bấm Đăng nhập" (vd bấm "Về trang
+  // chủ" trong form); khối cần đăng nhập thì applyAuthView() tự hiện form lại.
+  authState.forceAuth = false;
+  applyAuthView();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
+
+// Mọi link có data-section (logo, pill Guide, chân trang, đường dẫn, nút
+// trong trang chủ, link trong form đăng nhập) -> chuyển khối tại chỗ.
+document.querySelectorAll("a[data-section]").forEach((a) => {
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    switchSection(a.dataset.section);
+    setProductMenuOpen(false);
+  });
+});
+
+// Mục lục dính "TRÊN TRANG NÀY" của 3 trang văn bản: bấm thì cuộn mượt tới
+// mục, và tự tô đậm mục đang đọc khi người dùng cuộn (IntersectionObserver
+// -- API có sẵn của trình duyệt, báo khi 1 phần tử lọt vào vùng nhìn thấy).
+function wireTextPageToc() {
+  document.querySelectorAll(".tx-toc").forEach((toc) => {
+    const links = Array.from(toc.querySelectorAll('a[href^="#"]'));
+    const targetOf = (a) => $(a.getAttribute("href").slice(1));
+    const setActive = (id) => links.forEach((a) => a.classList.toggle("is-active", a.getAttribute("href") === "#" + id));
+    links.forEach((a) => {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        const target = targetOf(a);
+        if (!target) return;
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        setActive(target.id);
+      });
+    });
+    const observer = new IntersectionObserver((entries) => {
+      // Trong các mục đang lọt vào vùng quan sát, lấy mục ở gần đỉnh nhất.
+      const visible = entries
+        .filter((en) => en.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visible.length) setActive(visible[0].target.id);
+    }, { rootMargin: "-90px 0px -55% 0px", threshold: 0 });
+    links.map(targetOf).filter(Boolean).forEach((t) => observer.observe(t));
+    if (links[0]) links[0].classList.add("is-active");
+  });
+}
+wireTextPageToc();
 
 // ====== Dropdown "Product" -- bấm để mở/đóng, bấm ra ngoài hoặc nhấn Esc
 // thì tự đóng (kiểu dropdown chuẩn, không cần thư viện ngoài). ======
@@ -1209,11 +1310,11 @@ $("convert-download-btn").addEventListener("click", () => {
 });
 
 // ====== Khởi động ======
-// Hỗ trợ ?section=convert / ?section=free-tools -- index.html dùng để link
-// trực tiếp vào đúng khối (thay cho link convert.html/tools.html cũ).
+// Hỗ trợ ?section=<tên khối> (home / guide / security / privacy / free-tools /
+// convert) để mở thẳng đúng khối. Không có hoặc sai tên -> trang chủ.
 (function initSectionFromQuery() {
   const requested = new URLSearchParams(window.location.search).get("section");
-  if (requested === "convert" || requested === "free-tools") state.section = requested;
+  if (SECTIONS.includes(requested)) state.section = requested;
 })();
 
 checkAuth();
