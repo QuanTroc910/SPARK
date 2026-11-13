@@ -127,13 +127,77 @@ const state = {
     tool: "delimiter", // "delimiter" | "csv-to-json" | "json-to-csv"
     inputMode: "file",
     selectedFile: null,
+    rawPreviewActive: false,
+    filePreview: null, // {label, dims, rows, note} -- giống state.ft.filePreview
     lastResult: null,
   },
 };
 
-// ====== Cổng xác thực: bắt buộc đăng nhập, dùng chung session với trang
-// chính, chưa đăng nhập thì chuyển thẳng về index.html (nơi có form đăng
-// nhập thật). ======
+// ====== Đăng nhập / tạo tài khoản (bước 4) -- trang này TỰ lo, không đá về
+// index.html nữa. Cùng session cookie với index.html (cùng origin) nên đăng
+// nhập ở đây thì sang index.html cũng đã đăng nhập và ngược lại. ======
+const authState = { mode: "login" }; // "login" | "register"
+
+function showAuthView() {
+  document.body.classList.remove("ws-auth-pending");
+  document.body.classList.add("ws-auth-mode");
+  $("account-area").hidden = true;
+}
+function onLoggedIn(user) {
+  document.body.classList.remove("ws-auth-pending", "ws-auth-mode");
+  $("account-area").hidden = false;
+  $("account-username-text").textContent = `👤 ${user.username}`;
+}
+// 1 form dùng cho cả 2 chế độ -- chỉ đổi chữ (tiêu đề, nút, dòng chuyển chế
+// độ, gợi ý độ dài) để không phải nhân đôi HTML.
+function setAuthMode(mode) {
+  authState.mode = mode;
+  const isLogin = mode === "login";
+  $("ws-auth-eyebrow").textContent = isLogin ? "[ Chào mừng trở lại ]" : "[ Bắt đầu ]";
+  $("ws-auth-title").textContent = isLogin ? "Đăng nhập" : "Tạo tài khoản";
+  $("ws-auth-desc").textContent = isLogin
+    ? "Tiếp tục việc đang dở. Dữ liệu gắn với tài khoản của bạn, người khác không thấy được."
+    : "Tải lên, làm sạch và xuất file. Mỗi tài khoản là 1 không gian riêng, không qua bên thứ ba.";
+  $("ws-auth-submit").textContent = isLogin ? "Đăng nhập" : "Tạo tài khoản";
+  $("ws-auth-switch-text").textContent = isLogin ? "Chưa có tài khoản?" : "Đã có tài khoản?";
+  $("ws-auth-toggle").textContent = isLogin ? "Tạo tài khoản" : "Đăng nhập";
+  $("ws-auth-hint").hidden = isLogin;
+  $("ws-auth-password").autocomplete = isLogin ? "current-password" : "new-password";
+  setError($("ws-auth-error"), "");
+}
+$("ws-auth-toggle").addEventListener("click", () => setAuthMode(authState.mode === "login" ? "register" : "login"));
+$("ws-auth-show").addEventListener("click", () => {
+  const input = $("ws-auth-password");
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  $("ws-auth-show").textContent = show ? "Ẩn" : "Hiện";
+});
+$("ws-auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setError($("ws-auth-error"), "");
+  const username = $("ws-auth-username").value.trim();
+  const password = $("ws-auth-password").value;
+  if (!username || !password) return setError($("ws-auth-error"), "Nhập đủ tên đăng nhập và mật khẩu.");
+  const btn = $("ws-auth-submit");
+  btn.disabled = true;
+  let response, data;
+  try {
+    response = await fetch(authState.mode === "login" ? "/api/auth/login" : "/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    data = await response.json();
+  } catch (err) {
+    btn.disabled = false;
+    return setError($("ws-auth-error"), "Không gọi được backend. Kiểm tra xem python3 app.py có đang chạy không.");
+  }
+  btn.disabled = false;
+  if (!response.ok) return setError($("ws-auth-error"), data.error || "Không thành công.");
+  $("ws-auth-password").value = "";
+  onLoggedIn(data.user);
+});
+
 async function checkAuth() {
   let data = { user: null };
   try {
@@ -143,19 +207,20 @@ async function checkAuth() {
     // Không gọi được backend -- checkBackendHealth() bên dưới tự báo rõ.
   }
   if (!data.user) {
-    window.location.href = "index.html";
+    showAuthView();
     return;
   }
-  $("account-area").hidden = false;
-  $("account-username-text").textContent = `👤 ${data.user.username}`;
+  onLoggedIn(data.user);
 }
 $("logout-btn").addEventListener("click", async () => {
   try {
     await fetch("/api/auth/logout", { method: "POST" });
   } catch (err) {
-    // vẫn chuyển trang dù gọi API lỗi -- không giữ người dùng kẹt lại.
+    // vẫn hiện form đăng nhập dù gọi API lỗi -- không giữ người dùng kẹt lại.
   }
-  window.location.href = "index.html";
+  setAuthMode("login");
+  showAuthView();
+  window.scrollTo(0, 0);
 });
 $("open-profile-btn").addEventListener("click", () => {
   window.location.href = "index.html?open=profile";
@@ -726,6 +791,7 @@ document.querySelectorAll(".continue-pill").forEach((pill) => {
         // Convert -- cùng 1 trang, cùng 1 bộ nhớ JS, không cần sessionStorage.
         const text = state.ft.pipeline.currentText;
         if (text) {
+          hideCvRawPreview(); // bỏ file đang chọn bên Convert (nếu có) để ô dán text hiện ra
           document.querySelector('#convert-input-toggle button[data-mode="paste"]').click();
           $("convert-paste-input").value = text;
           setStatus($("convert-status"), '📥 Đang dùng kết quả từ Free Tools trước đó -- bấm "Convert" để tiếp tục.', "is-ok");
@@ -832,12 +898,131 @@ function delimiterLabel(d) {
   return DELIMITER_LABELS[d] || d;
 }
 
+const CV_TAB_LABEL = { delimiter: "Đổi delimiter CSV", "csv-to-json": "CSV → JSON", "json-to-csv": "JSON → CSV" };
+
+/* Hình trước/sau dạng VĂN BẢN cho Convert (đổi định dạng thì phải thấy chữ
+   thật thu nhỏ). lines: mảng chuỗi; dòng nào cần nhấn thì ghi dạng
+   ["chuỗi", true]. */
+function mockTextBox(label, lines) {
+  const html = lines
+    .map((l) => {
+      const [text, hit] = Array.isArray(l) ? l : [l, false];
+      return `<span class="tool-mock-line${hit ? " is-hit" : ""}">${escapeHtml(text)}</span>`;
+    })
+    .join("");
+  return `<div class="tool-mock-box tool-mock-text"><span class="tool-mock-label">${label}</span>${html}</div>`;
+}
+function mockTextPair(beforeLabel, beforeLines, afterLabel, afterLines, delta) {
+  return (
+    `<div class="tool-mock-frame"><span class="tool-mock-corner is-tr"></span><span class="tool-mock-corner is-bl"></span>` +
+    `<div class="tool-mock">${mockTextBox(beforeLabel, beforeLines)}` +
+    `<span class="tool-mock-delta">→<span class="tool-mock-delta-label">${delta}</span></span>` +
+    `${mockTextBox(afterLabel, afterLines)}</div></div>`
+  );
+}
+
+const CV_INFO = {
+  delimiter: {
+    headline: "ĐỔI DELIMITER<br>CỦA FILE CSV",
+    desc: "Đổi dấu phẩy thành chấm phẩy, tab, gạch đứng hoặc ngược lại mà không làm hỏng các giá trị có dấu ngoặc kép.",
+    mock: mockTextPair(
+      "export_eu.csv", ["ma;ten;gia", ["A01;But bi;12,50", true], "A02;Kep giay;3,00"],
+      "export.csv", ["ma,ten,gia", ['A01,But bi,"12,50"', true], "A02,Kep giay,\"3,00\""],
+      "; → ,"
+    ),
+    dropTitle: "Thả file CSV vào đây",
+    accept: ".csv,.txt",
+    steps: [
+      "Thêm file; delimiter hiện tại được tự nhận diện.",
+      "Chọn delimiter mới bạn cần.",
+      "Tải file đã đổi về.",
+    ],
+    explainer: [
+      { t: "Vì sao delimiter khác nhau", b: "Ở nơi dùng dấu phẩy làm dấu thập phân, Excel lưu CSV bằng chấm phẩy. Hệ thống khác lại xuất tab hoặc gạch đứng. Công cụ nhập thường chỉ nhận đúng 1 loại, nên phải đổi file chứ không sửa tay." },
+      { t: "Dấu ngoặc kép được lo sẵn", b: "Giá trị có chứa delimiter mới, dấu ngoặc kép hoặc xuống dòng sẽ tự được bọc trong ngoặc kép; giá trị chỉ bọc vì delimiter cũ thì được ghi lại bình thường." },
+      CV_PRIVACY(),
+    ],
+  },
+  "csv-to-json": {
+    headline: "CHUYỂN CSV<br>SANG JSON",
+    desc: "Biến CSV thành JSON sạch, khoá theo tên cột, tuỳ chọn tự nhận diện số và true/false.",
+    mock: mockTextPair(
+      "products.csv", ["sku,name,price", ["A-100,But bi,3.2", true], "A-101,Kep giay,0.5"],
+      "products.json", ["[", "  {", ['    "sku": "A-100",', true], ['    "name": "But bi",', true], ['    "price": 3.2', true], "  },", "  …", "]"],
+      "→ JSON"
+    ),
+    dropTitle: "Thả file CSV vào đây",
+    accept: ".csv,.txt",
+    steps: [
+      "Thêm file CSV.",
+      "Chọn Objects hay Arrays, có ép kiểu số / true-false không.",
+      "Sao chép JSON hoặc tải về dạng .json.",
+    ],
+    explainer: [
+      { t: "Khoá lấy từ dòng tiêu đề", b: "Mỗi dòng thành 1 object, khoá là tên cột. Tên cột trống thành \"column_1\", tên trùng được thêm hậu tố như \"name_2\" nên không mất giá trị nào." },
+      { t: "Kiểu dữ liệu không bất ngờ", b: "Bật ép kiểu thì số và true/false thành số và boolean JSON, ô trống thành null. Giá trị có số 0 ở đầu như mã bưu điện, số điện thoại vẫn giữ nguyên dạng chuỗi." },
+      CV_PRIVACY(),
+    ],
+  },
+  "json-to-csv": {
+    headline: "CHUYỂN JSON<br>SANG CSV",
+    desc: "Làm phẳng mảng JSON hoặc JSON Lines thành CSV mở được bằng bảng tính, object lồng nhau thành cột.",
+    mock: mockTextPair(
+      "users.json", ["[", "  {", '    "id": 1,', ['    "address": {', true], ['      "city": "Ha Noi"', true], "    }", "  }", "]"],
+      "users.csv", [["id,address.city", true], "1,Ha Noi"],
+      "→ CSV"
+    ),
+    dropTitle: "Thả file JSON vào đây",
+    accept: ".json,.jsonl,.txt",
+    steps: [
+      "Dán JSON hoặc thả file .json / .jsonl.",
+      "Xem lại cột: trường lồng nhau thành tên như \"address.city\".",
+      "Tải CSV về.",
+    ],
+    explainer: [
+      { t: "Nhận những gì", b: "1 mảng object, 1 object đơn, mảng của mảng, hoặc JSON Lines (mỗi dòng 1 object). Cột xuất theo thứ tự khoá xuất hiện lần đầu; khoá thiếu thành ô trống." },
+      { t: "Dữ liệu lồng nhau", b: "Object lồng nhau được làm phẳng thành tên cột nối bằng dấu chấm, vd \"address.city\". Mảng bên trong được ghi nguyên dạng JSON trong 1 ô nên không mất dữ liệu." },
+      CV_PRIVACY(),
+    ],
+  },
+};
+function CV_PRIVACY() {
+  return {
+    t: "Riêng tư theo thiết kế",
+    b: "File được backend Flask đọc để đổi định dạng rồi trả kết quả ngay trong cùng 1 request, không lưu lại bản nào. Vẫn cần đăng nhập như mọi chỗ khác trong Denoise.",
+  };
+}
+
+function renderCvTool(tool) {
+  const info = CV_INFO[tool];
+  $("cv-crumb-tool").textContent = CV_TAB_LABEL[tool];
+  $("cv-hero").innerHTML = `
+    <div class="tool-hero-grid">
+      <div>
+        <h1 class="tool-hero-headline">${info.headline}</h1>
+        <p class="tool-hero-desc">${info.desc}</p>
+      </div>
+      ${info.mock}
+    </div>`;
+  $("cv-steps").innerHTML = info.steps
+    .map((s, i) => `<div><p class="tool-step-num">0${i + 1}</p><p class="tool-step-text">${escapeHtml(s)}</p></div>`)
+    .join("");
+  $("cv-explainer").innerHTML = info.explainer
+    .map((e) => `<div><p class="tool-explainer-title">${escapeHtml(e.t)}</p><p class="tool-explainer-body">${escapeHtml(e.b)}</p></div>`)
+    .join("");
+  $("cv-dropzone-title").textContent = info.dropTitle;
+  $("convert-file-input").accept = info.accept;
+}
+
 function activateCvTool(tool) {
   document.querySelectorAll("#convert-tabs .convert-tab").forEach((b) => b.classList.toggle("is-active", b.dataset.tool === tool));
   state.cv.tool = tool;
   // SCOPE theo #section-convert -- ".convert-options" dùng CHUNG với khối
   // Free Tools, không scope sẽ ẩn/hiện nhầm cả options của Free Tools.
   document.querySelectorAll("#section-convert .convert-options").forEach((el) => (el.hidden = el.id !== "convert-options-" + tool));
+  renderCvTool(tool);
+  // Đổi tool là đổi loại file nhận vào (CSV ↔ JSON) -- bỏ file đang chọn.
+  hideCvRawPreview();
   resetCvResult();
 }
 document.querySelectorAll("#convert-tabs .convert-tab").forEach((btn) => {
@@ -849,18 +1034,70 @@ wireInputToggle($("convert-input-toggle"), $("convert-dropzone"), $("convert-pas
   state.cv.inputMode = mode;
 });
 
-// ====== Dropzone chọn file (kéo-thả + bấm chọn) ======
+// ====== Dropzone + bảng xem trước file vừa chọn (giống Free Tools, không
+// có pipeline nên đơn giản hơn). CSV: bảng; JSON: chỉ ghi chú, vì xem trước
+// JSON dạng bảng không có nghĩa -- bấm Convert là thấy kết quả. ======
 wireDropzone($("convert-dropzone"), $("convert-file-input"), (file) => {
   state.cv.selectedFile = file;
-  $("convert-file-name").textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
+  handleCvFileSelected(file);
 });
+async function handleCvFileSelected(file) {
+  const sizeText = `${(file.size / 1024).toFixed(1)} KB`;
+  if (!/\.(csv|txt)$/i.test(file.name) || state.cv.tool === "json-to-csv") {
+    showCvRawPreview(file.name, sizeText, null, 'File JSON -- bấm "Convert" để xem kết quả dạng bảng.');
+    return;
+  }
+  let text;
+  try {
+    text = await readFileAsText(file);
+  } catch (err) {
+    showCvRawPreview(file.name, sizeText, null, 'Không đọc được file để xem trước -- vẫn bấm "Convert" được bình thường.');
+    return;
+  }
+  // Xem trước tách theo dấu phẩy -- file dùng chấm phẩy/tab sẽ hiện 1 cột,
+  // đó là chuyện bình thường của bước xem trước, backend tự nhận diện khi Convert.
+  const { rows, totalDataRows } = naiveParseCsvPreview(text, 20);
+  showCvRawPreview(file.name, tableDims(totalDataRows, rows.length ? rows[0].length : 0), rows, totalDataRows > 20 ? `Xem trước 20/${totalDataRows} dòng đầu.` : "");
+}
+function showCvRawPreview(label, dims, rows, note) {
+  state.cv.rawPreviewActive = true;
+  state.cv.filePreview = { label, dims, rows, note };
+  renderCvInputArea();
+}
+function hideCvRawPreview() {
+  state.cv.rawPreviewActive = false;
+  state.cv.filePreview = null;
+  state.cv.selectedFile = null;
+  $("convert-file-input").value = "";
+  renderCvInputArea();
+}
+$("cv-change-file-btn").addEventListener("click", hideCvRawPreview);
+function renderCvInputArea() {
+  const show = state.cv.rawPreviewActive && !!state.cv.filePreview;
+  if (show) {
+    const f = state.cv.filePreview;
+    const hasTable = !!(f.rows && f.rows.length);
+    $("cv-raw-preview-label").textContent = f.label;
+    $("cv-raw-preview-dims").textContent = f.dims || "";
+    $("cv-raw-preview-table-wrap").hidden = !hasTable;
+    if (hasTable) renderPreviewTable($("cv-raw-preview-table"), f.rows);
+    const noteEl = $("cv-raw-preview-note");
+    noteEl.hidden = !f.note;
+    noteEl.textContent = f.note || "";
+    noteEl.classList.toggle("is-only", !hasTable);
+  }
+  $("convert-input-toggle").hidden = show;
+  $("convert-dropzone").hidden = show || state.cv.inputMode !== "file";
+  $("convert-paste-input").hidden = show || state.cv.inputMode !== "paste";
+  $("cv-raw-preview").hidden = !show;
+}
 
 /* ====== Kết quả ====== */
 function resetCvResult() {
   state.cv.lastResult = null;
   $("convert-result-empty").hidden = false;
-  $("convert-result-table-wrap").hidden = true;
-  $("convert-result-text").hidden = true;
+  $("convert-result-card").hidden = true;
+  $("convert-json-card").hidden = true;
   $("convert-download-btn").disabled = true;
   setStatus($("convert-status"), "", "");
   setError($("convert-error"), "");
@@ -872,20 +1109,28 @@ function showCvResult(data) {
   $("convert-download-btn").disabled = false;
 
   if (state.cv.tool === "csv-to-json") {
-    $("convert-result-table-wrap").hidden = true;
-    $("convert-result-text").hidden = false;
+    $("convert-result-card").hidden = true;
+    $("convert-json-card").hidden = false;
+    $("convert-json-dims").textContent = `${data.record_count} record`;
     $("convert-result-text").textContent = data.result_text;
     setStatus($("convert-status"), `✅ ${data.record_count} record (delimiter: ${delimiterLabel(data.used_delimiter)})`, "is-ok");
     return;
   }
 
-  $("convert-result-text").hidden = true;
-  $("convert-result-table-wrap").hidden = false;
+  $("convert-json-card").hidden = true;
+  $("convert-result-card").hidden = false;
+  const colCount = data.preview_rows && data.preview_rows.length ? data.preview_rows[0].length : 0;
+  // row_count của backend đếm CẢ dòng tiêu đề (đếm số dòng văn bản CSV) --
+  // bảng hiển thị coi dòng đầu là tiêu đề nên số "dòng dữ liệu" = row_count - 1,
+  // cho khớp với cột số thứ tự trong bảng.
+  const dataRows = Math.max(0, data.row_count - 1);
+  $("convert-result-tag").textContent = CV_TAB_LABEL[state.cv.tool];
+  $("convert-result-dims").textContent = tableDims(dataRows, colCount);
   renderPreviewTable($("convert-result-table"), data.preview_rows);
   if (state.cv.tool === "delimiter") {
-    setStatus($("convert-status"), `✅ ${data.row_count} dòng · đã nhận diện delimiter gốc: ${delimiterLabel(data.used_from_delimiter)}`, "is-ok");
+    setStatus($("convert-status"), `✅ ${dataRows} dòng dữ liệu · đã nhận diện delimiter gốc: ${delimiterLabel(data.used_from_delimiter)}`, "is-ok");
   } else {
-    setStatus($("convert-status"), `✅ ${data.row_count} dòng · ${data.columns.length} cột`, "is-ok");
+    setStatus($("convert-status"), `✅ ${dataRows} dòng dữ liệu · ${data.columns.length} cột`, "is-ok");
   }
 }
 
@@ -977,4 +1222,6 @@ renderFtToolHero(state.ft.tool);
 renderFtToolSteps(state.ft.tool);
 renderFtToolExplainer(state.ft.tool);
 renderFtPipelineStrip();
+renderCvTool(state.cv.tool);
+renderCvInputArea();
 switchSection(state.section);

@@ -14,10 +14,11 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="workspace.css" />
 </head>
-<body class="auth-ready">
-  <!-- Trang MỚI, thay thế dần index.html -- bắt đăng nhập qua cookie session dùng
-       chung (checkAuth() trong workspace.js), form đăng nhập thật vẫn CHỈ sống ở
-       index.html (sẽ xây lại ở bước 4).
+<body class="auth-ready ws-auth-pending">
+  <!-- Trang MỚI, thay thế dần index.html. Bước 4: trang này TỰ lo đăng nhập/tạo
+       tài khoản (#ws-auth bên dưới, hiện khi chưa đăng nhập, body.ws-auth-mode),
+       không còn đá về index.html nữa. Hồ sơ/đổi mật khẩu vẫn ở index.html
+       (chưa xây lại). body.ws-auth-pending = đang chờ GET /api/auth/me.
 
        Thân trang có 2 KHỐI (#section-free-tools / #section-convert), chuyển khối
        bằng switchSection() -- không điều hướng sang trang khác. Khối Free Tools
@@ -28,6 +29,72 @@
   <a class="ws-skip" href="#main">Bỏ qua điều hướng, tới nội dung</a>
   <!-- Các đường kẻ dọc mờ chạy suốt trang (trang trí, không tương tác). -->
   <div class="ws-gridlines" aria-hidden="true"></div>
+
+  <!-- ============================================================
+       ĐĂNG NHẬP / TẠO TÀI KHOẢN (bước 4) -- chia đôi màn hình theo CYD: trái là
+       form (1 form dùng cho cả 2 chế độ, đổi chữ bằng setAuthMode()), phải là
+       khối đen có bảng demo 3 lỗi. Gọi đúng 2 API có sẵn /api/auth/login và
+       /api/auth/register (JSON {username, password}); đăng ký xong backend tự
+       đăng nhập luôn. Hệ thống dùng TÊN ĐĂNG NHẬP (không phải email như CYD).
+       ============================================================ -->
+  <section class="ws-auth" id="ws-auth" aria-label="Đăng nhập Denoise">
+    <div class="ws-auth-left">
+      <div class="ws-auth-topbar">
+        <a class="ws-logo" href="/"><span class="ws-logo-accent">De</span>noise</a>
+        <a class="btn btn-ghost btn-small" href="/">Về trang chủ</a>
+      </div>
+      <div class="ws-auth-form-wrap">
+        <form class="ws-auth-form" id="ws-auth-form" novalidate>
+          <p class="ws-auth-eyebrow" id="ws-auth-eyebrow">[ Chào mừng trở lại ]</p>
+          <h1 class="ws-auth-title" id="ws-auth-title">Đăng nhập</h1>
+          <p class="ws-auth-desc" id="ws-auth-desc">Tiếp tục việc đang dở. Dữ liệu gắn với tài khoản của bạn, người khác không thấy được.</p>
+          <div class="ws-auth-field">
+            <label for="ws-auth-username">Tên đăng nhập</label>
+            <input class="input" id="ws-auth-username" autocomplete="username" />
+          </div>
+          <div class="ws-auth-field">
+            <label for="ws-auth-password">Mật khẩu</label>
+            <div class="ws-auth-pass">
+              <input class="input" id="ws-auth-password" type="password" autocomplete="current-password" />
+              <button type="button" class="btn btn-ghost btn-small ws-auth-show" id="ws-auth-show">Hiện</button>
+            </div>
+            <p class="ws-auth-hint" id="ws-auth-hint" hidden>Tên đăng nhập từ 3 ký tự · mật khẩu từ 6 ký tự</p>
+          </div>
+          <p class="form-error" id="ws-auth-error" hidden></p>
+          <button class="btn btn-primary ws-auth-submit" id="ws-auth-submit" type="submit">Đăng nhập</button>
+          <p class="ws-auth-switch"><span id="ws-auth-switch-text">Chưa có tài khoản?</span> <a id="ws-auth-toggle">Tạo tài khoản</a></p>
+        </form>
+      </div>
+      <div class="ws-auth-footer">
+        <a href="/">Trang chủ</a>
+        <a href="#">Guide</a>
+      </div>
+    </div>
+    <div class="ws-auth-right">
+      <div class="ws-auth-right-top">
+        <span>[ Denoise Workspace ]</span>
+        <span>Xử lý qua backend Flask</span>
+      </div>
+      <div class="ws-auth-right-body">
+        <h2 class="ws-auth-right-title">Dữ liệu nhiễu vào.<br>Dữ liệu sạch ra.</h2>
+        <div class="ws-auth-demo" aria-hidden="true">
+          <div class="ws-auth-demo-bar"><span class="name">khach_hang.csv</span><span class="issues">3 lỗi</span></div>
+          <table>
+            <tr><td>1</td><td>Ana Souza</td><td>Lisbon</td></tr>
+            <tr><td>2</td><td><span class="is-space">·Ben Okafor·</span></td><td>Lagos</td></tr>
+            <tr><td>3</td><td>Chloé Martin</td><td class="is-missing">∅</td></tr>
+            <tr class="is-dup"><td>4</td><td>Ana Souza</td><td>Lisbon</td></tr>
+          </table>
+        </div>
+        <ul class="ws-auth-checks">
+          <li>Thấy ngay ô thiếu, khoảng trắng lạc và dòng trùng</li>
+          <li>Sửa từng lỗi một, hoàn tác được mọi bước</li>
+          <li>Xuất CSV sạch bất cứ lúc nào</li>
+        </ul>
+      </div>
+      <div class="ws-wordmark" aria-hidden="true"><span>De</span>noise</div>
+    </div>
+  </section>
 
   <header class="ws-header">
     <div class="container ws-header-inner">
@@ -362,24 +429,23 @@
          KHỐI: Convert File -- ẨN mặc định. Bước 3 sẽ làm lại theo khuôn như
          Free Tools; hiện mới ăn theo bảng màu/góc vuông chung.
          ============================================================ -->
+    <!-- ============================================================
+         KHỐI: Convert File (bước 3) -- CÙNG KHUÔN với Free Tools: đường dẫn +
+         chỉ số, tiêu đề + hình trước/sau riêng từng tool (CV_INFO trong
+         workspace.js), khung 01/02 vuông, bảng kết quả kiểu CYD, "Cách hoạt
+         động" + 3 cột giải thích. Dùng lại NGUYÊN class .ft-* của Free Tools.
+         ============================================================ -->
     <div id="section-convert" hidden>
       <div class="ft-topbar">
-        <span class="ft-crumb">Trang chủ<i>/</i>Convert<i>/</i><b>Đổi định dạng file</b></span>
+        <span class="ft-crumb">Trang chủ<i>/</i>Convert<i>/</i><b id="cv-crumb-tool">Đổi delimiter CSV</b></span>
         <span class="ft-meta">
           <span>Chạy trên<strong>Backend Flask</strong></span>
           <span>Giá<strong>Miễn phí</strong></span>
           <span>Đăng nhập<strong>Bắt buộc</strong></span>
         </span>
       </div>
-      <div class="tool-hero-grid" style="margin-bottom: 26px">
-        <div>
-          <h1 class="tool-hero-headline">Convert<br>file</h1>
-          <p class="tool-hero-desc">
-            Đổi định dạng nhanh gọn: delimiter CSV, CSV ⇄ JSON. Dùng xong tải file ngay. Dữ liệu ở đây
-            không liên quan khối Free Tools, trừ khi bấm "Convert" ở panel "Xử lý tiếp".
-          </p>
-        </div>
-      </div>
+
+      <div id="cv-hero"></div>
 
       <div class="convert-badges">
         <span class="convert-badge">⚡ Kết quả tức thì</span>
@@ -388,29 +454,51 @@
       </div>
 
       <div class="convert-tabs" id="convert-tabs">
-        <button type="button" class="convert-tab is-active" data-tool="delimiter">⇄ Đổi delimiter CSV</button>
+        <button type="button" class="convert-tab is-active" data-tool="delimiter">Đổi delimiter CSV</button>
         <button type="button" class="convert-tab" data-tool="csv-to-json">CSV → JSON</button>
         <button type="button" class="convert-tab" data-tool="json-to-csv">JSON → CSV</button>
       </div>
 
       <div class="convert-grid">
         <!-- 01 · ĐẦU VÀO -->
-        <section class="convert-panel">
-          <div class="convert-panel-head">
-            <span class="convert-panel-eyebrow">01 · Đầu vào</span>
+        <section class="convert-panel ft-panel">
+          <div class="ft-panel-head">
+            <span class="ft-eyebrow-tag">01 · Đầu vào</span>
             <div class="convert-input-toggle" id="convert-input-toggle">
               <button type="button" class="is-active" data-mode="file">File</button>
               <button type="button" data-mode="paste">Dán text</button>
             </div>
           </div>
 
-          <label class="dropzone dropzone--compact" id="convert-dropzone">
-            <span class="dropzone-icon">📄</span>
-            <p>Kéo thả hoặc bấm để chọn file</p>
-            <p class="hint-note" id="convert-file-name">Chưa chọn file nào</p>
-          </label>
-          <input type="file" id="convert-file-input" accept=".csv,.json,.jsonl,.txt" hidden />
-          <textarea class="input mono convert-paste-input" id="convert-paste-input" rows="9" placeholder="Dán nội dung CSV/JSON vào đây…" hidden></textarea>
+          <div class="ft-panel-body">
+          <div class="ft-input-zone">
+            <label class="dropzone dropzone--compact" id="convert-dropzone">
+              <svg class="ft-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+              </svg>
+              <p class="ft-dropzone-title" id="cv-dropzone-title">Thả file CSV vào đây</p>
+              <p class="ft-dropzone-hint" id="cv-dropzone-hint">Tối đa 10 MB · không lưu lại file gốc</p>
+              <span class="btn btn-primary btn-small ft-choose-file-btn">Chọn file</span>
+            </label>
+            <input type="file" id="convert-file-input" accept=".csv,.txt" hidden />
+            <textarea class="input mono convert-paste-input" id="convert-paste-input" rows="9" placeholder="Dán nội dung CSV/JSON vào đây…" hidden></textarea>
+
+            <!-- Bảng xem trước file vừa chọn (CSV: bảng; JSON: chỉ ghi chú) -- xem
+                 handleCvFileSelected() trong workspace.js. -->
+            <div class="ft-raw-preview cyd-table" id="cv-raw-preview" hidden>
+              <div class="cyd-table-bar">
+                <span class="cyd-table-tag" id="cv-raw-preview-label"></span>
+                <span class="cyd-table-right">
+                  <span class="cyd-table-dims" id="cv-raw-preview-dims"></span>
+                  <button class="btn btn-ghost btn-small" id="cv-change-file-btn" type="button">↺ Đổi file</button>
+                </span>
+              </div>
+              <div class="table-wrap" id="cv-raw-preview-table-wrap">
+                <table class="results-table" id="cv-raw-preview-table"></table>
+              </div>
+              <p class="ft-table-note" id="cv-raw-preview-note" hidden></p>
+            </div>
+          </div>
 
           <div class="convert-options" id="convert-options-delimiter">
             <div class="field-row">
@@ -450,10 +538,15 @@
             </div>
             <div class="field">
               <label>Dạng kết quả</label>
-              <select class="select" id="opt-shape-c2j">
+              <div class="ft-seg" data-seg-for="opt-shape-c2j">
+                <button type="button" class="is-active" data-value="objects">Objects</button>
+                <button type="button" data-value="arrays">Arrays</button>
+              </div>
+              <select class="select" id="opt-shape-c2j" hidden>
                 <option value="objects">Mỗi dòng 1 object (khoá = tên cột)</option>
                 <option value="arrays">Mỗi dòng 1 mảng (không có tên cột)</option>
               </select>
+              <p class="hint-note">Objects: mỗi dòng 1 object, khoá là tên cột · Arrays: mỗi dòng 1 mảng</p>
             </div>
             <label class="switch-row"><input type="checkbox" id="opt-convert-types" checked /> Tự ép kiểu số / true-false (giữ nguyên số có 0 ở đầu)</label>
             <label class="switch-row"><input type="checkbox" id="opt-indent" checked /> Thụt lề JSON cho dễ đọc</label>
@@ -480,21 +573,58 @@
             <button class="btn btn-primary" id="convert-run-btn" type="button">Convert</button>
             <span class="status-text" id="convert-status"></span>
           </div>
+          </div>
         </section>
 
         <!-- 02 · KẾT QUẢ -->
-        <section class="convert-panel">
-          <div class="convert-panel-head">
-            <span class="convert-panel-eyebrow">02 · Kết quả</span>
+        <section class="convert-panel ft-panel">
+          <div class="ft-panel-head">
+            <span class="ft-eyebrow-tag">02 · Kết quả</span>
             <button class="btn btn-ghost btn-small" id="convert-download-btn" type="button" disabled>⬇ Tải xuống</button>
           </div>
-          <p class="empty-state" id="convert-result-empty">Kết quả sẽ hiện ở đây ngay khi bạn bấm "Convert".</p>
-          <div class="table-wrap" id="convert-result-table-wrap" hidden>
-            <table class="results-table" id="convert-result-table"></table>
+          <div class="ft-panel-body">
+          <div class="ft-result-zone">
+            <div class="ft-result-skeleton" id="convert-result-empty">
+              <div class="ft-result-skeleton-box">
+                <span class="ft-result-skeleton-tag">Đang chờ dữ liệu</span>
+                <div class="ft-result-skeleton-rows" aria-hidden="true">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                </div>
+                <p class="ft-result-skeleton-sub">Xử lý qua backend · không lưu file gốc</p>
+              </div>
+              <p class="ft-result-skeleton-caption">Kết quả hiện ở đây ngay khi bạn bấm "Convert".</p>
+            </div>
+            <!-- Kết quả dạng BẢNG (đổi delimiter, JSON → CSV) -->
+            <div class="cyd-table" id="convert-result-card" hidden>
+              <div class="cyd-table-bar">
+                <span class="cyd-table-tag" id="convert-result-tag">Kết quả</span>
+                <span class="cyd-table-right"><span class="cyd-table-dims" id="convert-result-dims"></span></span>
+              </div>
+              <div class="table-wrap" id="convert-result-table-wrap">
+                <table class="results-table" id="convert-result-table"></table>
+              </div>
+            </div>
+            <!-- Kết quả dạng CHỮ THÔ (CSV → JSON) -->
+            <div class="cyd-table" id="convert-json-card" hidden>
+              <div class="cyd-table-bar">
+                <span class="cyd-table-tag">JSON</span>
+                <span class="cyd-table-right"><span class="cyd-table-dims" id="convert-json-dims"></span></span>
+              </div>
+              <pre class="convert-result-text mono" id="convert-result-text"></pre>
+            </div>
           </div>
-          <pre class="convert-result-text mono" id="convert-result-text" hidden></pre>
+          </div>
         </section>
       </div>
+
+      <div class="ft-rule"></div>
+      <div class="ft-section-head">
+        <h2 class="ft-h2">Cách hoạt động</h2>
+        <span class="ft-section-meta">Ba bước · không cần cài gì</span>
+      </div>
+      <div class="tool-steps" id="cv-steps"></div>
+      <div class="ft-rule"></div>
+      <div class="tool-explainer" id="cv-explainer"></div>
     </div>
   </main>
 

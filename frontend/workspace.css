@@ -313,37 +313,37 @@ input[type="checkbox"] { accent-color: #111; width: 16px; height: 16px; }
 }
 
 /* Khung 01/02: nhãn đen flush góc, thân có padding riêng */
-#section-free-tools .convert-panel { padding: 0; overflow: hidden; }
-#section-free-tools .ft-panel-head {
+.ft-panel { padding: 0; overflow: hidden; }
+.ft-panel-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   min-height: 40px; border-bottom: 1px solid #111; padding-right: 10px;
 }
-#section-free-tools .ft-eyebrow-tag {
+.ft-eyebrow-tag {
   align-self: stretch; display: flex; align-items: center;
   background: #111; color: #fff; font-family: "IBM Plex Mono", monospace;
   font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
   white-space: nowrap; padding: 0 16px;
 }
-#section-free-tools .ft-panel-body { padding: 14px; }
+.ft-panel-body { padding: 14px; }
 
 /* Khung dữ liệu CHIỀU CAO CỐ ĐỊNH (không đổi dù trống/xem trước/kết quả) */
-#section-free-tools .ft-input-zone,
-#section-free-tools .ft-result-zone { height: 440px; display: flex; flex-direction: column; margin-bottom: 14px; }
+.ft-input-zone,
+.ft-result-zone { height: 440px; display: flex; flex-direction: column; margin-bottom: 14px; }
 
 /* Ô kéo-thả: lấp đầy khung, canh giữa */
-#section-free-tools .ft-input-zone .dropzone--compact {
+.ft-input-zone .dropzone--compact {
   flex: 1 1 auto; min-height: 0; padding: 18px 16px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
-#section-free-tools .ft-dropzone-icon { width: 26px; height: 26px; color: #111; margin-bottom: 10px; }
-#section-free-tools .ft-dropzone-title { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; margin: 0 0 6px; }
-#section-free-tools .ft-dropzone-hint {
+.ft-dropzone-icon { width: 26px; height: 26px; color: #111; margin-bottom: 10px; }
+.ft-dropzone-title { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; margin: 0 0 6px; }
+.ft-dropzone-hint {
   font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.05em;
   text-transform: uppercase; color: var(--ink-faint); margin: 0; text-align: center;
 }
 /* pointer-events:none -- cả ô <label> đã bắt click mở hộp chọn file, nút
    này chỉ để NHÌN giống nút thật theo đúng ảnh mẫu. */
-#section-free-tools .ft-choose-file-btn { margin-top: 16px; pointer-events: none; }
+.ft-choose-file-btn { margin-top: 16px; pointer-events: none; }
 
 /* ===== BẢNG DỮ LIỆU KIỂU CYD: thanh trên có thẻ đen (tên file / nhãn) bên
    trái và "N DÒNG × M CỘT" bên phải, cột số thứ tự dòng có kẻ dọc, chữ
@@ -388,43 +388,43 @@ input[type="checkbox"] { accent-color: #111; width: 16px; height: 16px; }
   padding: 20px; border-top: 0; font-size: 10.5px;
   background: repeating-linear-gradient(135deg, transparent 0 7px, rgba(17, 17, 17, 0.06) 7px 8px);
 }
-#section-free-tools .ft-raw-preview { flex: 1 1 auto; min-height: 0; }
+.ft-raw-preview { flex: 1 1 auto; min-height: 0; }
 
 /* Khung "ĐANG CHỜ DỮ LIỆU": nền gạch chéo mờ phủ cả vùng, ở giữa là hộp viền
    đứt có thẻ đen đè mép trên, 3 cột thanh xám giả bảng, 2 dòng chú thích mono. */
-#section-free-tools .ft-result-skeleton {
+.ft-result-skeleton {
   flex: 1 1 auto; min-height: 0; padding: 20px; text-align: center;
   display: flex; flex-direction: column; justify-content: center; align-items: center;
   border: 1px solid #111;
   background: repeating-linear-gradient(135deg, transparent 0 7px, rgba(17, 17, 17, 0.06) 7px 8px);
 }
-#section-free-tools .ft-result-skeleton-box {
+.ft-result-skeleton-box {
   position: relative; width: min(380px, 100%); border: 1px dashed #111; background: var(--bg);
   padding: 24px 22px 14px; margin-bottom: 18px;
 }
-#section-free-tools .ft-result-skeleton-tag {
+.ft-result-skeleton-tag {
   position: absolute; top: 0; left: 12px; transform: translateY(-50%);
   background: #111; color: #fff; font-family: "IBM Plex Mono", monospace;
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px;
 }
-#section-free-tools .ft-result-skeleton-rows {
+.ft-result-skeleton-rows {
   position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 20px; padding: 2px 6px 10px;
 }
-#section-free-tools .ft-result-skeleton-rows::before {
+.ft-result-skeleton-rows::before {
   content: ""; position: absolute; left: -4px; top: 0; width: 2px; height: 10px; background: var(--signal);
 }
-#section-free-tools .ft-result-skeleton-rows i { display: block; height: 4px; background: #c4c4bf; }
-#section-free-tools .ft-result-skeleton-rows i:nth-child(3n+2) { width: 70%; }
-#section-free-tools .ft-result-skeleton-rows i:nth-child(3n) { width: 55%; }
-#section-free-tools .ft-result-skeleton-sub {
+.ft-result-skeleton-rows i { display: block; height: 4px; background: #c4c4bf; }
+.ft-result-skeleton-rows i:nth-child(3n+2) { width: 70%; }
+.ft-result-skeleton-rows i:nth-child(3n) { width: 55%; }
+.ft-result-skeleton-sub {
   font-family: "IBM Plex Mono", monospace; font-size: 9px; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--ink-faint); margin: 0;
 }
-#section-free-tools .ft-result-skeleton-caption {
+.ft-result-skeleton-caption {
   font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--ink-dim); margin: 0;
 }
-#section-free-tools .ft-result-zone .cyd-table { flex: 1 1 auto; min-height: 0; }
+.ft-result-zone .cyd-table { flex: 1 1 auto; min-height: 0; }
 
 /* ===== Panel "Xử lý tiếp" ===== */
 .continue-panel { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
@@ -492,7 +492,124 @@ a.continue-item:hover { background: #ebebe7; }
 }
 .ws-footer-bottom i { font-style: normal; color: var(--signal); margin-right: 8px; }
 
+/* ==========================================================================
+   BƯỚC 3 -- khối Convert dùng CHUNG toàn bộ class khung/bảng của Free Tools
+   (.ft-panel, .ft-input-zone, .cyd-table...). Chỉ thêm 2 thứ riêng: hình
+   trước/sau dạng VĂN BẢN (CSV/JSON thật thu nhỏ, vì đổi định dạng thì phải
+   thấy chữ chứ không phải thanh đen) và thẻ kết quả JSON (chữ thô cuộn được
+   trong khung .cyd-table).
+   ========================================================================== */
+.tool-mock-text { padding: 20px 12px 10px; }
+.tool-mock-line {
+  display: block; font-family: "IBM Plex Mono", monospace; font-size: 9.5px; line-height: 1.7;
+  color: #111; white-space: pre; overflow: hidden; text-overflow: ellipsis;
+}
+.tool-mock-line.is-hit { color: var(--signal); font-weight: 700; }
+.cyd-table .convert-result-text {
+  flex: 1 1 auto; min-height: 0; margin: 0; border: 0; border-radius: 0; max-height: none;
+  background: transparent; padding: 12px 14px; font-size: 12px; line-height: 1.5;
+}
+
+/* ==========================================================================
+   BƯỚC 4 -- ĐĂNG NHẬP / TẠO TÀI KHOẢN chia đôi màn hình (theo trang Log in /
+   Create an account của CYD): nửa trái nền kem có form, nửa phải nền đen có
+   tiêu đề, bảng demo 3 lỗi và wordmark. Hiện khi CHƯA đăng nhập thay vì đá
+   về index.html như trước; header/thân/chân trang bị ẩn trong lúc đó
+   (body.ws-auth-mode). body.ws-auth-pending = đang chờ GET /api/auth/me,
+   ẩn tất cả để không nhoáng.
+   ========================================================================== */
+body.ws-auth-pending .ws-header, body.ws-auth-pending .main-area, body.ws-auth-pending .ws-footer,
+body.ws-auth-mode .ws-header, body.ws-auth-mode .main-area, body.ws-auth-mode .ws-footer { display: none; }
+.ws-auth { display: none; position: relative; z-index: 1; min-height: 100vh; grid-template-columns: 1fr 1fr; }
+body.ws-auth-mode .ws-auth { display: grid; }
+
+.ws-auth-left { background: var(--bg); border-right: 1px solid #111; display: flex; flex-direction: column; }
+.ws-auth-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px; padding: 0 32px; border-bottom: 1px solid #111;
+}
+.ws-auth-form-wrap { flex: 1 1 auto; display: flex; align-items: center; padding: 40px 0; }
+.ws-auth-form { width: min(460px, 100%); margin: 0 auto; padding: 0 32px; }
+.ws-auth-eyebrow {
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-dim); margin-bottom: 14px;
+}
+.ws-auth-title {
+  font-size: clamp(44px, 4.5vw, 64px); line-height: 0.95; font-weight: 600;
+  letter-spacing: -0.03em; text-transform: uppercase; margin-bottom: 16px;
+}
+.ws-auth-desc { font-size: 17px; line-height: 1.4; color: var(--ink-dim); margin-bottom: 28px; }
+.ws-auth-field { margin-bottom: 16px; }
+.ws-auth-field label {
+  display: block; font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 8px;
+}
+.ws-auth-field .input { width: 100%; height: 48px; font-size: 15px; }
+.ws-auth-pass { position: relative; }
+.ws-auth-pass .input { padding-right: 84px; }
+.ws-auth-show { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+.ws-auth-hint {
+  font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-faint); margin: 8px 0 0;
+}
+.ws-auth-submit { width: 100%; padding: 17px 18px; font-size: 12px; margin-top: 10px; }
+.ws-auth-switch {
+  margin-top: 22px; font-family: "IBM Plex Mono", monospace; font-size: 11px;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-dim);
+}
+.ws-auth-switch a { color: #111; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.ws-auth-footer {
+  display: flex; gap: 22px; padding: 14px 32px; border-top: 1px solid #111;
+  font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.ws-auth-footer a { color: #111; text-decoration: none; }
+.ws-auth-footer a:hover { text-decoration: underline; }
+
+.ws-auth-right {
+  background: #111; color: #fff; display: flex; flex-direction: column; padding: 22px 36px 0; overflow: hidden;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 25% 100%;
+}
+.ws-auth-right-top {
+  display: flex; justify-content: space-between; gap: 16px;
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: rgba(255, 255, 255, 0.75);
+}
+.ws-auth-right-body { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; max-width: 560px; padding: 40px 0; }
+.ws-auth-right-title {
+  font-size: clamp(40px, 3.8vw, 56px); line-height: 1; font-weight: 600;
+  letter-spacing: -0.03em; text-transform: uppercase; margin-bottom: 28px;
+}
+.ws-auth-demo { border: 1px solid #fff; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+.ws-auth-demo-bar { display: flex; justify-content: space-between; border-bottom: 1px solid #fff; }
+.ws-auth-demo-bar .name { background: #fff; color: #111; padding: 5px 10px; }
+.ws-auth-demo-bar .issues { background: var(--signal); color: #fff; padding: 5px 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.ws-auth-demo table { width: 100%; border-collapse: collapse; }
+.ws-auth-demo td { padding: 8px 10px; border-top: 1px solid rgba(255, 255, 255, 0.18); color: #fff; }
+.ws-auth-demo tr:first-child td { border-top: 0; }
+.ws-auth-demo td:first-child { width: 36px; color: rgba(255, 255, 255, 0.5); border-right: 1px solid rgba(255, 255, 255, 0.25); }
+.ws-auth-demo .is-space { text-decoration: underline dotted var(--signal); text-underline-offset: 4px; }
+.ws-auth-demo .is-missing { outline: 1.5px solid var(--signal); outline-offset: -1.5px; background: rgba(47, 75, 255, 0.25); }
+.ws-auth-demo tr.is-dup td {
+  color: rgba(255, 255, 255, 0.4); text-decoration: line-through;
+  background: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255, 255, 255, 0.07) 5px 6px);
+}
+.ws-auth-checks {
+  list-style: none; margin: 26px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px;
+  font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.ws-auth-checks li { display: flex; align-items: center; gap: 12px; }
+.ws-auth-checks li::before {
+  content: "✓"; flex: 0 0 auto; width: 18px; height: 18px; background: var(--signal); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
+}
+.ws-auth-right .ws-wordmark { margin-top: auto; padding-top: 40px; font-size: clamp(60px, 7.5vw, 120px); }
+
 /* ===== Responsive tối thiểu (demo khoá luận chạy trên máy tính) ===== */
+@media (max-width: 900px) {
+  .ws-auth { grid-template-columns: 1fr; }
+  .ws-auth-right { display: none; }
+}
 @media (max-width: 1040px) {
   .ws-megamenu { grid-template-columns: repeat(4, 240px); overflow-x: auto; }
 }
