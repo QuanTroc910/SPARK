@@ -309,7 +309,8 @@ function switchSection(section) {
   SECTIONS.forEach((name) => { $("section-" + name).hidden = name !== section; });
   // Viền màu nhấn (.is-current) cho pill của "vùng" đang mở: Product chứa 3
   // nhóm tool (Cần cấu hình / Convert / Free Tools), Guide và Class Noise là
-  // pill riêng. Trang chủ/Bảo mật/Riêng tư/Hồ sơ: không pill nào sáng.
+  // pill riêng; Home sáng khi ở trang chủ. Bảo mật/Riêng tư/Hồ sơ: không pill nào sáng.
+  $("ws-nav-home").classList.toggle("is-current", section === "home");
   $("ws-product-btn").classList.toggle("is-current", ["free-tools", "convert", "config"].includes(section));
   $("ws-nav-guide").classList.toggle("is-current", section === "guide");
   $("ws-nav-class").classList.toggle("is-current", section === "class-noise");
