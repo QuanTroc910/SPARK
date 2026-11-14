@@ -979,21 +979,23 @@ Object.keys(TOOLSEC).forEach((g) => {
 });
 
 /* ----- Panel "Xử lý tiếp": 3 danh mục, mọi mục đều bấm được ----- */
+// Ký hiệu (icon) của từng tool PHẢI GIỐNG HỆT ký hiệu ở menu "Product" trên header (workspace.html,
+// class ws-megamenu-icon) -- đơn sắc, cùng kiểu cho cả 3 nhóm. Sửa ký hiệu ở đâu thì sửa cả 2 nơi.
 const CONTINUE_GROUPS = [
   { key: "configure", label: "Cần cấu hình", g: "cf", attr: "data-config-tool", items: [
-    { icon: "📝", tool: "format-noise", sub: "Email · SĐT · ngày · số" },
-    { icon: "📏", tool: "out-of-range", sub: "Khai min / max" },
-    { icon: "📈", tool: "outlier", sub: "IQR · Z-score" },
-    { icon: "🧩", tool: "inconsistent-category", sub: "Về giá trị chuẩn" },
-    { icon: "🧮", tool: "missing-advanced", sub: "Mean · median · KNN · mode" },
-    { icon: "🔗", tool: "cross-rule", sub: "Mâu thuẫn giữa 2 cột" },
+    { icon: "@", tool: "format-noise", sub: "Email · SĐT · ngày · số" },
+    { icon: "[ ]", tool: "out-of-range", sub: "Khai min / max" },
+    { icon: "↯", tool: "outlier", sub: "IQR · Z-score" },
+    { icon: "≈", tool: "inconsistent-category", sub: "Về giá trị chuẩn" },
+    { icon: "∅", tool: "missing-advanced", sub: "Mean · median · KNN · mode" },
+    { icon: "⋈", tool: "cross-rule", sub: "Mâu thuẫn giữa 2 cột" },
   ] },
   { key: "convert", label: "Convert", g: "cv", attr: "data-convert-tool", items: [
-    { icon: "↔", tool: "delimiter" }, { icon: "{ }", tool: "csv-to-json" }, { icon: "{ }", tool: "json-to-csv" },
+    { icon: "⇄", tool: "delimiter" }, { icon: "{ }", tool: "csv-to-json" }, { icon: "{ }", tool: "json-to-csv" },
   ] },
   { key: "auto", label: "Tự động", g: "ft", attr: "data-tool", items: [
-    { icon: "🧬", tool: "remove-duplicates" }, { icon: "✂️", tool: "trim-whitespace" },
-    { icon: "🩹", tool: "fill-blanks" }, { icon: "🗑️", tool: "remove-empty-rows" },
+    { icon: "⧉", tool: "remove-duplicates" }, { icon: "⇥", tool: "trim-whitespace" },
+    { icon: "▦", tool: "fill-blanks" }, { icon: "☰", tool: "remove-empty-rows" },
   ] },
 ];
 function renderContinuePanel(g) {
