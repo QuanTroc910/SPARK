@@ -1149,3 +1149,13 @@ a.hm-tool:hover { background: #ebebe7; }
 #section-class-noise .method-grid.is-stacked .dir-num { margin-bottom: 12px; }
 #section-class-noise .stepper { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 900px) { .cf-row, .cf-row-3 { grid-template-columns: 1fr; } }
+
+/* ===== Danh sách dòng trùng (nút "Xem các dòng trùng" của Xoá dòng trùng) =====
+   Cột 1 = "Dòng" (số dòng gốc), cột 2 = "Kết quả" (Giữ / Xoá). Dòng bị xoá: chữ mờ + gạch ngang
+   + nền xám nhạt; dòng được giữ: chữ "Giữ" màu cobalt. Cột "Kết quả" luôn rõ chữ, không gạch. */
+.cyd-table tr.is-removed td { background: rgba(17, 17, 17, 0.045); color: var(--ink-faint); text-decoration: line-through; }
+.cyd-table tr.is-removed td:nth-child(2),
+.cyd-table tr.is-kept td:nth-child(2) { text-decoration: none; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.cyd-table tr.is-removed td:nth-child(2) { color: #111; }
+.cyd-table tr.is-kept td:nth-child(2) { color: var(--signal); }
+

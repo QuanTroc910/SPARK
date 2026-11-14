@@ -18,6 +18,7 @@ import uuid
 from functools import wraps
 from io import StringIO
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from flask import Flask, Response, jsonify, request, session
@@ -55,6 +56,7 @@ from attribute_noise.quick_tools import (
     QuickToolError,
     quick_fill_or_remove_blanks,
     quick_remove_duplicates,
+    preview_duplicate_rows,
     quick_remove_empty_rows,
     quick_trim_whitespace,
 )
@@ -1346,9 +1348,16 @@ def _delimiter_param(form, field_name: str, allow_auto: bool) -> str:
     return value
 
 
-def _csv_preview_rows(csv_text: str, delimiter: str, limit: int = 21) -> list:
-    """Đọc trước tối đa `limit` dòng đầu (mặc định 1 header + 20 dòng dữ liệu)
-    của 1 CSV text để trả cho FE hiện bảng xem trước -- tránh FE phải tự viết
+# Số dòng DỮ LIỆU tối đa hiện ở các bảng xem trước (Free Tools, Convert, Cần cấu
+# hình -- cả khung Đầu vào lẫn Kết quả). Phải KHỚP hằng số PREVIEW_ROWS trong
+# frontend/workspace.js (khung Đầu vào được trình duyệt tự cắt theo số đó).
+# Chỉ giới hạn việc HIỂN THỊ -- xử lý và file tải xuống luôn đủ toàn bộ dòng.
+PREVIEW_DATA_ROWS = 100
+
+
+def _csv_preview_rows(csv_text: str, delimiter: str, limit: int = PREVIEW_DATA_ROWS + 1) -> list:
+    """Đọc trước tối đa `limit` dòng đầu (mặc định 1 header + PREVIEW_DATA_ROWS dòng
+    dữ liệu) của 1 CSV text để trả cho FE hiện bảng xem trước -- tránh FE phải tự viết
     1 bộ phân tích CSV bằng JS (đúng quyết định kiến trúc đã chốt: mọi phân
     tích dữ liệu luôn làm ở backend thật, xem CLAUDE.md phần frontend/)."""
     reader = csv.reader(io.StringIO(csv_text), delimiter=delimiter)
@@ -1472,19 +1481,22 @@ def _read_df_for_noise_tool(req) -> pd.DataFrame:
     raise QuickToolError("Thiếu file hoặc nội dung dán tay")
 
 
-def _noise_tool_response(result_df: pd.DataFrame, stats: dict) -> Response:
+def _noise_tool_response(result_df: pd.DataFrame, stats: dict, extra: Optional[dict] = None) -> Response:
     """Đóng gói kết quả giống các route /api/convert/* (result_text để tải
-    về + preview_rows để FE hiện bảng), tái dùng _csv_preview_rows() đã có."""
+    về + preview_rows để FE hiện bảng), tái dùng _csv_preview_rows() đã có.
+    `extra` = các field riêng của từng tool, gộp thêm vào response (vd Xoá dòng
+    trùng gửi kèm `duplicate_preview`)."""
     buffer = StringIO()
     result_df.to_csv(buffer, index=False)
     result_text = buffer.getvalue()
-    return jsonify(
-        {
-            "result_text": result_text,
-            "stats": stats,
-            "preview_rows": _csv_preview_rows(result_text, ","),
-        }
-    )
+    payload = {
+        "result_text": result_text,
+        "stats": stats,
+        "preview_rows": _csv_preview_rows(result_text, ","),
+    }
+    if extra:
+        payload.update(extra)
+    return jsonify(payload)
 
 
 @app.route("/api/noise-tools/remove-duplicates", methods=["POST"])
@@ -1503,11 +1515,19 @@ def noise_tool_remove_duplicates():
         result_df, stats = quick_remove_duplicates(
             df, subset_columns, keep, ignore_case=ignore_case, ignore_whitespace=ignore_whitespace
         )
+        # Danh sách các dòng thuộc nhóm trùng (cho nút "Xem các dòng trùng" ở FE) --
+        # tính trên DỮ LIỆU ĐẦU VÀO với đúng cùng tuỳ chọn so sánh, nên khớp đúng
+        # tập dòng vừa bị xoá.
+        duplicate_preview = preview_duplicate_rows(
+            df, subset_columns, keep,
+            ignore_case=ignore_case, ignore_whitespace=ignore_whitespace,
+            limit=PREVIEW_DATA_ROWS,
+        )
     except QuickToolError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
-    return _noise_tool_response(result_df, stats)
+    return _noise_tool_response(result_df, stats, {"duplicate_preview": duplicate_preview})
 
 
 @app.route("/api/noise-tools/trim-whitespace", methods=["POST"])
@@ -1594,7 +1614,7 @@ CONFIG_TOOL_NOISE_TYPE = {
 CONFIG_TOOL_FLAGGED_LIMIT = 200  # số dòng bị gắn cờ tối đa trả về cho FE hiện bảng
 
 
-def _df_preview_rows(df: pd.DataFrame, limit: int = 20) -> list:
+def _df_preview_rows(df: pd.DataFrame, limit: int = PREVIEW_DATA_ROWS) -> list:
     """Header + tối đa `limit` dòng đầu của DataFrame, dạng list[list[str]]
     (cùng shape với _csv_preview_rows()) để FE hiện bảng xem trước."""
     rows = [[str(c) for c in df.columns]]
