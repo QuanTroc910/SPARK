@@ -149,7 +149,9 @@ const state = {
         colTypes: null, colState: "idle", colError: "", colSig: "", colSeq: 0, colPromise: null, colCounts: null, countsSig: "" },
   cv: { tool: "delimiter", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, lastResult: null },
   // cf thêm: columns/guessed đọc từ /api/noise-tools/inspect, detect = kết quả nhịp "Phát hiện".
-  cf: { tool: "out-of-range", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null },
+  cf: { tool: "out-of-range", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null,
+        // colSig = "chữ ký" đầu vào mà cột hiện có được đọc từ đó; pendingSig = đầu vào đang được đọc dở; colSeq = chống chạy chồng.
+        colSig: "", pendingSig: "", colSeq: 0 },
 };
 
 // ====== Đăng nhập / tạo tài khoản (bước 4) -- trang này TỰ lo, không đá về
@@ -319,6 +321,7 @@ function switchSection(section) {
   $("ws-nav-guide").classList.toggle("is-current", section === "guide");
   $("ws-nav-class").classList.toggle("is-current", section === "class-noise");
   if (section === "profile") renderProfile();
+  if (section === "config") refreshCfColumns(); // vào Cần cấu hình bằng cách nào cũng phải có đúng cột của đầu vào hiện tại
   // Đổi khối là thoát trạng thái "khách tự bấm Đăng nhập" (vd bấm "Về trang
   // chủ" trong form); khối cần đăng nhập thì applyAuthView() tự hiện form lại.
   authState.forceAuth = false;
@@ -893,6 +896,7 @@ function renderPipeStrips() {
     renderInputArea(g);
   });
   refreshFtColumnTypes(); // đầu vào nối tiếp đổi -> bảng kiểu cột của tool Sai định dạng cập nhật theo
+  refreshCfColumns(); // ... và danh sách cột của khối Cần cấu hình (nếu đang mở)
 }
 document.querySelectorAll(".pipe-new-file-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -908,9 +912,8 @@ document.querySelectorAll(".pipe-reset-btn").forEach((btn) => {
     p.currentKind = p.originalKind;
     p.steps = [];
     p.forceNewUpload = false;
-    renderPipeStrips();
+    renderPipeStrips(); // đã tự đọc lại cột của Cần cấu hình theo đầu vào gốc (refreshCfColumns)
     Object.keys(TOOLSEC).forEach(resetResult);
-    if (state.section === "config") cfInspect({ text: p.currentText }, p.originalLabel);
   });
 });
 // Ghi nhận 1 bước vừa xong: kết quả thành đầu vào kế tiếp của cả 3 nhóm.
@@ -1051,7 +1054,7 @@ function startChain(g, tool) {
   renderPipeStrips();
   const fromText = `📥 Đang dùng kết quả của bước trước (${state.pipe.steps.map((s) => s.label).join(" → ")}).`;
   setStatus($(TOOLSEC[g].status), fromText, "is-ok");
-  if (g === "cf") cfInspect({ text: state.pipe.currentText }, state.pipe.originalLabel, { keepPreview: true });
+  // (Cần cấu hình: renderPipeStrips() ở trên đã đọc cột của đầu vào nối tiếp, xem refreshCfColumns)
 }
 
 /* ----- Chọn tool (tab) + nội dung trang theo tool ----- */
@@ -1512,6 +1515,11 @@ const OPERATORS = ["<", "<=", ">", ">=", "==", "!="];
 // Đọc tên cột + kiểu đoán sẵn (+ xem trước) từ backend cho file/text hiện tại.
 async function cfInspect(source, label, opts) {
   opts = opts || {};
+  // sig = "chữ ký" của đầu vào hiện tại (xem cfInputSource). Chỉ lần gọi MỚI NHẤT (seq) được ghi kết quả; thành công thì
+  // state.cf.colSig nhớ các cột đang hiện được đọc từ đầu vào nào, để refreshCfColumns() biết khi nào cần đọc lại.
+  const seq = ++state.cf.colSeq;
+  const sig = (cfInputSource() || {}).sig || "";
+  state.cf.pendingSig = sig;
   const fd = new FormData();
   if (source.file) fd.append("file", source.file);
   else fd.append("text", source.text || "");
@@ -1520,10 +1528,16 @@ async function cfInspect(source, label, opts) {
     response = await fetch("/api/noise-tools/inspect", { method: "POST", body: fd });
     data = await response.json();
   } catch (err) {
-    setError($("cf-error"), "Không gọi được backend để đọc cột.");
+    if (seq === state.cf.colSeq) {
+      state.cf.pendingSig = "";
+      setError($("cf-error"), "Không gọi được backend để đọc cột.");
+    }
     return;
   }
+  if (seq !== state.cf.colSeq) return; // đã có lần đọc mới hơn
+  state.cf.pendingSig = "";
   if (!response.ok) {
+    state.cf.colSig = "";
     state.cf.columns = [];
     state.cf.guessed = {};
     renderCfOptions();
@@ -1531,6 +1545,7 @@ async function cfInspect(source, label, opts) {
     else setError($("cf-error"), data.error || "Không đọc được nội dung.");
     return;
   }
+  state.cf.colSig = sig;
   state.cf.columns = data.columns;
   state.cf.guessed = data.guessed_dtypes || {};
   renderCfOptions();
@@ -1538,6 +1553,38 @@ async function cfInspect(source, label, opts) {
     const note = data.row_count > PREVIEW_ROWS ? `Xem trước ${PREVIEW_ROWS}/${data.row_count} dòng đầu · ${data.columns.length} cột đã đọc được.` : `${data.columns.length} cột đã đọc được.`;
     showRawPreview("cf", label, tableDims(data.row_count, data.columns.length), data.preview_rows, note);
   }
+}
+// Đầu vào hiện tại của khối Cần cấu hình, cùng thứ tự ưu tiên với collectInput(): kết quả bước trước > file > text dán.
+// sig = "chữ ký" đầu vào (đổi khi đầu vào đổi); pipe = true nếu đang nối tiếp từ bước trước.
+function cfInputSource() {
+  const st = state.cf;
+  const p = state.pipe;
+  if (pipeUsable("cf")) return { text: p.currentText, pipe: true, label: p.originalLabel, sig: `pipe:${p.steps.length}:${p.currentText.length}:${hashText(p.currentText)}` };
+  if (st.inputMode === "file") {
+    const f = st.selectedFile;
+    return f ? { file: f, pipe: false, label: f.name, sig: `file:${f.name}:${f.size}:${f.lastModified}` } : null;
+  }
+  const text = $("cf-paste-input").value;
+  return text.trim() ? { text, pipe: false, label: "văn bản dán tay", sig: `text:${text.length}:${hashText(text)}` } : null;
+}
+// Bảo đảm danh sách cột của Cần cấu hình KHỚP đầu vào đang hiện ở khung 01. Gọi mỗi khi vào khối và mỗi khi chuỗi nối tiếp đổi.
+// Lỗi cũ nó sửa: vào Cần cấu hình bằng menu Product / chân trang (không qua bảng "Xử lý tiếp bằng") lúc đang có chuỗi thì
+// khung 01 hiện dữ liệu của chuỗi nhưng ô chọn cột rỗng, hoặc còn cột của file cũ.
+function refreshCfColumns() {
+  if (state.section !== "config") return;
+  const src = cfInputSource();
+  if (!src) {
+    // Không còn đầu vào nào (vd bấm "Tải file khác") -> không để lại cột của đầu vào cũ.
+    if (state.cf.colSig) {
+      state.cf.colSig = "";
+      state.cf.columns = [];
+      state.cf.guessed = {};
+      renderCfOptions();
+    }
+    return;
+  }
+  if (src.sig === state.cf.colSig || src.sig === state.cf.pendingSig) return;
+  cfInspect(src.file ? { file: src.file } : { text: src.text }, src.label, { keepPreview: !!src.pipe });
 }
 // Dán text: đọc cột sau khi người dùng ngừng gõ ~600ms.
 let cfPasteTimer = null;
