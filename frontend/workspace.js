@@ -815,6 +815,7 @@ function hideRawPreview(g) {
   $(TOOLSEC[g].fileInput).value = "";
   renderInputArea(g);
   if (g === "ft") refreshFtColumns();
+  if (g === "cf") refreshCfColumns(); // bỏ file -> dropdown chọn cột không được còn cột của file cũ
 }
 async function handleFileSelected(g, file) {
   if (g === "ft") clearListView(); // đầu vào đổi -> danh sách của lần chạy trước không còn đúng
@@ -880,10 +881,22 @@ function renderPipeStrips() {
   refreshFtColumns(); // đầu vào nối tiếp đổi -> bảng cột của tool Sai định dạng / Ô trống cập nhật theo
   refreshCfColumns(); // ... và danh sách cột của khối Cần cấu hình (nếu đang mở)
 }
+// Quên file đang chọn của nhóm g: ô kéo-thả về trống như chưa chọn gì. Trước đây "Tải file khác" chỉ ẩn bản xem trước nhưng VẪN giữ
+// st.selectedFile của file cũ, nên (1) hàm đọc cột đọc lại đúng file cũ -> bảng cột bên dưới hiện cột cũ, (2) bấm Chạy khi ô kéo-thả
+// đang trống vẫn âm thầm xử lý lại file cũ rồi nối vào chuỗi cũ.
+function forgetSelectedFile(g) {
+  const st = state[g];
+  st.rawPreviewActive = false;
+  st.filePreview = null;
+  st.selectedFile = null;
+  $(TOOLSEC[g].fileInput).value = "";
+  if (g === "ft") clearListView(); // danh sách "Xem ..." của lần chạy trước thuộc file cũ; đang xem nó thì khung 01 kẹt ở danh sách
+}
 document.querySelectorAll(".pipe-new-file-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     state.pipe.forceNewUpload = true;
-    Object.keys(TOOLSEC).forEach((g) => { state[g].rawPreviewActive = false; });
+    // Chuỗi nối tiếp dùng chung 3 nhóm nên file cũ phải bị quên ở CẢ 3 nhóm, không chỉ nhóm đang mở.
+    Object.keys(TOOLSEC).forEach(forgetSelectedFile);
     renderPipeStrips();
   });
 });
