@@ -75,6 +75,10 @@ class ColumnNoiseConfig:
     # threshold: hệ số nhân với IQR (thường dùng 1.5) hoặc số độ lệch chuẩn (zscore
     # thường dùng 3.0) để xác định biên trên/dưới của giá trị "bình thường".
     outlier_threshold: float = 1.5
+    # Kiểm NHIỀU phương pháp CÙNG LÚC trên 1 cột (vd IQR + Z-score): danh sách (phương pháp, ngưỡng). Ô bị gắn cờ nếu bất thường
+    # theo BẤT KỲ phương pháp nào (hợp); khi "kéo về biên" thì kéo về khoảng CHUNG của mọi phương pháp (giao). None = chỉ dùng đúng
+    # 1 cặp outlier_method / outlier_threshold ở trên (cách khai cũ, kết quả giữ nguyên) -- đọc qua get_outlier_rules().
+    outlier_rules: Optional[list[tuple[str, float]]] = None
 
     # --- Tham số riêng cho WHITESPACE_NOISE ---
     # Regex mô tả các ký tự KHÔNG được phép xuất hiện trong cột (vd r"[#@$%]").
@@ -85,6 +89,13 @@ class ColumnNoiseConfig:
     missing_placeholders: list[str] = field(
         default_factory=lambda: list(DEFAULT_MISSING_PLACEHOLDERS)
     )
+
+    def get_outlier_rules(self) -> list[tuple[str, float]]:
+        """Danh sách (phương pháp, ngưỡng) mà detect/cap outlier phải dùng: `outlier_rules` nếu có khai, không thì đúng 1 cặp
+        outlier_method / outlier_threshold (cách khai cũ)."""
+        if self.outlier_rules:
+            return list(self.outlier_rules)
+        return [(self.outlier_method, self.outlier_threshold)]
 
 
 @dataclass

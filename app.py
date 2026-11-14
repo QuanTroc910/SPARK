@@ -16,6 +16,7 @@ import os
 import re
 import threading
 import uuid
+from dataclasses import replace
 from functools import wraps
 from io import StringIO
 from pathlib import Path
@@ -46,7 +47,7 @@ from attribute_noise.config import (
     RuleValueType,
 )
 from attribute_noise.cross_field_rules import FormulaError
-from attribute_noise.detectors import INTEGER_RE
+from attribute_noise.detectors import INTEGER_RE, detect_outlier
 from attribute_noise.pipeline import (
     NoiseFinding,
     detect_noise,
@@ -505,6 +506,8 @@ def _config_from_json(item: dict) -> ColumnNoiseConfig:
         valid_categories=item.get("valid_categories"),
         outlier_method=item.get("outlier_method", "iqr"),
         outlier_threshold=item.get("outlier_threshold", 1.5),
+        # Nhiều phương pháp outlier trên 1 cột (danh sách (phương pháp, ngưỡng)); đã được _checked_outlier_rules() kiểm ở route tool.
+        outlier_rules=item.get("outlier_rules"),
         category_similarity_threshold=item.get("category_similarity_threshold", 0.85),
         disallowed_chars_pattern=item.get("disallowed_chars_pattern"),
     )
@@ -1773,10 +1776,41 @@ def _run_config_tool_detect(df: pd.DataFrame, cfg: dict):
         params = entry.get("params") or {}
         # Bỏ các tham số để trống ("" / None) để dataclass dùng giá trị mặc định.
         params = {k: v for k, v in params.items() if v not in ("", None)}
+        if noise_type == NoiseType.OUTLIER and "outlier_rules" in params:
+            params["outlier_rules"] = _checked_outlier_rules(column, params["outlier_rules"])
+        else:
+            params.pop("outlier_rules", None)  # chỉ tool Giá trị bất thường dùng danh sách phương pháp
         item = {"column": column, "dtype": entry.get("dtype") or "text", "noise_types": [noise_type.value], **params}
         column_configs.append(_config_from_json(item))
     findings = detect_noise(df, column_configs)
     return column_configs, [], findings, noise_type.value, (column_configs[0].column if len(column_configs) == 1 else None)
+
+
+OUTLIER_METHOD_LABELS = {"iqr": "IQR", "zscore": "Z-score"}
+
+
+def _checked_outlier_rules(column: str, raw) -> list[tuple[str, float]]:
+    """Kiểm + đổi danh sách phương pháp outlier của 1 cột (FE gửi [{method, threshold}, ...]) thành list (phương pháp, ngưỡng).
+    Phương pháp chỉ là "iqr" / "zscore", mỗi phương pháp khai tối đa 1 lần (2 ngưỡng IQR khác nhau trên cùng 1 cột không có
+    nghĩa gì thêm), ngưỡng phải là số hữu hạn lớn hơn 0 (ngưỡng <= 0 làm gần như mọi ô thành outlier)."""
+    if not isinstance(raw, list) or not raw:
+        raise QuickToolError(f"Cột '{column}': chọn ít nhất 1 phương pháp (IQR hoặc Z-score)")
+    rules: list[tuple[str, float]] = []
+    seen = set()
+    for entry in raw:
+        method = entry.get("method") if isinstance(entry, dict) else None
+        if method not in OUTLIER_METHOD_LABELS:
+            raise QuickToolError(f"Cột '{column}': phương pháp phải là 'iqr' hoặc 'zscore', nhận được: {method}")
+        label = OUTLIER_METHOD_LABELS[method]
+        if method in seen:
+            raise QuickToolError(f"Cột '{column}': phương pháp {label} bị khai nhiều lần")
+        threshold = entry.get("threshold")
+        # bool là con của int trong Python (True == 1) nên phải loại riêng, không để "true" lọt thành ngưỡng 1.
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not math.isfinite(threshold) or threshold <= 0:
+            raise QuickToolError(f"Cột '{column}': ngưỡng của {label} phải là số lớn hơn 0, nhận được: {threshold}")
+        seen.add(method)
+        rules.append((method, float(threshold)))
+    return rules
 
 
 def _config_tool_actions(column_configs, noise_key) -> list[str]:
@@ -1858,12 +1892,24 @@ def noise_tool_configured():
             per_column = []
             for col_cfg in column_configs:
                 col_findings = findings_by_column.get(col_cfg.column, [])
-                per_column.append({
+                entry = {
                     "column": col_cfg.column,
                     "findings_count": len(col_findings),
                     "flagged_rows_count": len({int(f.row_index) for f in col_findings}),
                     "available_actions": _config_tool_actions([col_cfg], noise_key),
-                })
+                }
+                rules = col_cfg.get_outlier_rules() if noise_key == NoiseType.OUTLIER.value else []
+                if len(rules) >= 2:
+                    # Cột kiểm nhiều phương pháp: tách số ô mỗi phương pháp bắt được (tổng findings_count là HỢP nên không bằng
+                    # tổng các phương pháp) + số ô cả 2 cùng bắt, để người dùng thấy mỗi phương pháp đóng góp bao nhiêu.
+                    masks = [detect_outlier(df[col_cfg.column], replace(col_cfg, outlier_rules=[rule])) for rule in rules]
+                    entry["methods"] = [
+                        {"method": method, "threshold": threshold, "findings_count": int(mask.sum())}
+                        for (method, threshold), mask in zip(rules, masks)
+                    ]
+                    if len(rules) == 2:
+                        entry["both_count"] = int((masks[0] & masks[1]).sum())
+                per_column.append(entry)
             payload = {
                     "mode": "detect",
                     "total_rows": int(len(df)),

@@ -22,6 +22,7 @@ from typing import Optional
 import pandas as pd
 
 from .config import DEFAULT_MISSING_PLACEHOLDERS, ColumnDType, ColumnNoiseConfig, NoiseType
+from .detectors import outlier_bounds
 from .pipeline import NoiseFinding
 
 
@@ -248,7 +249,9 @@ def _resolve_cap_bounds(
     """Tính biên dưới/trên để CAP_TO_RANGE -- với out_of_range dùng thẳng
     min_value/max_value đã khai; với outlier phải TÍNH LẠI đúng công thức
     IQR/zscore (cùng method/threshold) như lúc detect_outlier(), để cap đúng
-    ngay tại biên đã dùng để báo lỗi."""
+    ngay tại biên đã dùng để báo lỗi (dùng chung outlier_bounds()).
+    Cột kiểm nhiều phương pháp: ô bị gắn cờ khi ra ngoài khoảng của BẤT KỲ phương pháp nào nên vùng "bình thường" là GIAO của
+    các khoảng (biên dưới = lớn nhất trong các biên dưới, biên trên = nhỏ nhất trong các biên trên)."""
     if noise_type == NoiseType.OUT_OF_RANGE:
         lower = cfg.min_value if cfg and cfg.min_value is not None else float("-inf")
         upper = cfg.max_value if cfg and cfg.max_value is not None else float("inf")
@@ -256,16 +259,14 @@ def _resolve_cap_bounds(
 
     numeric = pd.to_numeric(df[column], errors="coerce")
     valid = numeric.dropna()
-    threshold = cfg.outlier_threshold if cfg else 1.5
-    if cfg and cfg.outlier_method == "zscore":
-        mean, std = valid.mean(), valid.std()
-        if std == 0:
-            return float("-inf"), float("inf")
-        return mean - threshold * std, mean + threshold * std
-
-    q1, q3 = valid.quantile(0.25), valid.quantile(0.75)
-    iqr = q3 - q1
-    return q1 - threshold * iqr, q3 + threshold * iqr
+    rules = cfg.get_outlier_rules() if cfg else [("iqr", 1.5)]
+    lower, upper = float("-inf"), float("inf")
+    for method, threshold in rules:
+        bounds = outlier_bounds(valid, method, threshold)
+        if bounds is None:  # z-score suy biến (mọi giá trị giống hệt nhau): không chặn gì
+            continue
+        lower, upper = max(lower, bounds[0]), min(upper, bounds[1])
+    return lower, upper
 
 
 def apply_handling(

@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from difflib import SequenceMatcher
+from typing import Optional
 
 import pandas as pd
 
@@ -99,15 +100,35 @@ def detect_out_of_range(series: pd.Series, cfg: ColumnNoiseConfig) -> pd.Series:
     return numeric.notna() & ((numeric < lower_bound) | (numeric > upper_bound))
 
 
+def outlier_bounds(valid_numeric: pd.Series, method: str, threshold: float) -> Optional[tuple[float, float]]:
+    """Biên [dưới, trên] của vùng "bình thường" theo 1 phương pháp, tính từ các giá trị số hợp lệ của cột.
+    Trả None nếu phương pháp suy biến (z-score mà mọi giá trị giống hệt nhau -> độ lệch chuẩn 0, không có biên có nghĩa).
+
+    Dùng CHUNG cho detect_outlier() và cho bước "kéo về biên" (attribute_handling._resolve_cap_bounds) để 2 nơi luôn ra cùng
+    1 công thức -- cap đúng ngay tại biên đã dùng để báo lỗi."""
+    if method == "zscore":
+        mean = valid_numeric.mean()
+        std = valid_numeric.std()
+        if std == 0:
+            return None
+        return mean - threshold * std, mean + threshold * std
+    # mặc định dùng "iqr"
+    q1 = valid_numeric.quantile(0.25)
+    q3 = valid_numeric.quantile(0.75)
+    iqr = q3 - q1
+    return q1 - threshold * iqr, q3 + threshold * iqr
+
+
 def detect_outlier(series: pd.Series, cfg: ColumnNoiseConfig) -> pd.Series:
     """Loại noise 4: OUTLIER (giá trị đúng định dạng, trong khoảng hợp lệ,
     nhưng lệch bất thường so với PHÂN BỐ chung của cả cột).
 
-    Hỗ trợ 2 phương pháp qua cfg.outlier_method:
-      - "iqr": outlier nếu nằm ngoài [Q1 - k*IQR, Q3 + k*IQR], k = outlier_threshold
+    Hỗ trợ 2 phương pháp (xem outlier_bounds()):
+      - "iqr": outlier nếu nằm ngoài [Q1 - k*IQR, Q3 + k*IQR], k = ngưỡng
                (thường dùng k = 1.5). Ưu điểm: không giả định phân phối chuẩn.
       - "zscore": outlier nếu |giá trị - mean| > k * độ lệch chuẩn (k thường = 3).
                Chỉ chính xác khi dữ liệu gần với phân phối chuẩn.
+    Cột có thể kiểm NHIỀU phương pháp cùng lúc (cfg.get_outlier_rules()): ô bị gắn cờ nếu bất thường theo BẤT KỲ phương pháp nào.
     """
     numeric = series.astype(str).apply(_to_numeric_or_nan)
     valid_numeric = numeric.dropna()
@@ -116,21 +137,14 @@ def detect_outlier(series: pd.Series, cfg: ColumnNoiseConfig) -> pd.Series:
     if len(valid_numeric) < 4:
         return pd.Series(False, index=series.index)
 
-    if cfg.outlier_method == "zscore":
-        mean = valid_numeric.mean()
-        std = valid_numeric.std()
-        if std == 0:  # mọi giá trị giống hệt nhau -> không có outlier
-            return pd.Series(False, index=series.index)
-        lower_bound = mean - cfg.outlier_threshold * std
-        upper_bound = mean + cfg.outlier_threshold * std
-    else:  # mặc định dùng "iqr"
-        q1 = valid_numeric.quantile(0.25)
-        q3 = valid_numeric.quantile(0.75)
-        iqr = q3 - q1
-        lower_bound = q1 - cfg.outlier_threshold * iqr
-        upper_bound = q3 + cfg.outlier_threshold * iqr
-
-    return numeric.notna() & ((numeric < lower_bound) | (numeric > upper_bound))
+    flagged = pd.Series(False, index=series.index)
+    for method, threshold in cfg.get_outlier_rules():
+        bounds = outlier_bounds(valid_numeric, method, threshold)
+        if bounds is None:  # phương pháp suy biến (z-score, mọi giá trị giống hệt nhau) -> không có outlier theo phương pháp này
+            continue
+        lower_bound, upper_bound = bounds
+        flagged |= numeric.notna() & ((numeric < lower_bound) | (numeric > upper_bound))
+    return flagged
 
 
 def detect_inconsistent_category(series: pd.Series, cfg: ColumnNoiseConfig) -> pd.Series:
