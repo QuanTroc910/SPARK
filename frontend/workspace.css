@@ -807,7 +807,7 @@ body.ws-guest .ws-only-user { display: none !important; }
 }
 .hm-number small { display: block; margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--ink-faint); }
 
-/* ===== TRANG CHỦ: lưới tool (5 Free Tools + 3 Convert + 1 ô đen) ===== */
+/* ===== TRANG CHỦ: lưới tool (4 Free Tools + 3 Convert + 1 ô đen = 8 ô, 4 cột x 2 hàng) ===== */
 .hm-tools-grid {
   display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 28px;
   border-top: 1px solid #111; border-left: 1px solid #111;
@@ -825,7 +825,7 @@ a.hm-tool:hover { background: #ebebe7; }
 .hm-tool b { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px; }
 .hm-tool small { font-size: 12.5px; line-height: 1.5; color: var(--ink-dim); flex: 1 1 auto; }
 .hm-tool i { position: absolute; right: 18px; bottom: 16px; font-style: normal; font-size: 18px; color: var(--signal); }
-.hm-tool.is-dark { background: #111; color: #fff; grid-column: 1 / -1; min-height: 130px; } /* trải hết hàng cuối khi lưới có 9 ô (5 Free Tools + 3 Convert + ô đen) */
+.hm-tool.is-dark { background: #111; color: #fff; }
 .hm-tool.is-dark .hm-tool-kind { color: rgba(255, 255, 255, 0.6); }
 .hm-tool.is-dark small { color: rgba(255, 255, 255, 0.75); }
 .hm-tool.is-dark i { color: var(--lime); }
@@ -1219,5 +1219,39 @@ a.hm-tool:hover { background: #ebebe7; }
   .ft-coltype-row { grid-template-columns: minmax(0, 1fr) 150px 72px; }
   .ft-coltype-fmt { grid-column: 1 / 3; grid-row: 2; }
   .ft-coltype-count { grid-column: 3; }
+}
+
+/* ===== Ô trống: bảng "Ô trống từng cột" (dùng lại khung .ft-coltypes + .ft-coltype-row ở trên) =====
+   Mỗi cột CÓ ô trống 1 mục: tên cột + số ô trống | kiểu | cách xử lý | ô giá trị cố định (chỉ hiện khi chọn "Điền giá trị cố
+   định"). Mục đã chọn cách xử lý khác "Giữ nguyên" có vạch cobalt bên trái (.is-edited, dùng chung với bảng kiểu cột).
+   Khung bên trái chỉ rộng ~350-640px tuỳ màn hình (lưới 5fr 7fr) nên bố cục TỰ ĐỔI theo bề rộng của chính khung (container
+   query, không theo bề rộng màn hình): hẹp = tên + số ô trống | kiểu và cách xử lý chia đôi hàng | ô giá trị; từ 560px = tên |
+   kiểu | cách xử lý nằm 1 hàng, ô giá trị xuống hàng dưới. Trình duyệt chưa hiểu container query vẫn dùng bố cục hẹp (an toàn).
+   Phải nằm SAU các luật .ft-coltype-* để đè đúng. */
+.ft-blanks { container: ftblank / inline-size; }
+.ft-blank-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); row-gap: 8px; padding-top: 9px; padding-bottom: 9px; }
+.ft-blank-name { grid-column: 1 / 3; grid-row: 1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; min-width: 0; }
+.ft-blank-count {
+  flex-shrink: 0; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  line-height: 1.3; color: var(--signal);
+}
+/* Ghi chú "cột trống hoàn toàn": xuống dòng riêng dưới tên + số ô trống. */
+.ft-blank-whole { flex-basis: 100%; font-size: 11.5px; line-height: 1.3; color: var(--ink-dim); }
+.ft-blank-dtype, .ft-blank-action, .ft-blank-fixed { height: 34px; padding: 0 10px; font-size: 13px; }
+.ft-blank-dtype { grid-column: 1; grid-row: 2; }
+.ft-blank-action { grid-column: 2; grid-row: 2; }
+.ft-blank-fixed { grid-column: 1 / 3; grid-row: 3; }
+@container ftblank (min-width: 560px) {
+  .ft-blank-row { grid-template-columns: minmax(0, 1fr) 132px 214px; }
+  .ft-blank-name { grid-column: 1; flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: center; gap: 2px; }
+  .ft-blank-whole { flex-basis: auto; }
+  .ft-blank-dtype { grid-column: 2; grid-row: 1; }
+  .ft-blank-action { grid-column: 3; grid-row: 1; }
+  .ft-blank-fixed { grid-column: 1 / 4; grid-row: 2; }
+}
+/* Điện thoại: thanh tiêu đề bảng chỉ còn tên + nút Đặt lại (bỏ dòng "N cột có ô trống" cho đỡ chật). */
+@media (max-width: 640px) {
+  .ft-blanks .ft-coltypes-meta { display: none; }
+  .ft-blanks .ft-coltypes-bar .btn { margin-left: auto; }
 }
 

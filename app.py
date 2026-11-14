@@ -56,14 +56,15 @@ from attribute_noise.pipeline import (
 from attribute_noise.quick_tools import (
     QuickToolError,
     auto_column_types,
+    blank_column_summary,
     find_format_errors,
-    quick_fill_or_remove_blanks,
+    quick_handle_blanks,
     quick_remove_duplicates,
+    preview_blank_changes,
     preview_duplicate_rows,
     preview_format_errors,
     preview_trim_changes,
     quick_fix_format_noise,
-    quick_remove_empty_rows,
     quick_trim_whitespace,
 )
 from class_noise.categorical_encoding import one_hot_encode_columns
@@ -1562,47 +1563,35 @@ def noise_tool_trim_whitespace():
     return _noise_tool_response(result_df, stats, {"trim_preview": trim_preview})
 
 
-@app.route("/api/noise-tools/fill-blanks", methods=["POST"])
+@app.route("/api/noise-tools/blanks", methods=["POST"])
 @login_required
-def noise_tool_fill_blanks():
-    """Free Tool 3: Điền/xoá ô trống ở ĐÚNG 1 cột người dùng tự gõ tên.
-    `action`: "fill_down" (MỚI, điền theo giá trị phía trên) / "fixed_value" /
-    "remove_row" -- không cần đọc tham số nào thêm ở đây, quick_tools.py tự
-    dispatch theo đúng chuỗi action gửi lên."""
+def noise_tool_blanks():
+    """Free Tool 3: Ô trống -- GỘP 3 tool cũ (Xoá dòng trống + Điền/xoá ô trống + Thiếu giá trị nâng cao). Field:
+    `column_actions` (JSON {cột: {dtype, action, fixed_value}}, bỏ trống = không đụng cột nào), `remove_empty_rows`
+    (mặc định true: xoá dòng mà MỌI cột đều trống), `remove_empty_columns` (mặc định false). Thứ tự xử lý và các cách xử lý
+    hợp lệ theo kiểu cột: xem quick_tools.py (quick_handle_blanks)."""
     try:
         df = _read_df_for_noise_tool(request)
-        column = request.form.get("column", "").strip()
-        if not column:
-            raise QuickToolError("Thiếu tên cột cần xử lý")
-        action = request.form.get("action", "")
-        fixed_value = request.form.get("fixed_value")
-        result_df, stats = quick_fill_or_remove_blanks(df, column, action, fixed_value)
-    except QuickToolError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except Exception as exc:
-        return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
-    return _noise_tool_response(result_df, stats)
-
-
-@app.route("/api/noise-tools/remove-empty-rows", methods=["POST"])
-@login_required
-def noise_tool_remove_empty_rows():
-    """Free Tool 4: Xoá dòng trống hoàn toàn (MỌI cột đều thiếu) -- loại
-    noise cấp dòng MỚI, chưa có detector riêng ở luồng Attribute Noise đầy
-    đủ (khác duplicate_row, cũng cấp dòng nhưng so sánh GIỮA các dòng chứ
-    không xét 1 dòng tự nó trống hay không). `also_remove_empty_columns`
-    (MỚI) xoá thêm cột nào CÓ MỌI DÒNG đều thiếu, sau khi đã xoá dòng."""
-    try:
-        df = _read_df_for_noise_tool(request)
-        also_remove_empty_columns = _as_bool(request.form.get("also_remove_empty_columns", "false"))
-        result_df, stats = quick_remove_empty_rows(
-            df, also_remove_empty_columns=also_remove_empty_columns
+        raw = request.form.get("column_actions", "").strip()
+        column_actions = {}
+        if raw:
+            try:
+                column_actions = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise QuickToolError(f"column_actions không phải JSON hợp lệ: {exc}")
+            if not isinstance(column_actions, dict):
+                raise QuickToolError("column_actions phải là object {tên cột: {dtype, action, fixed_value}}")
+        remove_empty_rows = _as_bool(request.form.get("remove_empty_rows", "true"))
+        remove_empty_columns = _as_bool(request.form.get("remove_empty_columns", "false"))
+        result_df, stats, outcome = quick_handle_blanks(
+            df, column_actions, remove_empty_rows=remove_empty_rows, remove_empty_columns=remove_empty_columns
         )
+        blank_preview = preview_blank_changes(df, outcome, limit=PREVIEW_DATA_ROWS)
     except QuickToolError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
-    return _noise_tool_response(result_df, stats)
+    return _noise_tool_response(result_df, stats, {"blank_preview": blank_preview})
 
 
 @app.route("/api/noise-tools/format-noise", methods=["POST"])
@@ -1636,9 +1625,10 @@ def noise_tool_format_noise():
 
 
 # ===========================================================================
-# TOOL "CẦN CẤU HÌNH" (5 tool, giao diện Denoise): Ngoài khoảng / Giá trị
-# bất thường / Không nhất quán / Thiếu giá trị nâng cao / Rule liên cột. ("Sai
-# định dạng" đã chuyển sang nhóm Tự động -- route /api/noise-tools/format-noise.) Vận hành GIỐNG 4 Free Tools ở trên (không file_id, xong
+# TOOL "CẦN CẤU HÌNH" (4 tool, giao diện Denoise): Ngoài khoảng / Giá trị
+# bất thường / Không nhất quán / Rule liên cột. ("Sai định dạng" và "Thiếu giá
+# trị nâng cao" đã chuyển sang nhóm Tự động -- route /api/noise-tools/format-noise
+# và /api/noise-tools/blanks.) Vận hành GIỐNG 4 Free Tools ở trên (không file_id, xong
 # trong 1 request, @login_required) nhưng KHÁC ở chỗ cần người dùng khai cột
 # + tham số, nên chia 2 nhịp: mode="detect" (chỉ phát hiện, trả các dòng bị
 # gắn cờ + danh sách cách xử lý hợp lệ) rồi mode="apply" (phát hiện lại trên
@@ -1650,7 +1640,6 @@ CONFIG_TOOL_NOISE_TYPE = {
     "out-of-range": NoiseType.OUT_OF_RANGE,
     "outlier": NoiseType.OUTLIER,
     "inconsistent-category": NoiseType.INCONSISTENT_CATEGORY,
-    "missing-advanced": NoiseType.MISSING_VALUE,
 }
 CONFIG_TOOL_FLAGGED_LIMIT = 200  # số dòng bị gắn cờ tối đa trả về cho FE hiện bảng
 
@@ -1677,8 +1666,11 @@ def noise_tool_inspect():
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": f"Không đọc được file: {exc}"}), 400
+    # Chỉ khi giao diện hỏi (tool Ô trống) mới đếm ô trống từng cột -- phải quét hết file nên không làm cho mọi lần đọc cột.
+    blanks_info = blank_column_summary(df) if _as_bool(request.form.get("include_blanks", "false")) else {}
     return jsonify(
         {
+            **blanks_info,
             "columns": [str(c) for c in df.columns],
             "guessed_dtypes": {str(c): guess_column_dtype(df[c]) for c in df.columns},
             # Khuôn ngày đoán sẵn cho các cột được đoán là "date" (tool Sai định dạng dùng để điền sẵn ô khuôn ngày).

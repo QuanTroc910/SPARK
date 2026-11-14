@@ -126,7 +126,7 @@ function wireInputToggle(toggleEl, dropzoneEl, pasteEl, onModeChange) {
 
 // Danh sách khối trong <main>, đúng thứ tự xuất hiện. 4 khối đầu là trang
 // CÔNG KHAI: chưa đăng nhập vẫn xem được. 5 khối sau cần đăng nhập (config =
-// 5 tool cần cấu hình, class-noise = 4 bước ở workspace-flow.js, profile = hồ
+// 4 tool cần cấu hình, class-noise = 4 bước ở workspace-flow.js, profile = hồ
 // sơ, free-tools, convert).
 const SECTIONS = ["home", "guide", "security", "privacy", "config", "class-noise", "profile", "free-tools", "convert"];
 const PUBLIC_SECTIONS = new Set(["home", "guide", "security", "privacy"]);
@@ -146,7 +146,10 @@ const state = {
         // Tool Sai định dạng: bảng kiểu dữ liệu từng cột. colTypes = [{name, guessed, guessedFmt, dtype, dateFormat}] (null = chưa có);
         // colState = idle|loading|ready|error; colSig = "chữ ký" đầu vào đã đọc cột (tránh đọc lại khi đầu vào không đổi);
         // colSeq/colPromise = chống chạy chồng; colCounts = {cột: số ô sai} của lần Chạy gần nhất (countsSig = chữ ký đầu vào lúc đó).
-        colTypes: null, colState: "idle", colError: "", colSig: "", colSeq: 0, colPromise: null, colCounts: null, countsSig: "" },
+        colTypes: null, colState: "idle", colError: "", colSig: "", colSeq: 0, colPromise: null, colCounts: null, countsSig: "",
+        // Tool Ô trống: bảng các cột CÓ ô trống. blankCols = [{name, blanks, guessed, dtype, action, fixedValue}] (null = chưa có);
+        // blankInfo = {empty_row_count, empty_columns, blank_actions} từ backend; blankState/blankSig/blankSeq/blankPromise như colXxx ở trên.
+        blankCols: null, blankInfo: null, blankState: "idle", blankError: "", blankSig: "", blankSeq: 0, blankPromise: null },
   cv: { tool: "delimiter", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, lastResult: null },
   // cf thêm: columns/guessed đọc từ /api/noise-tools/inspect, detect = kết quả nhịp "Phát hiện".
   cf: { tool: "out-of-range", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null,
@@ -504,8 +507,7 @@ function PRIVACY_COLUMN() {
 const TOOL_TAB_LABEL = {
   "remove-duplicates": "Xoá dòng trùng",
   "trim-whitespace": "Cắt khoảng trắng",
-  "fill-blanks": "Điền/xoá ô trống",
-  "remove-empty-rows": "Xoá dòng trống",
+  "blanks": "Ô trống",
   "format-noise": "Sai định dạng",
 };
 const CV_TAB_LABEL = { delimiter: "Đổi delimiter CSV", "csv-to-json": "CSV → JSON", "json-to-csv": "JSON → CSV" };
@@ -513,7 +515,6 @@ const CF_TAB_LABEL = {
   "out-of-range": "Ngoài khoảng",
   outlier: "Giá trị bất thường",
   "inconsistent-category": "Không nhất quán",
-  "missing-advanced": "Thiếu giá trị (nâng cao)",
   "cross-rule": "Rule liên cột",
 };
 const DTYPE_LABELS = {
@@ -563,25 +564,14 @@ const TOOL_INFO = {
       PRIVACY_COLUMN(),
     ],
   },
-  "fill-blanks": {
-    headline: "ĐIỀN / XOÁ Ô TRỐNG<br>TRONG FILE CSV",
-    desc: "Thay ô trống bằng giá trị bạn chọn, điền theo giá trị ở dòng gần nhất phía trên, hoặc xoá hẳn cả dòng thiếu -- áp dụng cho ĐÚNG 1 cột bạn chỉ định.",
-    mock: mockPair([[[]], [["is-hit"]], [[]], [["is-hit"]]], [[[]], [["is-fixed"]], [[]], [["is-fixed"]]], "Điền ↓"),
-    steps: ["Thả file CSV/Excel vào, hoặc dán text.", "Gõ tên cột cần xử lý, chọn cách điền/xoá.", "Xem số ô đã đổi (hoặc số dòng đã xoá), rồi tải file."],
+  "blanks": {
+    headline: "XỬ LÝ Ô TRỐNG<br>TRONG FILE CSV",
+    desc: 'Ô trống, "NA", "null", "-", "?" đều là thiếu. Một tool làm cả ba việc: xoá dòng trống hoàn toàn, điền ô trống từng cột (từ ô phía trên, giá trị cố định, trung bình, trung vị, KNN, giá trị phổ biến nhất) hoặc xoá dòng có ô trống, và xoá cột trống hoàn toàn.',
+    mock: mockPair([[[]], [["", "is-hit"]], [[], { removed: true, tag: "TRỐNG" }], [[]]], [[[]], [["", "is-fixed"]], [[]]], "Điền · -1 dòng"),
+    steps: ["Thả file CSV/Excel vào, hoặc dán text.", "Xem các cột có ô trống; mỗi cột chọn cách xử lý (không chọn thì giữ nguyên).", "Bấm Chạy, xem số ô đã điền / dòng đã xoá rồi tải file."],
     explainer: [
-      { t: "3 cách điền/xoá", b: `"Điền theo giá trị phía trên" copy giá trị KHÔNG trống GẦN NHẤT phía trên xuống (hợp với báo cáo theo nhóm, mỗi nhóm chỉ ghi tên 1 lần). "Điền giá trị cố định" dùng ĐÚNG 1 giá trị bạn gõ (vd "Không rõ"). "Xoá cả dòng" bỏ hẳn dòng thiếu.` },
-      { t: "Cần điền thông minh hơn?", b: `Tool "Thiếu giá trị (nâng cao)" ở nhóm Cần cấu hình điền theo trung bình / trung vị / KNN / giá trị phổ biến nhất tuỳ kiểu cột -- bấm "Xử lý tiếp" sau khi chạy là sang được ngay.` },
-      PRIVACY_COLUMN(),
-    ],
-  },
-  "remove-empty-rows": {
-    headline: "XOÁ DÒNG TRỐNG<br>TRONG FILE CSV",
-    desc: "Xoá các dòng không có giá trị nào cả, kể cả dòng chỉ toàn khoảng trắng/dấu phẩy rỗng -- tuỳ chọn thêm: xoá luôn cột nào trống hoàn toàn từ trên xuống dưới.",
-    mock: mockPair([[[]], [[], { removed: true, tag: "TRỐNG" }], [[]], [[], { removed: true, tag: "TRỐNG" }], [[]]], [[[]], [[]], [[]]], "-2 dòng"),
-    steps: ["Thả file CSV/Excel vào, hoặc dán text.", "Chọn có xoá luôn cột trống hoàn toàn hay không.", "Tải file không còn dòng/cột trống."],
-    explainer: [
-      { t: "Thế nào là trống", b: "1 dòng bị coi là trống khi MỌI cột đều trống hoặc chỉ chứa khoảng trắng -- dòng còn ít nhất 1 giá trị thì vẫn được giữ lại, dù phần lớn ô khác trống." },
-      { t: "Cột trống hoàn toàn", b: "File xuất ra đôi khi có cột chưa từng được điền gì (lỗi mẫu/thiếu dữ liệu nguồn). Bật tuỳ chọn này để xoá luôn cột đó, không chỉ dòng." },
+      { t: "Thế nào là ô trống, làm theo thứ tự nào", b: `Ô trống, chỉ có khoảng trắng, hoặc ghi "NA", "null", "none", "?", "-". Thứ tự: xoá dòng trống hoàn toàn, rồi xoá dòng mà cột nào đó đòi xoá, sau cùng mới điền. Nhờ vậy dòng sắp bị xoá không làm lệch trung bình hay trung vị dùng để điền.` },
+      { t: "Cách điền hợp với kiểu cột", b: "Cột số có trung bình, trung vị, KNN (tìm 5 dòng giống nhất theo các cột số khác rồi lấy trung bình); cột nhóm có giá trị phổ biến nhất. Email, số điện thoại, ngày không có impute vì không thể đoán giá trị thay thế, chỉ điền từ ô phía trên, giá trị cố định hoặc xoá dòng." },
       PRIVACY_COLUMN(),
     ],
   },
@@ -668,17 +658,6 @@ const CF_INFO = {
     explainer: [
       { t: "Thế nào là gần giống", b: "Denoise so độ giống chuỗi (sau khi bỏ hoa/thường và khoảng trắng) với từng giá trị chuẩn. Ngưỡng mặc định 0.85: đủ bắt lỗi gõ nhẹ, đủ chặt để không gộp nhầm hai nhóm khác nhau." },
       { t: "Giá trị không khớp gì cả", b: "Một giá trị không giống bất kỳ giá trị chuẩn nào vẫn bị gắn cờ nhưng không tự sửa, vì không biết đưa về đâu. Hãy xem lại danh sách chuẩn hoặc xử lý tay." },
-      PRIVACY_COLUMN(),
-    ],
-  },
-  "missing-advanced": {
-    headline: "ĐIỀN GIÁ TRỊ THIẾU<br>THEO KIỂU CỘT",
-    desc: 'Ô trống, "NA", "null", "-", "?" đều là thiếu. Khác tool Điền ô trống đơn giản, ở đây cách điền phụ thuộc kiểu cột: trung bình, trung vị, KNN cho cột số; giá trị phổ biến nhất cho cột nhóm.',
-    mock: mockPair([[[]], [["", "is-hit"]], [[]], [["", "is-hit"]]], [[[]], [["", "is-fixed"]], [[]], [["", "is-fixed"]]], "Impute"),
-    steps: ["Chọn file và cột cần điền; kiểu cột đã đoán sẵn.", "Bấm Phát hiện để xem các ô thiếu.", "Chọn cách điền hợp với kiểu cột, bấm Áp dụng."],
-    explainer: [
-      { t: "KNN điền thế nào", b: "Với mỗi ô thiếu, Denoise tìm 5 dòng giống nhất theo các cột số khác (khoảng cách Euclid sau chuẩn hoá) rồi lấy trung bình của chúng. Viết tay, không phụ thuộc thư viện ngoài." },
-      { t: "Vì sao cột email không có impute", b: "Bảng quyết định kiểu cột × loại lỗi chỉ cho phép đoán giá trị với cột số và cột nhóm. Email, số điện thoại, ngày tháng chỉ có xoá dòng hoặc điền cố định." },
       PRIVACY_COLUMN(),
     ],
   },
@@ -832,13 +811,13 @@ function hideRawPreview(g) {
   st.selectedFile = null;
   $(TOOLSEC[g].fileInput).value = "";
   renderInputArea(g);
-  if (g === "ft") refreshFtColumnTypes();
+  if (g === "ft") refreshFtColumns();
 }
 async function handleFileSelected(g, file) {
   if (g === "ft") clearListView(); // đầu vào đổi -> danh sách của lần chạy trước không còn đúng
   const st = state[g];
   st.selectedFile = file;
-  if (g === "ft") refreshFtColumnTypes(); // tool Sai định dạng: đọc cột + đoán kiểu của file vừa chọn
+  if (g === "ft") refreshFtColumns(); // tool Sai định dạng / Ô trống: đọc cột của file vừa chọn
   const sizeText = `${(file.size / 1024).toFixed(1)} KB`;
   if (g === "cf") {
     // Tool cần cấu hình: nhờ backend đọc (có tên cột + kiểu đoán sẵn + 20 dòng
@@ -895,7 +874,7 @@ function renderPipeStrips() {
     if (p.active) strip.querySelector(".pipe-strip-text").innerHTML = `📄 Đang dùng: <strong>${escapeHtml(p.originalLabel)}</strong>${escapeHtml(stepsText)}`;
     renderInputArea(g);
   });
-  refreshFtColumnTypes(); // đầu vào nối tiếp đổi -> bảng kiểu cột của tool Sai định dạng cập nhật theo
+  refreshFtColumns(); // đầu vào nối tiếp đổi -> bảng cột của tool Sai định dạng / Ô trống cập nhật theo
   refreshCfColumns(); // ... và danh sách cột của khối Cần cấu hình (nếu đang mở)
 }
 document.querySelectorAll(".pipe-new-file-btn").forEach((btn) => {
@@ -970,7 +949,11 @@ function statusFromStats(stats) {
   const parts = [];
   if (stats.removed_row_count > 0) parts.push(`đã xoá ${stats.removed_row_count} dòng (${stats.original_row_count} → ${stats.final_row_count})`);
   else parts.push(`giữ nguyên ${stats.final_row_count} dòng`);
-  if (stats.cells_changed > 0) parts.push(`đã sửa ${stats.cells_changed} ô`);
+  if (stats.filled_cell_count !== undefined) {
+    // Tool Ô trống: nói rõ số ô đã điền và số ô định điền mà vẫn trống.
+    if (stats.filled_cell_count > 0) parts.push(`đã điền ${stats.filled_cell_count} ô`);
+    if (stats.unfilled_cell_count > 0) parts.push(`${stats.unfilled_cell_count} ô chưa điền được`);
+  } else if (stats.cells_changed > 0) parts.push(`đã sửa ${stats.cells_changed} ô`);
   // Tool Sai định dạng ở chế độ "chỉ báo" (không đổi gì): nói rõ đã tìm thấy bao nhiêu ô sai.
   if (stats.flagged_cell_count !== undefined && !stats.removed_row_count && !stats.cells_changed) {
     parts.push(stats.flagged_cell_count > 0 ? `tìm thấy ${stats.flagged_cell_count} ô sai định dạng` : "không thấy ô nào sai định dạng");
@@ -1004,7 +987,6 @@ const CONTINUE_GROUPS = [
     { icon: "[ ]", tool: "out-of-range", sub: "Khai min / max" },
     { icon: "↯", tool: "outlier", sub: "IQR · Z-score" },
     { icon: "≈", tool: "inconsistent-category", sub: "Về giá trị chuẩn" },
-    { icon: "∅", tool: "missing-advanced", sub: "Mean · median · KNN · mode" },
     { icon: "⋈", tool: "cross-rule", sub: "Mâu thuẫn giữa 2 cột" },
   ] },
   { key: "convert", label: "Convert", g: "cv", attr: "data-convert-tool", items: [
@@ -1012,7 +994,7 @@ const CONTINUE_GROUPS = [
   ] },
   { key: "auto", label: "Tự động", g: "ft", attr: "data-tool", items: [
     { icon: "⧉", tool: "remove-duplicates" }, { icon: "⇥", tool: "trim-whitespace" },
-    { icon: "▦", tool: "fill-blanks" }, { icon: "☰", tool: "remove-empty-rows" },
+    { icon: "□", tool: "blanks" },
     { icon: "@", tool: "format-noise" },
   ] },
 ];
@@ -1098,12 +1080,12 @@ function activateTool(g, tool) {
   if (state.pipe.active && !toolAccepts(g, tool, state.pipe.currentKind)) state.pipe.forceNewUpload = true;
   renderInputArea(g);
   resetResult(g);
-  if (g === "ft") refreshFtColumnTypes();
+  if (g === "ft") refreshFtColumns();
 }
 Object.keys(TOOLSEC).forEach((g) => {
   const T = TOOLSEC[g];
   document.querySelectorAll(`#${T.tabs} .convert-tab`).forEach((btn) => btn.addEventListener("click", () => activateTool(g, btn.dataset.tool)));
-  wireInputToggle($(T.toggle), $(T.dropzone), $(T.paste), (mode) => { state[g].inputMode = mode; if (g === "ft") refreshFtColumnTypes(); });
+  wireInputToggle($(T.toggle), $(T.dropzone), $(T.paste), (mode) => { state[g].inputMode = mode; if (g === "ft") refreshFtColumns(); });
   wireDropzone($(T.dropzone), $(T.fileInput), (file) => handleFileSelected(g, file));
   $(T.changeBtn).addEventListener("click", () => hideRawPreview(g));
 });
@@ -1122,9 +1104,6 @@ Object.keys(TOOLSEC).forEach((g) => {
 /* ============================================================
    FREE TOOLS -- tuỳ chọn tĩnh + bấm Chạy
    ============================================================ */
-$("opt-action").addEventListener("change", () => {
-  $("opt-fixed-value-wrap").hidden = $("opt-action").value !== "fixed_value";
-});
 document.querySelectorAll(".ft-seg[data-seg-for]").forEach(wireSegmented);
 
 $("ft-run-btn").addEventListener("click", async () => {
@@ -1143,16 +1122,21 @@ $("ft-run-btn").addEventListener("click", async () => {
   } else if (tool === "trim-whitespace") {
     formData.append("collapse_repeated", $("opt-collapse-repeated").checked ? "true" : "false");
     formData.append("remove_zero_width", $("opt-remove-zero-width").checked ? "true" : "false");
-  } else if (tool === "fill-blanks") {
-    const column = $("opt-column").value.trim();
-    if (!column) return setError($(T.error), "Chưa gõ tên cột cần xử lý.");
-    const action = $("opt-action").value;
-    if (action === "fixed_value" && !$("opt-fixed-value").value) return setError($(T.error), "Chưa nhập giá trị để điền vào ô trống.");
-    formData.append("column", column);
-    formData.append("action", action);
-    formData.append("fixed_value", $("opt-fixed-value").value);
-  } else if (tool === "remove-empty-rows") {
-    formData.append("also_remove_empty_columns", $("opt-remove-empty-columns").checked ? "true" : "false");
+  } else if (tool === "blanks") {
+    // Bảng phải KHỚP đầu vào hiện tại: đầu vào vừa đổi mà bảng chưa kịp đọc lại (vd dán text khác rồi bấm Chạy trong lúc đang
+    // chờ 600ms) thì đọc lại ngay -- lựa chọn của bảng cũ bị bỏ, không gửi nhầm tên cột không có trong đầu vào mới. Rồi chờ lần
+    // đọc đang chạy dở (vd vừa nối tiếp từ bước trước) xong để gửi đúng bảng mới nhất.
+    await refreshFtBlankColumns();
+    if (state.ft.blankPromise) await state.ft.blankPromise;
+    const actions = {};
+    for (const c of state.ft.blankCols || []) {
+      if (c.action === "keep") continue;
+      if (c.action === "fixed_value" && !String(c.fixedValue).trim()) return setError($(T.error), `Cột "${c.name}": chưa nhập giá trị để điền vào ô trống.`);
+      actions[c.name] = { dtype: c.dtype, action: c.action, fixed_value: c.action === "fixed_value" ? c.fixedValue : "" };
+    }
+    formData.append("column_actions", JSON.stringify(actions));
+    formData.append("remove_empty_rows", $("opt-blank-remove-empty-rows").checked ? "true" : "false");
+    formData.append("remove_empty_columns", $("opt-blank-remove-empty-columns").checked ? "true" : "false");
   } else if (tool === "format-noise") {
     // Đang đọc cột (vd vừa nối tiếp từ bước trước) thì chờ xong để gửi đúng bảng kiểu cột mới nhất.
     if (state.ft.colPromise) await state.ft.colPromise;
@@ -1216,6 +1200,24 @@ const LIST_VIEW = {
     // Ô đã sửa tô nền (class is-changed).
     tableOpts: (d) => ({ rowNumbers: d.row_numbers, cellClasses: d.cell_changed.map((row) => row.map((c) => (c ? "is-changed" : ""))) }),
   },
+  "blanks": {
+    field: "blank_preview",
+    open: "Xem các ô trống đã xử lý",
+    none: "Không có ô trống nào bị xử lý",
+    count: (d) => d.affected_row_count,
+    totalRows: (d) => d.affected_row_count,
+    tag: "Ô trống đã xử lý",
+    dims: (d) => `${d.filled_cell_count} ô đã điền · ${d.removed_row_count} dòng đã xoá`,
+    truncated: (d) => `Hiện ${d.shown_count}/${d.affected_row_count} dòng đầu tiên. `,
+    note: (d) => 'Cột "Dòng" là số thứ tự dòng trong đầu vào · dòng gạch ngang = đã bị xoá · ô tô nền = ô trống đã xử lý, hiện "trước → sau"' +
+      (d.removed_columns && d.removed_columns.length ? ` · cột trống hoàn toàn đã xoá: ${d.removed_columns.join(", ")}` : "") + ".",
+    // Dòng bị xoá gạch ngang (is-removed); ô trống đã xử lý tô nền (is-flagged).
+    tableOpts: (d) => ({
+      rowNumbers: d.row_numbers,
+      rowClasses: d.row_status.map((x) => (x === "remove" ? "is-removed" : "")),
+      cellClasses: d.cell_flagged.map((row) => row.map((c) => (c ? "is-flagged" : ""))),
+    }),
+  },
   "format-noise": {
     field: "format_preview",
     open: "Xem các ô sai định dạng",
@@ -1252,7 +1254,7 @@ function renderListView() {
   const cfg = LIST_VIEW[v.kind];
   const d = v.data;
   const shownAll = d.shown_count >= cfg.totalRows(d);
-  fillPreviewCard("ft", cfg.tag, cfg.dims(d), d.rows, (shownAll ? "" : cfg.truncated(d)) + cfg.note, cfg.tableOpts(d));
+  fillPreviewCard("ft", cfg.tag, cfg.dims(d), d.rows, (shownAll ? "" : cfg.truncated(d)) + (typeof cfg.note === "function" ? cfg.note(d) : cfg.note), cfg.tableOpts(d));
 }
 /* ----- Sai định dạng: bảng KIỂU DỮ LIỆU TỪNG CỘT dưới bảng đầu vào (đoán sẵn, sửa được) -----
    Sau khi có đầu vào (file / text dán / kết quả bước trước), hỏi backend /api/noise-tools/inspect lấy tên cột + kiểu
@@ -1394,11 +1396,188 @@ $("ft-coltypes").addEventListener("click", (e) => {
   state.ft.colCounts = null;
   renderFtColTypes();
 });
+/* ----- Ô trống: bảng "Ô TRỐNG TỪNG CỘT" dưới bảng đầu vào -----
+   Tool này GỘP 3 tool cũ (Xoá dòng trống + Điền ô trống + Thiếu giá trị nâng cao). Cùng cách làm với bảng kiểu cột của
+   tool Sai định dạng (đọc qua /api/noise-tools/inspect), khác ở chỗ:
+   - chỉ liệt kê cột CÓ ô trống (backend trả blank_counts khi gửi include_blanks=true);
+   - mỗi cột có 3 ô: kiểu (đoán sẵn, sửa được -> quyết định cách điền nào hợp lệ), cách xử lý (mặc định "Giữ nguyên"),
+     giá trị cố định (chỉ hiện khi chọn "Điền giá trị cố định");
+   - cột để "Giữ nguyên" không bị đụng tới, nên chỉ chọn file rồi bấm Chạy = chỉ xoá dòng trống hoàn toàn
+     (đúng như tool "Xoá dòng trống" cũ); 2 ô tick bên dưới bảng là cài đặt chung cho cả file. */
+const BLANK_DTYPE_OPTIONS = [
+  ["integer", "Số nguyên"], ["float", "Số thực"], ["category", "Nhóm"], ["text", "Văn bản"],
+  ["email", "Email"], ["phone", "Số điện thoại"], ["date", "Ngày tháng"],
+];
+const BLANK_DTYPE_LABEL = Object.fromEntries(BLANK_DTYPE_OPTIONS);
+const BLANK_ACTION_LABELS = {
+  keep: "Giữ nguyên",
+  fill_down: "Điền từ ô phía trên",
+  fixed_value: "Điền giá trị cố định",
+  impute_mean: "Điền trung bình",
+  impute_median: "Điền trung vị",
+  impute_knn: "Điền theo KNN",
+  impute_mode: "Điền giá trị phổ biến nhất",
+  remove_row: "Xoá cả dòng",
+};
+// Chữ gợi ý mặc định của 2 ô tick (HTML tĩnh) -- giữ lại để khôi phục khi chưa có đầu vào.
+const BLANK_ROWS_HINT_DEFAULT = $("opt-blank-rows-hint").textContent;
+const BLANK_COLS_HINT_DEFAULT = $("opt-blank-cols-hint").textContent;
+
+// Cách xử lý hợp lệ cho 1 kiểu cột (danh sách do backend trả, giao diện không tự định nghĩa lại).
+function blankActionsFor(dtype) {
+  const info = state.ft.blankInfo;
+  return (info && info.blank_actions && info.blank_actions[dtype]) || ["keep"];
+}
+function blankActionOptionsHTML(c) {
+  return blankActionsFor(c.dtype).map((a) => `<option value="${a}"${a === c.action ? " selected" : ""}>${BLANK_ACTION_LABELS[a] || a}</option>`).join("");
+}
+// Ghi số dòng / cột trống hoàn toàn của đầu vào vào chữ gợi ý dưới 2 ô tick.
+function updateBlankHints() {
+  const info = state.ft.blankInfo;
+  const rowsHint = $("opt-blank-rows-hint");
+  const colsHint = $("opt-blank-cols-hint");
+  if (!info) {
+    rowsHint.textContent = BLANK_ROWS_HINT_DEFAULT;
+    colsHint.textContent = BLANK_COLS_HINT_DEFAULT;
+    return;
+  }
+  rowsHint.textContent = info.empty_row_count > 0
+    ? `Đầu vào có ${info.empty_row_count} dòng trống hoàn toàn (mọi cột đều trống, kể cả "NA", "-", "?").`
+    : "Đầu vào không có dòng nào trống hoàn toàn.";
+  const cols = info.empty_columns;
+  colsHint.textContent = cols.length > 0
+    ? `Đầu vào có ${cols.length} cột trống hoàn toàn: ${cols.slice(0, 5).join(", ")}${cols.length > 5 ? ` và ${cols.length - 5} cột khác` : ""}.`
+    : "Đầu vào không có cột nào trống hoàn toàn.";
+}
+// Đọc lại cột nếu đầu vào đã đổi. Chỉ chạy khi đang ở tool Ô trống; cùng đầu vào thì giữ nguyên bảng (và các lựa chọn).
+async function refreshFtBlankColumns() {
+  const st = state.ft;
+  if (st.tool !== "blanks") return;
+  const src = ftInputSource();
+  if (!src) {
+    st.blankSig = "";
+    st.blankCols = null;
+    st.blankInfo = null;
+    st.blankState = "idle";
+    updateBlankHints();
+    renderFtBlanks();
+    return;
+  }
+  if (src.sig === st.blankSig) return;
+  st.blankSig = src.sig;
+  const seq = ++st.blankSeq;
+  const prev = st.blankCols;
+  // Nối tiếp từ bước trước thì giữ bảng cũ trong lúc đọc lại cho đỡ nháy.
+  if (!(src.pipe && prev)) {
+    st.blankCols = null;
+    st.blankInfo = null;
+    st.blankState = "loading";
+    updateBlankHints();
+    renderFtBlanks();
+  }
+  const fd = new FormData();
+  if (src.file) fd.append("file", src.file);
+  else fd.append("text", src.text);
+  fd.append("include_blanks", "true");
+  st.blankPromise = (async () => {
+    let response, data;
+    try {
+      response = await fetch("/api/noise-tools/inspect", { method: "POST", body: fd });
+      data = await response.json();
+    } catch (err) {
+      if (seq === st.blankSeq) { st.blankSig = ""; st.blankCols = null; st.blankInfo = null; st.blankState = "error"; st.blankError = "Không gọi được backend để đọc cột."; updateBlankHints(); renderFtBlanks(); }
+      return;
+    }
+    if (seq !== st.blankSeq) return; // đã có lần đọc mới hơn
+    if (!response.ok) { st.blankSig = ""; st.blankCols = null; st.blankInfo = null; st.blankState = "error"; st.blankError = data.error || "Không đọc được nội dung."; updateBlankHints(); renderFtBlanks(); return; }
+    st.blankInfo = { empty_row_count: data.empty_row_count || 0, empty_columns: data.empty_columns || [], blank_actions: data.blank_actions || {} };
+    const counts = data.blank_counts || {};
+    // Chuỗi nối tiếp: cột nào người dùng đã sửa kiểu thì giữ lựa chọn đó (tìm theo tên cột). Cách xử lý thì luôn về
+    // "Giữ nguyên": ô trống đã được xử lý ở bước trước rồi, bảng chỉ còn liệt kê những cột còn ô trống.
+    const prevByName = new Map((src.pipe && prev ? prev : []).map((c) => [c.name, c]));
+    st.blankCols = data.columns.filter((name) => counts[name] > 0).map((name) => {
+      const guessed = data.guessed_dtypes[name] || "text";
+      const old = prevByName.get(name);
+      const dtype = old && old.dtype !== old.guessed && st.blankInfo.blank_actions[old.dtype] ? old.dtype : guessed;
+      return { name, blanks: counts[name], guessed, dtype, action: "keep", fixedValue: "" };
+    });
+    st.blankState = "ready";
+    updateBlankHints();
+    renderFtBlanks();
+  })();
+  await st.blankPromise;
+}
+function ftBlankRowHTML(c, i) {
+  const dtypeOpts = BLANK_DTYPE_OPTIONS.map(([v, l]) => `<option value="${v}"${v === c.dtype ? " selected" : ""}>${l}</option>`).join("");
+  // Cột trống hoàn toàn: ghi chú xuống DÒNG RIÊNG (không nối vào "N ô trống") để chữ dài không làm tên cột bị cắt.
+  const whole = state.ft.blankInfo.empty_columns.includes(c.name) ? '<span class="ft-blank-whole">cột trống hoàn toàn</span>' : "";
+  return `<div class="ft-coltype-row ft-blank-row${c.action !== "keep" ? " is-edited" : ""}" data-i="${i}">` +
+    `<span class="ft-blank-name" title="${escapeAttr(c.name)}"><span class="ft-coltype-name">${escapeHtml(c.name)}</span><span class="ft-blank-count">${c.blanks} ô trống</span>${whole}</span>` +
+    `<select class="select ft-blank-dtype" data-role="dtype" title="Denoise đoán: ${escapeAttr(BLANK_DTYPE_LABEL[c.guessed] || c.guessed)}">${dtypeOpts}</select>` +
+    `<select class="select ft-blank-action" data-role="action">${blankActionOptionsHTML(c)}</select>` +
+    `<input class="input ft-blank-fixed" data-role="fixed" value="${escapeAttr(c.fixedValue)}" placeholder="Giá trị điền" aria-label="Giá trị cố định cho cột ${escapeAttr(c.name)}"${c.action === "fixed_value" ? "" : " hidden"} />` +
+    "</div>";
+}
+function renderFtBlanks() {
+  const box = $("ft-blanks");
+  const st = state.ft;
+  if (st.blankState === "loading") { box.innerHTML = '<p class="ft-coltypes-msg">Đang đọc cột và đếm ô trống…</p>'; return; }
+  if (st.blankState === "error") { box.innerHTML = `<p class="ft-coltypes-msg is-error">${escapeHtml(st.blankError || "Không đọc được cột.")}</p>`; return; }
+  if (!st.blankCols) { box.innerHTML = '<p class="ft-coltypes-msg">Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ liệt kê các cột có ô trống ở đây để bạn chọn cách xử lý từng cột.</p>'; return; }
+  box.innerHTML =
+    `<div class="ft-coltypes-bar"><span class="ft-coltypes-title">Ô trống từng cột</span><span class="ft-coltypes-meta">${st.blankCols.length} cột có ô trống</span>` +
+    '<button type="button" class="btn btn-ghost btn-small" data-role="reset">↺ Đặt lại</button></div>' +
+    '<p class="ft-coltypes-hint">Chỉ liệt kê cột có ô trống; cột để "Giữ nguyên" thì không bị đụng tới. Denoise đoán kiểu mỗi cột để chỉ đưa ra cách điền hợp lệ (số mới có trung bình / trung vị / KNN, nhóm mới có giá trị phổ biến nhất). Đoán sai thì chọn lại kiểu.</p>' +
+    (st.blankCols.length
+      ? `<div class="ft-coltypes-list">${st.blankCols.map((c, i) => ftBlankRowHTML(c, i)).join("")}</div>`
+      : '<p class="ft-coltypes-msg">Không có cột nào có ô trống.</p>');
+}
+// Đồng bộ 1 dòng với state sau khi người dùng đổi kiểu / cách xử lý (cập nhật tại chỗ, không dựng lại cả bảng).
+function syncBlankRow(row, c) {
+  const sel = row.querySelector('[data-role="action"]');
+  sel.innerHTML = blankActionOptionsHTML(c);
+  sel.value = c.action;
+  row.querySelector('[data-role="fixed"]').hidden = c.action !== "fixed_value";
+  row.classList.toggle("is-edited", c.action !== "keep");
+}
+$("ft-blanks").addEventListener("change", (e) => {
+  const row = e.target.closest(".ft-blank-row");
+  if (!row || !state.ft.blankCols) return;
+  const c = state.ft.blankCols[Number(row.dataset.i)];
+  const role = e.target.dataset.role;
+  if (role === "dtype") {
+    c.dtype = e.target.value;
+    // Cách xử lý đang chọn không còn hợp lệ với kiểu mới (vd "Điền trung bình" rồi đổi sang Văn bản) -> về "Giữ nguyên".
+    if (!blankActionsFor(c.dtype).includes(c.action)) c.action = "keep";
+    syncBlankRow(row, c);
+  } else if (role === "action") {
+    c.action = e.target.value;
+    syncBlankRow(row, c);
+    if (c.action === "fixed_value") row.querySelector('[data-role="fixed"]').focus();
+  }
+});
+$("ft-blanks").addEventListener("input", (e) => {
+  const row = e.target.closest(".ft-blank-row");
+  if (!row || e.target.dataset.role !== "fixed" || !state.ft.blankCols) return;
+  state.ft.blankCols[Number(row.dataset.i)].fixedValue = e.target.value;
+});
+$("ft-blanks").addEventListener("click", (e) => {
+  if (!e.target.closest('[data-role="reset"]') || !state.ft.blankCols) return;
+  state.ft.blankCols.forEach((c) => { c.dtype = c.guessed; c.action = "keep"; c.fixedValue = ""; });
+  renderFtBlanks();
+});
+
+// Hai tool Free Tools có bảng cột (Sai định dạng, Ô trống) đều đọc cột qua /api/noise-tools/inspect; mỗi hàm tự bỏ qua nếu
+// tool đang mở không phải của nó. Gọi mỗi khi chọn file / gõ text / đổi tab / đầu vào nối tiếp đổi.
+function refreshFtColumns() {
+  refreshFtColumnTypes();
+  refreshFtBlankColumns();
+}
 // Dán text: đọc cột sau khi người dùng ngừng gõ ~600ms.
 let ftPasteTimer = null;
 $("ft-paste-input").addEventListener("input", () => {
   clearTimeout(ftPasteTimer);
-  ftPasteTimer = setTimeout(refreshFtColumnTypes, 600);
+  ftPasteTimer = setTimeout(refreshFtColumns, 600);
 });
 
 // Bảng dữ liệu (khung 01) có thể nằm cách nút "Xem ..." cả nghìn px -- nhất là tool Sai định dạng, vì giữa bảng và nút còn có
@@ -1508,7 +1687,6 @@ const CF_DTYPES = {
   "out-of-range": ["integer", "float"],
   outlier: ["integer", "float"],
   "inconsistent-category": ["category"],
-  "missing-advanced": ["integer", "float", "category", "text", "email", "phone", "date"],
 };
 const OPERATORS = ["<", "<=", ">", ">=", "==", "!="];
 
@@ -1653,8 +1831,6 @@ function renderCfOptions() {
     extra = `<div class="cf-row"><div class="field"><label>Phương pháp</label><div class="ft-seg" data-seg-for="cf-outlier-method"><button type="button" class="is-active" data-value="iqr">IQR</button><button type="button" data-value="zscore">Z-score</button></div><select class="select" id="cf-outlier-method" hidden><option value="iqr">IQR</option><option value="zscore">Z-score</option></select></div><div class="field"><label for="cf-outlier-threshold">Ngưỡng</label><input class="input" id="cf-outlier-threshold" type="number" step="any" value="1.5" /></div></div><p class="hint-note">IQR thường dùng 1.5 · Z-score thường dùng 3</p>`;
   } else if (tool === "inconsistent-category") {
     extra = `<div class="field"><label for="cf-categories">Danh sách giá trị chuẩn (cách nhau bởi dấu phẩy)</label><textarea class="input" id="cf-categories" rows="2" placeholder="vd: Nam, Nữ"></textarea></div><div class="field"><label for="cf-similarity">Ngưỡng giống nhau (0.5 – 1)</label><input class="input" id="cf-similarity" type="number" step="0.01" min="0.5" max="1" value="0.85" /></div>`;
-  } else if (tool === "missing-advanced") {
-    extra = `<p class="hint-note">Thiếu = ô trống, "NA", "null", "none", "?", "-". Cách điền hợp lệ phụ thuộc kiểu cột bạn chọn.</p>`;
   }
   wrap.innerHTML = cfColumnSelect("cf-column", "Cột cần kiểm tra", firstCol) + cfDtypeSelect(allowed, dtype) + extra;
   wrap.querySelectorAll(".ft-seg[data-seg-for]").forEach(wireSegmented);

@@ -5,7 +5,9 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from .config import ColumnDType, ColumnNoiseConfig, CrossFieldRuleConfig, DuplicateRowConfig, NoiseType
+from .config import (
+    DEFAULT_MISSING_PLACEHOLDERS, ColumnDType, ColumnNoiseConfig, CrossFieldRuleConfig, DuplicateRowConfig, NoiseType,
+)
 from .cross_field_rules import CROSS_FIELD_RULE_DETECTORS, describe_rule
 from .detectors import DETECTORS, EMAIL_RE, INTEGER_RE, PHONE_RE, detect_duplicate_rows
 
@@ -34,6 +36,17 @@ def load_data(file_path: str) -> pd.DataFrame:
 _COMMON_DATE_FORMATS = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"]
 
 
+_MISSING_LOWER = frozenset(p.lower() for p in DEFAULT_MISSING_PLACEHOLDERS)
+
+
+def _non_missing_values(series: pd.Series) -> pd.Series:
+    """Các giá trị KHÔNG thiếu của cột (đã cắt khoảng trắng đầu/cuối). Ô "thiếu" gồm ô trống lẫn các chuỗi "NA", "null", "none",
+    "?", "-", "--"... (đúng tập `DEFAULT_MISSING_PLACEHOLDERS`): chúng KHÔNG nói gì về kiểu của cột nên không được đưa vào mẫu
+    đoán kiểu -- nếu không, cột số có nhiều ô "NA" sẽ bị đoán nhầm thành văn bản (lỗi thật đã gặp ở tool Ô trống)."""
+    cleaned = series.astype(str).str.strip()
+    return cleaned[~cleaned.str.lower().isin(_MISSING_LOWER)]
+
+
 def guess_column_dtype(series: pd.Series, sample_size: int = 200) -> str:
     """Đoán `ColumnDType` hợp lý nhất cho 1 cột dựa trên GIÁ TRỊ THẬT trong đó
     -- dùng để TỰ ĐIỀN SẴN dropdown "Kiểu dữ liệu" ở Bước 3 FE ngay sau khi
@@ -52,8 +65,7 @@ def guess_column_dtype(series: pd.Series, sample_size: int = 200) -> str:
     integer -> float -> category (ít giá trị khác nhau, không phải số) -> text
     (mặc định cuối cùng nếu không khớp kiểu nào ở trên).
     """
-    non_empty = series.astype(str).str.strip()
-    non_empty = non_empty[non_empty != ""]
+    non_empty = _non_missing_values(series)
     if non_empty.empty:
         return ColumnDType.TEXT.value
 
@@ -113,8 +125,7 @@ def guess_date_format(series: pd.Series, sample_size: int = 200) -> Optional[str
     (caller tự dùng khuôn mặc định). Cùng ngưỡng 90% và cùng cách lấy mẫu với `guess_column_dtype()`.
     Lưu ý như đã ghi ở `_COMMON_DATE_FORMATS`: không phân biệt được dd/mm với mm/dd khi mọi ngày
     đều <= 12, nên đây chỉ là gợi ý -- người dùng luôn sửa lại được ở ô khuôn ngày."""
-    non_empty = series.astype(str).str.strip()
-    non_empty = non_empty[non_empty != ""]
+    non_empty = _non_missing_values(series)
     if non_empty.empty:
         return None
     sample = non_empty.head(sample_size)

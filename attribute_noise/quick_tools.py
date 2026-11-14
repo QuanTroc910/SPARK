@@ -25,14 +25,17 @@ apply_handling()`) ở chỗ:
 """
 
 import re
+from dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
 
-from .attribute_handling import DuplicateKeep, _is_missing_text
-from .config import ColumnDType, ColumnNoiseConfig, NoiseType
-from .detectors import detect_format_noise
-from .pipeline import guess_column_dtype, guess_date_format
+from .attribute_handling import (
+    DuplicateKeep, HandlingAction, HandlingChoice, _is_missing_text, apply_handling,
+)
+from .config import DEFAULT_MISSING_PLACEHOLDERS, ColumnDType, ColumnNoiseConfig, NoiseType
+from .detectors import INTEGER_RE, detect_format_noise
+from .pipeline import NoiseFinding, guess_column_dtype, guess_date_format
 
 
 class QuickToolError(Exception):
@@ -391,6 +394,16 @@ def preview_format_errors(df: pd.DataFrame, mask: pd.DataFrame, limit: int = 100
     }
 
 
+def _fill_down_series(series: pd.Series, is_blank: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """Điền ô trống bằng giá trị KHÁC TRỐNG GẦN NHẤT phía TRÊN nó. Đổi ô trống thành None rồi forward-fill (ffill). Ô trống mà
+    phía trên cũng toàn trống (hoặc là dòng đầu tiên) thì GIỮ NGUYÊN -- không có gì "ở trên" để điền, đúng hành vi tool tham khảo.
+    Trả về (cột sau khi điền, mask ô vẫn trống)."""
+    as_none = series.where(~is_blank, None)
+    filled = as_none.ffill()
+    still_blank = filled.isna()
+    return filled.where(~still_blank, series), still_blank
+
+
 def quick_fill_or_remove_blanks(
     df: pd.DataFrame, column: str, action: str, fixed_value: Optional[str] = None
 ) -> tuple[pd.DataFrame, dict]:
@@ -417,19 +430,30 @@ def quick_fill_or_remove_blanks(
 
     if action == "fill_down":
         result = df.copy()
-        # Đổi ô trống thành None rồi forward-fill (ffill): mỗi None được thay
-        # bằng giá trị KHÔNG-None GẦN NHẤT phía TRÊN nó. Dòng trống mà phía
-        # trên cũng toàn trống (hoặc là dòng đầu tiên) thì GIỮ NGUYÊN trống
-        # -- không có gì "ở trên" để điền vào, đúng hành vi tool tham khảo.
-        as_none = result[column].where(~is_blank, None)
-        filled = as_none.ffill()
-        still_blank = filled.isna()
-        filled = filled.where(~still_blank, result[column])
+        filled, still_blank = _fill_down_series(result[column], is_blank)
         cells_changed = int((is_blank & ~still_blank).sum())
         result[column] = filled
         return result, _stats(df, result, cells_changed=cells_changed)
 
     raise QuickToolError(f"action không hợp lệ: {action}")
+
+
+# Tập giá trị "thiếu" đã chuẩn hoá (chữ thường) -- ĐÚNG tập `_is_missing_text` dùng, viết lại dạng frozenset để kiểm tra
+# cả cột một lượt bằng thao tác chuỗi vector hoá của pandas (nhanh hơn nhiều so với gọi hàm cho từng ô trên file lớn).
+_MISSING_NORMALIZED = frozenset(p.lower() for p in DEFAULT_MISSING_PLACEHOLDERS)
+
+
+def _blank_series(series: pd.Series) -> pd.Series:
+    """True = ô "thiếu" (trống, "NA", "null", "none", "?", "-", "--", không phân biệt hoa/thường, đã cắt khoảng trắng
+    đầu/cuối). KẾT QUẢ GIỐNG HỆT `_is_missing_text` áp cho từng ô (test có kiểm chứng), chỉ khác là chạy vector hoá."""
+    return series.astype(str).str.strip().str.lower().isin(_MISSING_NORMALIZED)
+
+
+def blank_mask(df: pd.DataFrame) -> pd.DataFrame:
+    """Bảng True/False cùng hình dạng với `df`: True = ô thiếu."""
+    if df.shape[0] == 0 or df.shape[1] == 0:
+        return pd.DataFrame(False, index=df.index, columns=df.columns)
+    return df.apply(_blank_series)
 
 
 def is_row_fully_empty(df: pd.DataFrame) -> pd.Series:
@@ -440,7 +464,7 @@ def is_row_fully_empty(df: pd.DataFrame) -> pd.Series:
     riêng (chỉ mới có `duplicate_row` ở cấp dòng)."""
     if df.empty:
         return pd.Series(dtype=bool)
-    return df.apply(lambda row: all(_is_missing_text(v) for v in row), axis=1)
+    return blank_mask(df).all(axis=1)
 
 
 def is_column_fully_empty(series: pd.Series) -> bool:
@@ -448,7 +472,7 @@ def is_column_fully_empty(series: pd.Series) -> bool:
     hoàn toàn" (MỚI, khớp "Also remove empty columns" của tool tham khảo)."""
     if series.empty:
         return False
-    return bool(series.apply(_is_missing_text).all())
+    return bool(_blank_series(series).all())
 
 
 def quick_remove_empty_rows(
@@ -465,3 +489,253 @@ def quick_remove_empty_rows(
     stats = _stats(df, result)
     stats["columns_removed"] = columns_removed
     return result, stats
+
+
+# ---------------------------------------------------------------------------
+# Tool "Ô trống" (nhóm Tự động) -- GỘP 3 tool cũ: Xoá dòng trống + Điền/xoá ô trống + Thiếu giá trị (nâng cao).
+# Cùng 1 định nghĩa "ô trống" (`_blank_series`) cho cả 3 việc. Làm theo thứ tự:
+#   1. xoá DÒNG TRỐNG HOÀN TOÀN (mọi cột đều trống) -- tuỳ chọn, mặc định bật;
+#   2. xoá CỘT TRỐNG HOÀN TOÀN (xét trên các dòng còn lại) -- tuỳ chọn, mặc định tắt;
+#   3. với các cột chọn "Xoá dòng": xoá mọi dòng có ô trống ở cột đó (hợp nhất: dòng nào bị 1 cột đòi xoá thì xoá);
+#   4. với các cột còn lại: điền ô trống theo cách đã chọn (điền từ ô phía trên / giá trị cố định / trung bình / trung vị /
+#      KNN / giá trị phổ biến nhất) -- XOÁ DÒNG LÀM TRƯỚC KHI ĐIỀN để dòng sắp bị xoá không làm lệch trung bình/trung vị.
+# Cách điền số/nhóm dùng lại NGUYÊN `apply_handling()` của luồng Attribute Noise đầy đủ (cùng công thức impute, cùng cách
+# làm tròn theo kiểu cột), nên kết quả giống hệt tool "Thiếu giá trị (nâng cao)" cũ.
+# ---------------------------------------------------------------------------
+
+# Cách xử lý hợp lệ theo kiểu cột (giao diện lấy danh sách này từ /api/noise-tools/inspect, không tự định nghĩa lại).
+_NUMERIC_BLANK_ACTIONS = ["keep", "fill_down", "fixed_value", "impute_mean", "impute_median", "impute_knn", "remove_row"]
+_CATEGORY_BLANK_ACTIONS = ["keep", "fill_down", "fixed_value", "impute_mode", "remove_row"]
+# Email/SĐT/ngày/văn bản: không đoán được giá trị thay thế (không thể "trung bình" của email) nên KHÔNG có impute.
+_PLAIN_BLANK_ACTIONS = ["keep", "fill_down", "fixed_value", "remove_row"]
+BLANK_ACTIONS_BY_DTYPE = {
+    "integer": _NUMERIC_BLANK_ACTIONS,
+    "float": _NUMERIC_BLANK_ACTIONS,
+    "category": _CATEGORY_BLANK_ACTIONS,
+    "text": _PLAIN_BLANK_ACTIONS,
+    "email": _PLAIN_BLANK_ACTIONS,
+    "phone": _PLAIN_BLANK_ACTIONS,
+    "date": _PLAIN_BLANK_ACTIONS,
+}
+# Các action đi qua apply_handling (KNN xếp cuối vì nó dùng giá trị các cột khác để tính khoảng cách).
+_BLANK_IMPUTE_ACTIONS = {
+    "fixed_value": HandlingAction.FIXED_VALUE,
+    "impute_mean": HandlingAction.IMPUTE_MEAN,
+    "impute_median": HandlingAction.IMPUTE_MEDIAN,
+    "impute_mode": HandlingAction.IMPUTE_MODE,
+    "impute_knn": HandlingAction.IMPUTE_KNN,
+}
+
+
+def blank_column_summary(df: pd.DataFrame) -> dict:
+    """Dữ liệu cho bảng "Ô trống từng cột" (route inspect, khi giao diện hỏi): số ô trống mỗi cột, số dòng trống hoàn
+    toàn, danh sách cột trống hoàn toàn, và cách xử lý hợp lệ theo từng kiểu cột."""
+    mask = blank_mask(df)
+    has_data = len(df) > 0 and len(df.columns) > 0
+    return {
+        "blank_counts": {str(c): int(mask[c].sum()) for c in mask.columns},
+        "empty_row_count": int(mask.all(axis=1).sum()) if has_data else 0,
+        "empty_columns": [str(c) for c in mask.columns if len(df) > 0 and bool(mask[c].all())],
+        "blank_actions": BLANK_ACTIONS_BY_DTYPE,
+    }
+
+
+@dataclass
+class BlankOutcome:
+    """Kết quả chi tiết của `quick_handle_blanks`, đủ để `preview_blank_changes` dựng danh sách "Xem các ô trống đã xử lý".
+    Mọi vị trí dòng là vị trí GỐC (0-based) trong dữ liệu đầu vào."""
+
+    removed_positions: set        # dòng đã bị xoá (trống hoàn toàn + dòng bị cột nào đó đòi xoá)
+    fully_empty_count: int        # trong số đó: số dòng trống hoàn toàn
+    handled: dict                 # {cột: (Index vị trí dòng có ô trống được xử lý, Series giá trị mới cùng Index)}
+    columns_removed: list         # tên các cột trống hoàn toàn đã xoá
+    filled_count: int = 0         # số ô trống đã được điền
+    unfilled_count: int = 0       # số ô định điền nhưng vẫn trống (vd điền từ ô trên mà đó là dòng đầu, trung bình mà không có số nào)
+
+
+def _validate_blank_actions(df: pd.DataFrame, column_actions: dict) -> dict:
+    """Kiểm tra `column_actions` = {tên cột: {"dtype": ..., "action": ..., "fixed_value": ...}}; trả về chỉ các cột có
+    cách xử lý khác "keep", kiểu đã đổi thành ColumnDType. Thiếu "dtype" thì tự đoán từ giá trị cột."""
+    specs = {}
+    for col, spec in column_actions.items():
+        if col not in df.columns:
+            raise QuickToolError(f"Cột không tồn tại: {col}")
+        spec = spec or {}
+        dtype_raw = spec.get("dtype") or guess_column_dtype(df[col])
+        try:
+            dtype = ColumnDType(dtype_raw)
+        except ValueError:
+            raise QuickToolError(f"Kiểu dữ liệu không hợp lệ ở cột '{col}': {dtype_raw}")
+        action = spec.get("action") or "keep"
+        allowed = BLANK_ACTIONS_BY_DTYPE[dtype.value]
+        if action not in allowed:
+            raise QuickToolError(
+                f"Cách xử lý '{action}' không dùng được cho cột '{col}' (kiểu {dtype.value}); cách hợp lệ: {', '.join(allowed)}"
+            )
+        if action == "keep":
+            continue
+        fixed = spec.get("fixed_value")
+        if action == "fixed_value":
+            if fixed is None or str(fixed).strip() == "":
+                raise QuickToolError(f"Thiếu giá trị cố định để điền vào cột '{col}'")
+            fixed = str(fixed)
+            if dtype == ColumnDType.INTEGER and not INTEGER_RE.match(fixed.strip()):
+                raise QuickToolError(f"Giá trị cố định của cột '{col}' (kiểu số nguyên) phải là số nguyên, nhận được: {fixed}")
+            if dtype == ColumnDType.FLOAT:
+                try:
+                    float(fixed.strip())
+                except ValueError:
+                    raise QuickToolError(f"Giá trị cố định của cột '{col}' (kiểu số thực) phải là số, nhận được: {fixed}")
+            if dtype in (ColumnDType.INTEGER, ColumnDType.FLOAT):
+                fixed = fixed.strip()
+        specs[col] = {"dtype": dtype, "action": action, "fixed_value": fixed}
+    return specs
+
+
+def quick_handle_blanks(
+    df: pd.DataFrame,
+    column_actions: Optional[dict] = None,
+    remove_empty_rows: bool = True,
+    remove_empty_columns: bool = False,
+) -> tuple[pd.DataFrame, dict, BlankOutcome]:
+    """Xử lý ô trống theo đúng thứ tự mô tả ở đầu khối. `column_actions` rỗng/None = KHÔNG đụng cột nào (chỉ làm 2 tuỳ chọn
+    xoá dòng/cột trống hoàn toàn) -- đúng tool "Xoá dòng trống" cũ. Trả về (df kết quả, stats, BlankOutcome).
+
+    stats ngoài 4 field chung (original/removed/final_row_count, cells_changed) còn có: filled_cell_count (ô đã điền),
+    unfilled_cell_count (ô định điền mà vẫn trống), empty_row_removed_count (dòng trống hoàn toàn đã xoá),
+    action_row_removed_count (dòng xoá vì cột chọn "Xoá dòng"), columns_removed (số cột trống đã xoá)."""
+    specs = _validate_blank_actions(df, column_actions or {})
+    work = df.reset_index(drop=True)          # nhãn dòng = vị trí gốc; xoá dòng không đánh số lại nên nhãn giữ nguyên
+    blank = blank_mask(work)
+    has_data = len(work) > 0 and len(work.columns) > 0
+
+    # 1. dòng trống hoàn toàn
+    removed: set = set()
+    fully_empty: set = set()
+    if remove_empty_rows and has_data:
+        fully_empty = set(work.index[blank.all(axis=1)])
+        removed |= fully_empty
+
+    # 2. cột trống hoàn toàn (xét trên các dòng còn lại, giống tool cũ)
+    columns_removed: list = []
+    if remove_empty_columns and has_data:
+        remaining = work.index.difference(pd.Index(list(removed)))
+        if len(remaining) > 0:
+            sub = blank.loc[remaining]
+            columns_removed = [c for c in work.columns if bool(sub[c].all())]
+
+    # 3. cột chọn "Xoá dòng" (bỏ qua cột đã bị xoá ở bước 2 -- "xoá" thắng)
+    action_removed: set = set()
+    for col, spec in specs.items():
+        if spec["action"] == "remove_row" and col not in columns_removed:
+            action_removed |= set(work.index[blank[col]]) - removed
+    removed |= action_removed
+
+    keep_index = work.index.difference(pd.Index(list(removed)))
+    result = work.loc[keep_index].drop(columns=columns_removed)
+    blank_kept = blank.loc[keep_index, result.columns]
+
+    # 4. điền ô trống từng cột. Điền từ ô phía trên trước (độc lập từng cột), rồi tới nhóm đi qua apply_handling.
+    handled: dict = {}
+    flagged_by_col = {}
+    for col, spec in specs.items():
+        if spec["action"] == "remove_row" or col in columns_removed:
+            continue
+        flagged = result.index[blank_kept[col]]
+        if len(flagged) > 0:
+            flagged_by_col[col] = flagged
+
+    for col, spec in specs.items():
+        if spec["action"] == "fill_down" and col in flagged_by_col:
+            filled, _still = _fill_down_series(result[col], blank_kept[col])
+            result[col] = filled
+
+    impute_specs = [(c, sp) for c, sp in specs.items() if sp["action"] in _BLANK_IMPUTE_ACTIONS and c in flagged_by_col]
+    impute_specs.sort(key=lambda item: item[1]["action"] == "impute_knn")     # KNN xếp cuối
+    if impute_specs:
+        configs = [ColumnNoiseConfig(column=c, dtype=sp["dtype"], noise_types=[NoiseType.MISSING_VALUE]) for c, sp in impute_specs]
+        findings = [
+            NoiseFinding(row_index=int(pos), column=c, noise_type=NoiseType.MISSING_VALUE.value, value=result.at[pos, c])
+            for c, _sp in impute_specs for pos in flagged_by_col[c]
+        ]
+        choices = [
+            HandlingChoice(column=c, noise_type=NoiseType.MISSING_VALUE, action=_BLANK_IMPUTE_ACTIONS[sp["action"]], fixed_value=sp["fixed_value"])
+            for c, sp in impute_specs
+        ]
+        result, _ = apply_handling(result, configs, findings, choices)
+
+    filled_count = 0
+    unfilled_count = 0
+    for col, flagged in flagged_by_col.items():
+        new_values = result.loc[flagged, col]
+        still = _blank_series(new_values)
+        filled_count += int((~still).sum())
+        unfilled_count += int(still.sum())
+        handled[col] = (flagged, new_values)
+
+    final = result.reset_index(drop=True)
+    stats = _stats(df, final, cells_changed=filled_count)
+    stats.update({
+        "filled_cell_count": filled_count,
+        "unfilled_cell_count": unfilled_count,
+        "empty_row_removed_count": len(fully_empty),
+        "action_row_removed_count": len(action_removed),
+        "columns_removed": len(columns_removed),
+    })
+    outcome = BlankOutcome(
+        removed_positions=removed, fully_empty_count=len(fully_empty), handled=handled,
+        columns_removed=[str(c) for c in columns_removed], filled_count=filled_count, unfilled_count=unfilled_count,
+    )
+    return final, stats, outcome
+
+
+def preview_blank_changes(df: pd.DataFrame, outcome: BlankOutcome, limit: int = 100) -> dict:
+    """Dữ liệu cho nút "Xem các ô trống đã xử lý": các DÒNG bị xoá hoặc có ô trống được xử lý, theo thứ tự trong file (tối đa
+    `limit` dòng). Dòng bị xoá giữ giá trị gốc, đánh dấu "remove". Ô trống được xử lý hiện "trước → sau" (vd "(trống) → 35"
+    hoặc "(trống) → (vẫn trống)" nếu không điền được) và được gắn cờ.
+      rows / row_numbers / cell_flagged -- như `preview_format_errors`;  row_status -- "remove" | "fill";
+      affected_row_count / removed_row_count / filled_cell_count / unfilled_cell_count -- thống kê TOÀN BỘ (không bị cắt bởi
+      `limit`); removed_columns -- cột trống hoàn toàn đã xoá (vẫn hiện trong bảng vì đây là dữ liệu đầu vào)."""
+    work = df.reset_index(drop=True)
+    header = [str(c) for c in work.columns]
+    flagged_positions: set = set()
+    for flagged, _new in outcome.handled.values():
+        flagged_positions.update(int(p) for p in flagged)
+    positions = sorted(outcome.removed_positions | flagged_positions)
+    shown = positions[:limit]
+    shown_set = set(shown)
+    new_by_cell = {}
+    for col, (flagged, new_values) in outcome.handled.items():
+        for pos in flagged:
+            if int(pos) in shown_set:
+                new_by_cell[(int(pos), str(col))] = new_values.at[pos]
+    rows = [header]
+    row_numbers, row_status, cell_flagged = [], [], []
+    for pos in shown:
+        values = ["" if v is None else str(v) for v in work.iloc[pos].tolist()]
+        flags = [False] * len(values)
+        is_removed = pos in outcome.removed_positions
+        if not is_removed:
+            for i, name in enumerate(header):
+                if (pos, name) in new_by_cell:
+                    before = values[i] if values[i].strip() else "(trống)"
+                    after = new_by_cell[(pos, name)]
+                    after_text = "(vẫn trống)" if _is_missing_text(after) else str(after)
+                    values[i] = f"{before} → {after_text}"
+                    flags[i] = True
+        rows.append(values)
+        row_numbers.append(int(pos) + 1)
+        row_status.append("remove" if is_removed else "fill")
+        cell_flagged.append(flags)
+    return {
+        "rows": rows,
+        "row_numbers": row_numbers,
+        "row_status": row_status,
+        "cell_flagged": cell_flagged,
+        "affected_row_count": len(positions),
+        "removed_row_count": len(outcome.removed_positions),
+        "filled_cell_count": outcome.filled_count,
+        "unfilled_cell_count": outcome.unfilled_count,
+        "removed_columns": outcome.columns_removed,
+        "shown_count": len(shown),
+    }
