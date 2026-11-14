@@ -126,7 +126,7 @@ function wireInputToggle(toggleEl, dropzoneEl, pasteEl, onModeChange) {
 
 // Danh sách khối trong <main>, đúng thứ tự xuất hiện. 4 khối đầu là trang
 // CÔNG KHAI: chưa đăng nhập vẫn xem được. 5 khối sau cần đăng nhập (config =
-// 6 tool cần cấu hình, class-noise = 4 bước ở workspace-flow.js, profile = hồ
+// 5 tool cần cấu hình, class-noise = 4 bước ở workspace-flow.js, profile = hồ
 // sơ, free-tools, convert).
 const SECTIONS = ["home", "guide", "security", "privacy", "config", "class-noise", "profile", "free-tools", "convert"];
 const PUBLIC_SECTIONS = new Set(["home", "guide", "security", "privacy"]);
@@ -142,10 +142,14 @@ const state = {
   // listView = danh sách của nút "Xem ..." sau lần chạy gần nhất: { kind: tên tool, data: dữ liệu backend trả, showing }
   // (kind "remove-duplicates" = các dòng trùng, "trim-whitespace" = các ô đã sửa; null = chưa có / đã bị xoá);
   // showing = khung 01 đang hiện danh sách đó thay cho đầu vào.
-  ft: { tool: "remove-duplicates", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, listView: null },
+  ft: { tool: "remove-duplicates", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, listView: null,
+        // Tool Sai định dạng: bảng kiểu dữ liệu từng cột. colTypes = [{name, guessed, guessedFmt, dtype, dateFormat}] (null = chưa có);
+        // colState = idle|loading|ready|error; colSig = "chữ ký" đầu vào đã đọc cột (tránh đọc lại khi đầu vào không đổi);
+        // colSeq/colPromise = chống chạy chồng; colCounts = {cột: số ô sai} của lần Chạy gần nhất (countsSig = chữ ký đầu vào lúc đó).
+        colTypes: null, colState: "idle", colError: "", colSig: "", colSeq: 0, colPromise: null, colCounts: null, countsSig: "" },
   cv: { tool: "delimiter", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, lastResult: null },
   // cf thêm: columns/guessed đọc từ /api/noise-tools/inspect, detect = kết quả nhịp "Phát hiện".
-  cf: { tool: "format-noise", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null },
+  cf: { tool: "out-of-range", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null },
 };
 
 // ====== Đăng nhập / tạo tài khoản (bước 4) -- trang này TỰ lo, không đá về
@@ -499,10 +503,10 @@ const TOOL_TAB_LABEL = {
   "trim-whitespace": "Cắt khoảng trắng",
   "fill-blanks": "Điền/xoá ô trống",
   "remove-empty-rows": "Xoá dòng trống",
+  "format-noise": "Sai định dạng",
 };
 const CV_TAB_LABEL = { delimiter: "Đổi delimiter CSV", "csv-to-json": "CSV → JSON", "json-to-csv": "JSON → CSV" };
 const CF_TAB_LABEL = {
-  "format-noise": "Sai định dạng",
   "out-of-range": "Ngoài khoảng",
   outlier: "Giá trị bất thường",
   "inconsistent-category": "Không nhất quán",
@@ -578,6 +582,17 @@ const TOOL_INFO = {
       PRIVACY_COLUMN(),
     ],
   },
+  "format-noise": {
+    headline: "BẮT Ô SAI ĐỊNH DẠNG<br>TRONG FILE CSV",
+    desc: "Email thiếu @, số điện thoại lẫn chữ, ngày ghi sai khuôn, số nguyên có chữ cái. Denoise tự đoán kiểu của từng cột rồi quét mọi cột một lượt, gắn cờ ô không khớp. Đoán sai kiểu cột nào thì bạn chọn lại ngay dưới bảng dữ liệu.",
+    mock: mockPair([[[]], [["", "is-hit"]], [[]], [["", "is-hit"]]], [[[]], [["", "is-fixed"]], [[]], [["", "is-fixed"]]], "2 ô"),
+    steps: ["Thả file CSV/Excel vào, hoặc dán text.", "Xem kiểu Denoise đoán cho từng cột, sửa nếu đoán sai.", "Chọn chỉ báo, để trống ô sai hoặc xoá dòng, rồi bấm Chạy."],
+    explainer: [
+      { t: "Kiểu nào kiểm tra gì", b: "Email cần dạng ten@mien; số điện thoại chỉ chữ số và vài ký tự +, -, khoảng trắng; ngày phải đúng khuôn (vd %Y-%m-%d); số nguyên/số thực phải ép được thành số. Cột kiểu Nhóm hoặc Văn bản không có khuôn nên không bị kiểm tra." },
+      { t: "Kiểu cột được đoán thế nào", b: "Denoise nhìn giá trị thật của cột chứ không nhìn tên cột: từ 90% giá trị khớp khuôn nào thì đoán cột là kiểu đó, nên vài ô sai không làm hỏng việc đoán và vẫn bị bắt. Đoán sai kiểu cột nào thì sửa ở bảng ngay dưới dữ liệu đầu vào." },
+      PRIVACY_COLUMN(),
+    ],
+  },
 };
 
 const CV_INFO = {
@@ -620,17 +635,6 @@ const CV_INFO = {
 };
 
 const CF_INFO = {
-  "format-noise": {
-    headline: "BẮT GIÁ TRỊ<br>SAI ĐỊNH DẠNG",
-    desc: "Email thiếu @, số điện thoại lẫn chữ, ngày ghi sai khuôn, số nguyên có chữ cái. Bạn khai cột và kiểu dữ liệu kỳ vọng, Denoise gắn cờ từng ô không khớp rồi cho bạn chọn cách sửa.",
-    mock: mockPair([[[]], [["", "is-hit"]], [[]], [["", "is-hit"]]], [[[]], [["", "is-fixed"]], [[]], [["", "is-fixed"]]], "2 ô"),
-    steps: ["Chọn file; Denoise đọc tên cột và đoán kiểu từng cột.", "Chọn cột và kiểu kỳ vọng (email, SĐT, ngày, số), bấm Phát hiện.", "Xem ô lỗi, chọn xoá dòng hoặc điền giá trị, bấm Áp dụng."],
-    explainer: [
-      { t: "Kiểu nào kiểm tra gì", b: "Email cần dạng ten@mien; số điện thoại chỉ chữ số và vài ký tự +, -, khoảng trắng; ngày phải đúng khuôn bạn khai (vd %Y-%m-%d); số nguyên/số thực phải ép được thành số." },
-      { t: "Vì sao không được impute email", b: "Cột định danh (email, số điện thoại) không thể đoán giá trị thay thế, nên chỉ có xoá dòng hoặc điền một giá trị cố định. Cột số thì điền được trung bình, trung vị hay KNN." },
-      PRIVACY_COLUMN(),
-    ],
-  },
   "out-of-range": {
     headline: "BẮT GIÁ TRỊ<br>NGOÀI KHOẢNG",
     desc: "Tuổi 210, lương âm, điểm 11/10. Bạn khai min và max hợp lý cho một cột số, Denoise gắn cờ mọi giá trị nằm ngoài rồi kéo về biên, điền lại hoặc xoá dòng theo ý bạn.",
@@ -825,11 +829,13 @@ function hideRawPreview(g) {
   st.selectedFile = null;
   $(TOOLSEC[g].fileInput).value = "";
   renderInputArea(g);
+  if (g === "ft") refreshFtColumnTypes();
 }
 async function handleFileSelected(g, file) {
   if (g === "ft") clearListView(); // đầu vào đổi -> danh sách của lần chạy trước không còn đúng
   const st = state[g];
   st.selectedFile = file;
+  if (g === "ft") refreshFtColumnTypes(); // tool Sai định dạng: đọc cột + đoán kiểu của file vừa chọn
   const sizeText = `${(file.size / 1024).toFixed(1)} KB`;
   if (g === "cf") {
     // Tool cần cấu hình: nhờ backend đọc (có tên cột + kiểu đoán sẵn + 20 dòng
@@ -886,6 +892,7 @@ function renderPipeStrips() {
     if (p.active) strip.querySelector(".pipe-strip-text").innerHTML = `📄 Đang dùng: <strong>${escapeHtml(p.originalLabel)}</strong>${escapeHtml(stepsText)}`;
     renderInputArea(g);
   });
+  refreshFtColumnTypes(); // đầu vào nối tiếp đổi -> bảng kiểu cột của tool Sai định dạng cập nhật theo
 }
 document.querySelectorAll(".pipe-new-file-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -961,6 +968,10 @@ function statusFromStats(stats) {
   if (stats.removed_row_count > 0) parts.push(`đã xoá ${stats.removed_row_count} dòng (${stats.original_row_count} → ${stats.final_row_count})`);
   else parts.push(`giữ nguyên ${stats.final_row_count} dòng`);
   if (stats.cells_changed > 0) parts.push(`đã sửa ${stats.cells_changed} ô`);
+  // Tool Sai định dạng ở chế độ "chỉ báo" (không đổi gì): nói rõ đã tìm thấy bao nhiêu ô sai.
+  if (stats.flagged_cell_count !== undefined && !stats.removed_row_count && !stats.cells_changed) {
+    parts.push(stats.flagged_cell_count > 0 ? `tìm thấy ${stats.flagged_cell_count} ô sai định dạng` : "không thấy ô nào sai định dạng");
+  }
   if (stats.columns_removed) parts.push(`đã xoá ${stats.columns_removed} cột`);
   return `✅ ${parts.join(" · ")}`;
 }
@@ -987,7 +998,6 @@ Object.keys(TOOLSEC).forEach((g) => {
 // class ws-megamenu-icon) -- đơn sắc, cùng kiểu cho cả 3 nhóm. Sửa ký hiệu ở đâu thì sửa cả 2 nơi.
 const CONTINUE_GROUPS = [
   { key: "configure", label: "Cần cấu hình", g: "cf", attr: "data-config-tool", items: [
-    { icon: "@", tool: "format-noise", sub: "Email · SĐT · ngày · số" },
     { icon: "[ ]", tool: "out-of-range", sub: "Khai min / max" },
     { icon: "↯", tool: "outlier", sub: "IQR · Z-score" },
     { icon: "≈", tool: "inconsistent-category", sub: "Về giá trị chuẩn" },
@@ -1000,6 +1010,7 @@ const CONTINUE_GROUPS = [
   { key: "auto", label: "Tự động", g: "ft", attr: "data-tool", items: [
     { icon: "⧉", tool: "remove-duplicates" }, { icon: "⇥", tool: "trim-whitespace" },
     { icon: "▦", tool: "fill-blanks" }, { icon: "☰", tool: "remove-empty-rows" },
+    { icon: "@", tool: "format-noise" },
   ] },
 ];
 function renderContinuePanel(g) {
@@ -1084,11 +1095,12 @@ function activateTool(g, tool) {
   if (state.pipe.active && !toolAccepts(g, tool, state.pipe.currentKind)) state.pipe.forceNewUpload = true;
   renderInputArea(g);
   resetResult(g);
+  if (g === "ft") refreshFtColumnTypes();
 }
 Object.keys(TOOLSEC).forEach((g) => {
   const T = TOOLSEC[g];
   document.querySelectorAll(`#${T.tabs} .convert-tab`).forEach((btn) => btn.addEventListener("click", () => activateTool(g, btn.dataset.tool)));
-  wireInputToggle($(T.toggle), $(T.dropzone), $(T.paste), (mode) => { state[g].inputMode = mode; });
+  wireInputToggle($(T.toggle), $(T.dropzone), $(T.paste), (mode) => { state[g].inputMode = mode; if (g === "ft") refreshFtColumnTypes(); });
   wireDropzone($(T.dropzone), $(T.fileInput), (file) => handleFileSelected(g, file));
   $(T.changeBtn).addEventListener("click", () => hideRawPreview(g));
 });
@@ -1138,6 +1150,15 @@ $("ft-run-btn").addEventListener("click", async () => {
     formData.append("fixed_value", $("opt-fixed-value").value);
   } else if (tool === "remove-empty-rows") {
     formData.append("also_remove_empty_columns", $("opt-remove-empty-columns").checked ? "true" : "false");
+  } else if (tool === "format-noise") {
+    // Đang đọc cột (vd vừa nối tiếp từ bước trước) thì chờ xong để gửi đúng bảng kiểu cột mới nhất.
+    if (state.ft.colPromise) await state.ft.colPromise;
+    const cols = state.ft.colTypes;
+    const badDate = (cols || []).find((c) => c.dtype === "date" && !String(c.dateFormat).includes("%"));
+    if (badDate) return setError($(T.error), `Khuôn ngày của cột "${badDate.name}" phải có dạng %Y-%m-%d (có dấu %).`);
+    formData.append("action", $("opt-format-action").value);
+    // Gửi kiểu từng cột người dùng đã xác nhận/sửa; không có bảng (đọc cột lỗi) thì backend tự đoán.
+    if (cols) formData.append("column_types", JSON.stringify(Object.fromEntries(cols.map((c) => [c.name, { dtype: c.dtype, date_format: c.dtype === "date" ? c.dateFormat : "" }]))));
   }
   const data = await callBackend($("ft-run-btn"), "Chạy", "/api/noise-tools/" + tool, formData, $(T.error));
   if (!data) return;
@@ -1151,6 +1172,14 @@ $("ft-run-btn").addEventListener("click", async () => {
   state.ft.listView = lv && data[lv.field] ? { kind: tool, data: data[lv.field], showing: false } : null;
   recordPipeStep(TOOL_TAB_LABEL[tool], data.result_text, "csv", inp.label, fresh);
   renderListButton();
+  if (tool === "format-noise") {
+    // Hiện số ô sai cạnh từng cột trong bảng kiểu dữ liệu. countsSig = chữ ký đầu vào SAU bước này (đầu vào
+    // đã chuyển sang kết quả bước này) để lần đọc lại cột ngay sau đó không xoá mất số liệu vừa có.
+    const src = ftInputSource();
+    state.ft.colCounts = data.format_preview ? data.format_preview.column_error_counts : null;
+    state.ft.countsSig = src ? src.sig : "";
+    renderFtColTypes();
+  }
   renderContinuePanel("ft");
 });
 
@@ -1163,6 +1192,7 @@ const LIST_VIEW = {
     open: "Xem các dòng trùng",         // chữ nút khi đang xem đầu vào
     none: "Không có dòng trùng",        // chữ nút (mờ) khi không có gì để xem
     count: (d) => d.group_row_count,
+    totalRows: (d) => d.group_row_count,
     tag: "Dòng trùng",
     dims: (d) => `${d.group_row_count} dòng trùng · ${d.removed_row_count} dòng đã xoá`,
     truncated: (d) => `Hiện ${d.shown_count}/${d.group_row_count} dòng trùng đầu tiên. `,
@@ -1175,12 +1205,26 @@ const LIST_VIEW = {
     open: "Xem các ô đã sửa",
     none: "Không có ô nào cần sửa",
     count: (d) => d.changed_cell_count,
+    totalRows: (d) => d.changed_row_count,
     tag: "Ô đã sửa",
     dims: (d) => `${d.changed_cell_count} ô đã sửa · ${d.changed_row_count} dòng`,
     truncated: (d) => `Hiện ${d.shown_count}/${d.changed_row_count} dòng có ô đã sửa đầu tiên. `,
     note: 'Cột "Dòng" là số thứ tự dòng trong đầu vào · ô tô nền là ô đã bị sửa, hiện giá trị TRƯỚC khi sửa · ␣ dấu cách · ⇥ tab · ⏎ xuống dòng · ⍽ non-breaking space · ⟨ZW⟩ ký tự vô hình.',
     // Ô đã sửa tô nền (class is-changed).
     tableOpts: (d) => ({ rowNumbers: d.row_numbers, cellClasses: d.cell_changed.map((row) => row.map((c) => (c ? "is-changed" : ""))) }),
+  },
+  "format-noise": {
+    field: "format_preview",
+    open: "Xem các ô sai định dạng",
+    none: "Không có ô sai định dạng",
+    count: (d) => d.flagged_cell_count,
+    totalRows: (d) => d.flagged_row_count,
+    tag: "Ô sai định dạng",
+    dims: (d) => `${d.flagged_cell_count} ô sai · ${d.flagged_row_count} dòng`,
+    truncated: (d) => `Hiện ${d.shown_count}/${d.flagged_row_count} dòng có ô sai đầu tiên. `,
+    note: 'Cột "Dòng" là số thứ tự dòng trong đầu vào · ô tô nền là ô sai định dạng so với kiểu cột đang chọn, giữ nguyên giá trị gốc. Kiểu cột sai thì sửa ở bảng bên dưới rồi bấm Chạy lại.',
+    // Ô sai tô nền (class is-flagged).
+    tableOpts: (d) => ({ rowNumbers: d.row_numbers, cellClasses: d.cell_flagged.map((row) => row.map((c) => (c ? "is-flagged" : ""))) }),
   },
 };
 function clearListView() {
@@ -1204,9 +1248,156 @@ function renderListView() {
   const v = state.ft.listView;
   const cfg = LIST_VIEW[v.kind];
   const d = v.data;
-  const shownAll = d.shown_count >= (v.kind === "remove-duplicates" ? d.group_row_count : d.changed_row_count);
+  const shownAll = d.shown_count >= cfg.totalRows(d);
   fillPreviewCard("ft", cfg.tag, cfg.dims(d), d.rows, (shownAll ? "" : cfg.truncated(d)) + cfg.note, cfg.tableOpts(d));
 }
+/* ----- Sai định dạng: bảng KIỂU DỮ LIỆU TỪNG CỘT dưới bảng đầu vào (đoán sẵn, sửa được) -----
+   Sau khi có đầu vào (file / text dán / kết quả bước trước), hỏi backend /api/noise-tools/inspect lấy tên cột + kiểu
+   đoán sẵn (+ khuôn ngày) rồi dựng 1 dòng cho mỗi cột. Người dùng đổi kiểu nếu đoán sai; bấm Chạy thì gửi kiểu đã chọn
+   lên (field column_types). Chỉ 5 kiểu Số nguyên / Số thực / Email / SĐT / Ngày có khuôn để kiểm tra. */
+const FORMAT_DTYPE_OPTIONS = [
+  ["integer", "Số nguyên"], ["float", "Số thực"], ["email", "Email"], ["phone", "Số điện thoại"],
+  ["date", "Ngày tháng"], ["category", "Nhóm (không kiểm tra)"], ["text", "Văn bản (không kiểm tra)"],
+];
+const FORMAT_DTYPE_LABEL = Object.fromEntries(FORMAT_DTYPE_OPTIONS);
+const DEFAULT_DATE_FORMAT = "%Y-%m-%d";
+
+// Băm nhanh (djb2) để nhận ra "đầu vào đã đổi chưa" mà không phải giữ cả đoạn text.
+function hashText(text) {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return h;
+}
+// Đầu vào hiện tại của Free Tools, cùng thứ tự ưu tiên với collectInput(): kết quả bước trước > file > text dán.
+// sig = "chữ ký" đầu vào (đổi khi đầu vào đổi); pipe = true nếu đang nối tiếp từ bước trước.
+function ftInputSource() {
+  const st = state.ft;
+  const p = state.pipe;
+  if (pipeUsable("ft")) return { text: p.currentText, pipe: true, sig: `pipe:${p.steps.length}:${p.currentText.length}:${hashText(p.currentText)}` };
+  if (st.inputMode === "file") {
+    const f = st.selectedFile;
+    return f ? { file: f, pipe: false, sig: `file:${f.name}:${f.size}:${f.lastModified}` } : null;
+  }
+  const text = $("ft-paste-input").value;
+  return text.trim() ? { text, pipe: false, sig: `text:${text.length}:${hashText(text)}` } : null;
+}
+function isFtColEdited(c) {
+  return c.dtype !== c.guessed || (c.dtype === "date" && c.dateFormat !== c.guessedFmt);
+}
+// Đọc lại cột nếu đầu vào đã đổi (gọi mỗi khi chọn file / gõ text / đổi tab / đầu vào nối tiếp đổi). Chỉ chạy khi đang ở
+// tool Sai định dạng; cùng đầu vào thì giữ nguyên bảng (và các kiểu người dùng đã sửa).
+async function refreshFtColumnTypes() {
+  const st = state.ft;
+  if (st.tool !== "format-noise") return;
+  const src = ftInputSource();
+  if (!src) {
+    st.colSig = "";
+    st.colTypes = null;
+    st.colState = "idle";
+    st.colCounts = null;
+    renderFtColTypes();
+    return;
+  }
+  if (src.sig === st.colSig) return;
+  st.colSig = src.sig;
+  const seq = ++st.colSeq;
+  const prev = st.colTypes;
+  // Nối tiếp từ bước trước thì cột gần như không đổi: giữ bảng cũ trong lúc đọc lại cho đỡ nháy.
+  if (!(src.pipe && prev)) {
+    st.colTypes = null;
+    st.colCounts = null;
+    st.colState = "loading";
+    renderFtColTypes();
+  }
+  const fd = new FormData();
+  if (src.file) fd.append("file", src.file);
+  else fd.append("text", src.text);
+  st.colPromise = (async () => {
+    let response, data;
+    try {
+      response = await fetch("/api/noise-tools/inspect", { method: "POST", body: fd });
+      data = await response.json();
+    } catch (err) {
+      if (seq === st.colSeq) { st.colTypes = null; st.colState = "error"; st.colError = "Không gọi được backend để đọc cột."; renderFtColTypes(); }
+      return;
+    }
+    if (seq !== st.colSeq) return; // đã có lần đọc mới hơn
+    if (!response.ok) { st.colTypes = null; st.colState = "error"; st.colError = data.error || "Không đọc được nội dung."; renderFtColTypes(); return; }
+    // Chuỗi nối tiếp: cột nào người dùng đã sửa kiểu thì giữ lựa chọn đó (tìm theo tên cột).
+    const prevByName = new Map((src.pipe && prev ? prev : []).map((c) => [c.name, c]));
+    st.colTypes = data.columns.map((name) => {
+      const guessed = data.guessed_dtypes[name] || "text";
+      const guessedFmt = (data.guessed_date_formats || {})[name] || DEFAULT_DATE_FORMAT;
+      const old = prevByName.get(name);
+      if (old && isFtColEdited(old)) return { name, guessed, guessedFmt, dtype: old.dtype, dateFormat: old.dateFormat };
+      return { name, guessed, guessedFmt, dtype: guessed, dateFormat: guessedFmt };
+    });
+    st.colState = "ready";
+    if (st.countsSig !== src.sig) st.colCounts = null; // số ô sai chỉ còn đúng nếu đầu vào vẫn là kết quả của lần Chạy đó
+    renderFtColTypes();
+  })();
+  await st.colPromise;
+}
+function ftColRowHTML(c, i, counts) {
+  const n = counts[c.name] || 0;
+  const opts = FORMAT_DTYPE_OPTIONS.map(([v, l]) => `<option value="${v}"${v === c.dtype ? " selected" : ""}>${l}</option>`).join("");
+  return `<div class="ft-coltype-row${isFtColEdited(c) ? " is-edited" : ""}${n ? " has-errors" : ""}" data-i="${i}">` +
+    `<span class="ft-coltype-name" title="${escapeAttr(c.name)}">${escapeHtml(c.name)}</span>` +
+    `<select class="select ft-coltype-select" data-role="dtype" title="Denoise đoán: ${escapeAttr(FORMAT_DTYPE_LABEL[c.guessed] || c.guessed)}">${opts}</select>` +
+    `<input class="input mono ft-coltype-fmt" data-role="fmt" value="${escapeAttr(c.dateFormat)}" placeholder="${DEFAULT_DATE_FORMAT}" title="Khuôn ngày (chuẩn strptime)"${c.dtype === "date" ? "" : " hidden"} />` +
+    `<span class="ft-coltype-count">${n ? `${n} ô sai` : ""}</span></div>`;
+}
+function renderFtColTypes() {
+  const box = $("ft-coltypes");
+  const st = state.ft;
+  if (st.colState === "loading") { box.innerHTML = '<p class="ft-coltypes-msg">Đang đọc cột và đoán kiểu dữ liệu…</p>'; return; }
+  if (st.colState === "error") { box.innerHTML = `<p class="ft-coltypes-msg is-error">${escapeHtml(st.colError || "Không đọc được cột.")}</p>`; return; }
+  if (!st.colTypes) { box.innerHTML = '<p class="ft-coltypes-msg">Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ đọc tên cột và đoán kiểu của từng cột ở đây, bạn sửa được.</p>'; return; }
+  const counts = st.colCounts || {};
+  box.innerHTML =
+    `<div class="ft-coltypes-bar"><span class="ft-coltypes-title">Kiểu dữ liệu từng cột</span><span class="ft-coltypes-meta">${st.colTypes.length} cột</span>` +
+    '<button type="button" class="btn btn-ghost btn-small" data-role="reset">↺ Về kiểu tự đoán</button></div>' +
+    '<p class="ft-coltypes-hint">Denoise đoán kiểu mỗi cột từ giá trị thật. Chỉ cột kiểu Số nguyên, Số thực, Email, Số điện thoại, Ngày tháng mới bị kiểm tra khuôn. Đoán sai thì chọn lại.</p>' +
+    `<div class="ft-coltypes-list">${st.colTypes.map((c, i) => ftColRowHTML(c, i, counts)).join("")}</div>`;
+}
+// Người dùng sửa 1 cột: cập nhật trạng thái + đánh dấu "đã sửa"; số ô sai cũ không còn đúng nên xoá.
+function afterFtColEdit(row, c) {
+  row.classList.toggle("is-edited", isFtColEdited(c));
+  state.ft.colCounts = null;
+  document.querySelectorAll("#ft-coltypes .ft-coltype-row").forEach((r) => {
+    r.classList.remove("has-errors");
+    r.querySelector(".ft-coltype-count").textContent = "";
+  });
+}
+$("ft-coltypes").addEventListener("change", (e) => {
+  const row = e.target.closest(".ft-coltype-row");
+  if (!row || e.target.dataset.role !== "dtype") return;
+  const c = state.ft.colTypes[Number(row.dataset.i)];
+  c.dtype = e.target.value;
+  if (!c.dateFormat) c.dateFormat = DEFAULT_DATE_FORMAT;
+  row.querySelector('[data-role="fmt"]').hidden = c.dtype !== "date";
+  afterFtColEdit(row, c);
+});
+$("ft-coltypes").addEventListener("input", (e) => {
+  const row = e.target.closest(".ft-coltype-row");
+  if (!row || e.target.dataset.role !== "fmt") return;
+  const c = state.ft.colTypes[Number(row.dataset.i)];
+  c.dateFormat = e.target.value;
+  afterFtColEdit(row, c);
+});
+$("ft-coltypes").addEventListener("click", (e) => {
+  if (!e.target.closest('[data-role="reset"]') || !state.ft.colTypes) return;
+  state.ft.colTypes.forEach((c) => { c.dtype = c.guessed; c.dateFormat = c.guessedFmt; });
+  state.ft.colCounts = null;
+  renderFtColTypes();
+});
+// Dán text: đọc cột sau khi người dùng ngừng gõ ~600ms.
+let ftPasteTimer = null;
+$("ft-paste-input").addEventListener("input", () => {
+  clearTimeout(ftPasteTimer);
+  ftPasteTimer = setTimeout(refreshFtColumnTypes, 600);
+});
+
 $("ft-view-btn").addEventListener("click", () => {
   const v = state.ft.listView;
   if (!v || LIST_VIEW[v.kind].count(v.data) === 0) return;
@@ -1298,7 +1489,6 @@ $("convert-run-btn").addEventListener("click", async () => {
    Phát hiện -> Áp dụng (POST /api/noise-tools/configured, mode=detect|apply)
    ============================================================ */
 const CF_DTYPES = {
-  "format-noise": ["email", "phone", "date", "integer", "float"],
   "out-of-range": ["integer", "float"],
   outlier: ["integer", "float"],
   "inconsistent-category": ["category"],
@@ -1397,9 +1587,7 @@ function renderCfOptions() {
   const allowed = CF_DTYPES[tool];
   const dtype = cfDefaultDtype(firstCol, allowed);
   let extra = "";
-  if (tool === "format-noise") {
-    extra = `<div class="field" id="cf-date-format-wrap"${dtype === "date" ? "" : " hidden"}><label for="cf-date-format">Khuôn ngày (chuẩn strftime)</label><input class="input mono" id="cf-date-format" value="%Y-%m-%d" /><p class="hint-note">%Y-%m-%d = 2024-03-15 · %d/%m/%Y = 15/03/2024</p></div>`;
-  } else if (tool === "out-of-range") {
+  if (tool === "out-of-range") {
     extra = `<div class="cf-row"><div class="field"><label for="cf-min">Nhỏ nhất hợp lệ</label><input class="input" id="cf-min" type="number" step="any" placeholder="vd: 18" /></div><div class="field"><label for="cf-max">Lớn nhất hợp lệ</label><input class="input" id="cf-max" type="number" step="any" placeholder="vd: 65" /></div></div><p class="hint-note">Để trống 1 bên = không chặn bên đó</p>`;
   } else if (tool === "outlier") {
     extra = `<div class="cf-row"><div class="field"><label>Phương pháp</label><div class="ft-seg" data-seg-for="cf-outlier-method"><button type="button" class="is-active" data-value="iqr">IQR</button><button type="button" data-value="zscore">Z-score</button></div><select class="select" id="cf-outlier-method" hidden><option value="iqr">IQR</option><option value="zscore">Z-score</option></select></div><div class="field"><label for="cf-outlier-threshold">Ngưỡng</label><input class="input" id="cf-outlier-threshold" type="number" step="any" value="1.5" /></div></div><p class="hint-note">IQR thường dùng 1.5 · Z-score thường dùng 3</p>`;
@@ -1471,7 +1659,6 @@ function buildCfConfig() {
   const column = $("cf-column").value;
   const dtype = $("cf-dtype").value;
   const params = {};
-  if (tool === "format-noise" && dtype === "date") params.date_format = $("cf-date-format").value || "%Y-%m-%d";
   if (tool === "out-of-range") {
     params.min_value = num("cf-min");
     params.max_value = num("cf-max");

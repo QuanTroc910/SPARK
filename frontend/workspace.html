@@ -23,7 +23,7 @@
        Thân trang có 8 KHỐI, chuyển bằng switchSection() (không điều hướng sang
        trang khác): #section-home (trang chủ, MẶC ĐỊNH), #section-guide,
        #section-security, #section-privacy (4 trang CÔNG KHAI, bước 5 -- chưa
-       đăng nhập vẫn xem được), #section-config (6 tool cần cấu hình),
+       đăng nhập vẫn xem được), #section-config (5 tool cần cấu hình),
        #section-class-noise (4 bước, logic ở workspace-flow.js), #section-profile
        (hồ sơ), #section-free-tools và #section-convert (5 khối sau cần đăng
        nhập; bấm vào khi chưa đăng nhập thì #ws-auth hiện đè lên).
@@ -121,14 +121,10 @@
             Product <span class="ws-caret">⌄</span>
           </button>
           <div class="ws-megamenu" id="ws-product-menu" hidden>
-            <!-- Cột 1: 6 tool CẦN NHẬP TAY tham số -- mỗi mục mở đúng tab của khối
+            <!-- Cột 1: 5 tool CẦN NHẬP TAY tham số -- mỗi mục mở đúng tab của khối
                  Cần cấu hình (data-config-tool, xem workspace.js). -->
             <div class="ws-megamenu-col">
               <span class="ws-megamenu-label">Cần cấu hình</span>
-              <a class="ws-megamenu-item" href="#" data-config-tool="format-noise">
-                <span class="ws-megamenu-icon">@</span>
-                <span class="ws-megamenu-item-text"><strong>Sai định dạng</strong><small>Email · SĐT · ngày tháng sai khuôn</small></span>
-              </a>
               <a class="ws-megamenu-item" href="#" data-config-tool="out-of-range">
                 <span class="ws-megamenu-icon">[ ]</span>
                 <span class="ws-megamenu-item-text"><strong>Ngoài khoảng</strong><small>Tự khai min/max cho cột số</small></span>
@@ -186,6 +182,10 @@
               <a class="ws-megamenu-item" href="#" data-tool="fill-blanks">
                 <span class="ws-megamenu-icon">▦</span>
                 <span class="ws-megamenu-item-text"><strong>Điền ô trống</strong><small>Điền từ trên xuống hoặc 1 giá trị cố định</small></span>
+              </a>
+              <a class="ws-megamenu-item" href="#" data-tool="format-noise">
+                <span class="ws-megamenu-icon">@</span>
+                <span class="ws-megamenu-item-text"><strong>Sai định dạng</strong><small>Email · SĐT · ngày · số sai khuôn</small></span>
               </a>
             </div>
 
@@ -294,7 +294,7 @@
       </div>
       <div class="hm-fix-grid">
         <div class="hm-card"><span class="hm-card-num">/01</span><span class="hm-card-icon">∅</span><h3>Thiếu giá trị</h3><p>Ô trống, "NA", "null", "-"... đều bị bắt. Xoá dòng, điền giá trị cố định, hoặc điền mean / median / KNN / mode theo kiểu cột.</p><small>Free Tools · Cần cấu hình</small></div>
-        <div class="hm-card"><span class="hm-card-num">/02</span><span class="hm-card-icon">@</span><h3>Sai định dạng</h3><p>Email, số điện thoại, ngày tháng, số nguyên không đúng khuôn của kiểu cột bạn chọn.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/02</span><span class="hm-card-icon">@</span><h3>Sai định dạng</h3><p>Email, số điện thoại, ngày tháng, số nguyên không đúng khuôn. Denoise tự đoán kiểu từng cột, bạn sửa được.</p><small>Free Tools</small></div>
         <div class="hm-card"><span class="hm-card-num">/03</span><span class="hm-card-icon">↕</span><h3>Ngoài khoảng</h3><p>Tuổi 210, lương âm... Bạn khai min / max, Denoise gắn cờ và có thể kéo về biên.</p><small>Cần cấu hình</small></div>
         <div class="hm-card"><span class="hm-card-num">/04</span><span class="hm-card-icon">σ</span><h3>Giá trị bất thường</h3><p>Outlier theo IQR hoặc Z-score trên cột số. Cap về biên, điền lại hoặc giữ nguyên nếu đó là dữ liệu thật.</p><small>Cần cấu hình</small></div>
         <div class="hm-card"><span class="hm-card-num">/05</span><span class="hm-card-icon">Aa</span><h3>Không nhất quán</h3><p>"Nam", "nam", "NAM", " Nam " cùng một nghĩa. Tự chuẩn hoá về giá trị chuẩn bạn khai.</p><small>Cần cấu hình</small></div>
@@ -329,11 +329,11 @@
         <div class="hm-number"><b>4</b><span>Loại rule liên cột</span><small>so sánh · điều kiện · công thức · phụ thuộc hàm</small></div>
         <div class="hm-number"><b>3</b><span>Thuật toán class noise</span><small>Confident Learning · Mutual k-NN · Ensemble</small></div>
         <div class="hm-number"><b>10</b><span>Cách xử lý</span><small>từ xoá dòng tới impute KNN, chọn theo kiểu cột × loại lỗi</small></div>
-        <div class="hm-number"><b>7</b><span>Tool chạy ngay</span><small>4 Free Tools + 3 Convert, không cần cấu hình</small></div>
+        <div class="hm-number"><b>8</b><span>Tool chạy ngay</span><small>5 Free Tools + 3 Convert, không cần cấu hình</small></div>
         <div class="hm-number"><b>0</b><span>Dịch vụ bên thứ ba</span><small>không tracker, không gửi dữ liệu ra ngoài server của bạn</small></div>
       </div>
 
-      <!-- Lưới tool: 4 Free Tools + 3 Convert (bấm là chuyển khối tại chỗ) +
+      <!-- Lưới tool: 5 Free Tools + 3 Convert (bấm là chuyển khối tại chỗ) +
            1 ô đen "Workspace đầy đủ" (đang xây lại, bước 6). -->
       <div class="ft-rule"></div>
       <div class="ft-section-head">
@@ -345,6 +345,7 @@
         <a class="hm-tool" href="#" data-tool="trim-whitespace"><span class="hm-tool-kind">Free Tools</span><b>Cắt khoảng trắng</b><small>Khoảng trắng lạc và ký tự vô hình</small><i>→</i></a>
         <a class="hm-tool" href="#" data-tool="remove-empty-rows"><span class="hm-tool-kind">Free Tools</span><b>Xoá dòng trống</b><small>Dòng và cột trống hoàn toàn</small><i>→</i></a>
         <a class="hm-tool" href="#" data-tool="fill-blanks"><span class="hm-tool-kind">Free Tools</span><b>Điền ô trống</b><small>Từ ô phía trên hoặc 1 giá trị cố định</small><i>→</i></a>
+        <a class="hm-tool" href="#" data-tool="format-noise"><span class="hm-tool-kind">Free Tools</span><b>Sai định dạng</b><small>Email · SĐT · ngày · số không đúng khuôn</small><i>→</i></a>
         <a class="hm-tool" href="#" data-convert-tool="delimiter"><span class="hm-tool-kind">Convert</span><b>Đổi delimiter CSV</b><small>Phẩy · chấm phẩy · tab · gạch đứng</small><i>→</i></a>
         <a class="hm-tool" href="#" data-convert-tool="csv-to-json"><span class="hm-tool-kind">Convert</span><b>CSV → JSON</b><small>Mỗi dòng 1 object, khoá là tên cột</small><i>→</i></a>
         <a class="hm-tool" href="#" data-convert-tool="json-to-csv"><span class="hm-tool-kind">Convert</span><b>JSON → CSV</b><small>Làm phẳng JSON lồng nhau thành cột</small><i>→</i></a>
@@ -435,9 +436,9 @@
             <h2 class="tx-h2"><span>01</span>Denoise gồm những gì</h2>
             <p>Có ba cách làm việc, xếp theo mức độ phải cấu hình. Chọn cách nhẹ nhất đủ cho việc của bạn.</p>
             <ul class="tx-list">
-              <li><b>Free Tools</b> — 4 thao tác không cần khai gì: xoá dòng trùng, cắt khoảng trắng, điền hoặc xoá ô trống, xoá dòng trống. Tải file lên, bấm Chạy, có kết quả ngay.</li>
+              <li><b>Free Tools</b> — 5 thao tác gần như không cần khai gì: xoá dòng trùng, cắt khoảng trắng, điền hoặc xoá ô trống, xoá dòng trống, tìm ô sai định dạng (Denoise tự đoán kiểu từng cột, bạn sửa được). Tải file lên, bấm Chạy, có kết quả ngay.</li>
               <li><b>Convert</b> — đổi delimiter CSV, CSV sang JSON, JSON sang CSV. Chỉ đổi định dạng, giữ nguyên văn từng giá trị.</li>
-              <li><b>Cần cấu hình</b> — 6 tool cho lỗi phải khai cột và tham số: sai định dạng, ngoài khoảng, giá trị bất thường, không nhất quán, thiếu giá trị nâng cao, rule liên cột. Chạy hai nhịp: phát hiện rồi áp dụng.</li>
+              <li><b>Cần cấu hình</b> — 5 tool cho lỗi phải khai cột và tham số: ngoài khoảng, giá trị bất thường, không nhất quán, thiếu giá trị nâng cao, rule liên cột. Chạy hai nhịp: phát hiện rồi áp dụng.</li>
               <li><b>Class Noise</b> — 4 bước riêng cho nhãn phân loại bị gán sai, 3 thuật toán để so sánh.</li>
             </ul>
             <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Ba nhóm tool nối được với nhau: xong tool nào, panel "Xử lý tiếp" cho chọn bất kỳ tool nào khác và mang đúng kết quả vừa có sang làm đầu vào. Dải đen phía trên ghi lại chuỗi các bước; "Bắt đầu lại từ gốc" trả về file ban đầu.</p></div>
@@ -717,7 +718,7 @@
          KHỐI: CLASS NOISE -- 4 bước (File & phương pháp / Nhãn & đặc trưng /
          Kết quả / Xử lý), chạy bằng workspace-flow.js (bản sao script.js, hướng
          cố định = "class"). Nhánh Attribute Noise của luồng cũ KHÔNG còn dùng
-         (đã thay bằng 6 tool "Cần cấu hình" ở #section-config) -- các khối
+         (đã thay bằng 5 tool "Cần cấu hình" ở #section-config) -- các khối
          #panel-N-attribute vẫn còn trong HTML vì workspace-flow.js gắn listener
          theo id lúc nạp, nhưng luôn bị ẩn (toggleStepNDirection()). Khối này
          CẦN đăng nhập.
@@ -1175,8 +1176,9 @@
     </div>
 
     <!-- ============================================================
-         KHỐI: CẦN CẤU HÌNH -- 6 tool (Sai định dạng / Ngoài khoảng / Giá trị
-         bất thường / Không nhất quán / Thiếu giá trị nâng cao / Rule liên cột),
+         KHỐI: CẦN CẤU HÌNH -- 5 tool (Ngoài khoảng / Giá trị bất thường /
+         Không nhất quán / Thiếu giá trị nâng cao / Rule liên cột; "Sai định
+         dạng" đã chuyển sang nhóm Tự động / Free Tools),
          CÙNG KHUÔN trang tool Free Tools (01 đầu vào / 02 kết quả) nhưng chạy
          2 NHỊP: bấm "Phát hiện" -> khung 02 tô màu các ô lỗi; chọn cách xử lý
          rồi bấm "Áp dụng" -> khung 02 thành dữ liệu đã sửa, hiện "Xử lý tiếp".
@@ -1185,7 +1187,7 @@
          ============================================================ -->
     <div id="section-config" hidden>
       <div class="ft-topbar">
-        <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i>Cần cấu hình<i>/</i><b id="cf-crumb-tool">Sai định dạng</b></span>
+        <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i>Cần cấu hình<i>/</i><b id="cf-crumb-tool">Ngoài khoảng</b></span>
         <span class="ft-meta">
           <span>Chạy trên<strong>Backend Flask</strong></span>
           <span>Hai nhịp<strong>Phát hiện → Áp dụng</strong></span>
@@ -1202,8 +1204,7 @@
       </div>
 
       <div class="convert-tabs" id="cf-tabs">
-        <button type="button" class="convert-tab is-active" data-tool="format-noise">Sai định dạng</button>
-        <button type="button" class="convert-tab" data-tool="out-of-range">Ngoài khoảng</button>
+        <button type="button" class="convert-tab is-active" data-tool="out-of-range">Ngoài khoảng</button>
         <button type="button" class="convert-tab" data-tool="outlier">Giá trị bất thường</button>
         <button type="button" class="convert-tab" data-tool="inconsistent-category">Không nhất quán</button>
         <button type="button" class="convert-tab" data-tool="missing-advanced">Thiếu giá trị</button>
@@ -1360,13 +1361,14 @@
         <span class="convert-badge">▦ Xử lý qua backend thật</span>
       </div>
 
-      <!-- Tab chọn tool: CYD mỗi tool 1 trang riêng, Denoise gộp 4 tool trong 1
+      <!-- Tab chọn tool: CYD mỗi tool 1 trang riêng, Denoise gộp 5 tool trong 1
            khối nên giữ hàng tab (kiểu viên thuốc) để đổi tool nhanh. -->
       <div class="convert-tabs" id="ft-tabs">
         <button type="button" class="convert-tab is-active" data-tool="remove-duplicates">Xoá dòng trùng</button>
         <button type="button" class="convert-tab" data-tool="trim-whitespace">Cắt khoảng trắng</button>
         <button type="button" class="convert-tab" data-tool="fill-blanks">Điền ô trống</button>
         <button type="button" class="convert-tab" data-tool="remove-empty-rows">Xoá dòng trống</button>
+        <button type="button" class="convert-tab" data-tool="format-noise">Sai định dạng</button>
       </div>
 
       <!-- Dải "đang nối tiếp" -- chỉ hiện khi có chuỗi xử lý (state.pipe, DÙNG
@@ -1484,6 +1486,27 @@
           <div class="convert-options" id="convert-options-remove-empty-rows" hidden>
             <label class="switch-row"><input type="checkbox" id="opt-remove-empty-columns" /> Xoá luôn cột trống hoàn toàn</label>
             <p class="hint-note">Cột mà mọi dòng đều thiếu, kể cả tiêu đề</p>
+          </div>
+
+          <!-- Sai định dạng: bảng KIỂU DỮ LIỆU TỪNG CỘT (Denoise tự đoán từ giá trị thật, người dùng sửa được)
+               nằm ngay dưới bảng dữ liệu đầu vào + cách xử lý ô sai. Bảng #ft-coltypes do workspace.js dựng
+               sau khi đọc file/text (refreshFtColumnTypes), kèm khuôn ngày cho cột kiểu "Ngày tháng". -->
+          <div class="convert-options" id="convert-options-format-noise" hidden>
+            <div class="ft-coltypes" id="ft-coltypes"></div>
+            <div class="field">
+              <label>Khi gặp ô sai định dạng</label>
+              <div class="ft-seg" data-seg-for="opt-format-action">
+                <button type="button" class="is-active" data-value="report">Chỉ báo, không sửa</button>
+                <button type="button" data-value="clear_cell">Để trống ô sai</button>
+                <button type="button" data-value="remove_row">Xoá cả dòng</button>
+              </div>
+              <select class="select" id="opt-format-action" hidden>
+                <option value="report">Chỉ báo, không sửa</option>
+                <option value="clear_cell">Để trống ô sai</option>
+                <option value="remove_row">Xoá cả dòng</option>
+              </select>
+            </div>
+            <p class="hint-note">"Để trống ô sai" biến ô sai thành ô trống, rồi dùng "Điền ô trống" nếu muốn điền lại. Ô vốn đã trống không bị tính là sai.</p>
           </div>
 
           <p class="form-error" id="ft-error" hidden></p>
@@ -1794,7 +1817,7 @@
         <div class="ws-footer-col">
           <h4>Sản phẩm</h4>
           <a href="#" data-section="home">Trang chủ</a>
-          <a href="#" data-config-tool="format-noise">Cần cấu hình</a>
+          <a href="#" data-config-tool="out-of-range">Cần cấu hình</a>
           <a href="#" data-section="class-noise">Class Noise</a>
         </div>
         <div class="ws-footer-col">
@@ -1803,6 +1826,7 @@
           <a href="#" data-tool="trim-whitespace">Cắt khoảng trắng</a>
           <a href="#" data-tool="remove-empty-rows">Xoá dòng trống</a>
           <a href="#" data-tool="fill-blanks">Điền ô trống</a>
+          <a href="#" data-tool="format-noise">Sai định dạng</a>
         </div>
         <div class="ws-footer-col">
           <h4>Convert</h4>

@@ -807,7 +807,7 @@ body.ws-guest .ws-only-user { display: none !important; }
 }
 .hm-number small { display: block; margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--ink-faint); }
 
-/* ===== TRANG CHỦ: lưới tool (4 Free Tools + 3 Convert + 1 ô đen) ===== */
+/* ===== TRANG CHỦ: lưới tool (5 Free Tools + 3 Convert + 1 ô đen) ===== */
 .hm-tools-grid {
   display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 28px;
   border-top: 1px solid #111; border-left: 1px solid #111;
@@ -825,7 +825,7 @@ a.hm-tool:hover { background: #ebebe7; }
 .hm-tool b { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px; }
 .hm-tool small { font-size: 12.5px; line-height: 1.5; color: var(--ink-dim); flex: 1 1 auto; }
 .hm-tool i { position: absolute; right: 18px; bottom: 16px; font-style: normal; font-size: 18px; color: var(--signal); }
-.hm-tool.is-dark { background: #111; color: #fff; }
+.hm-tool.is-dark { background: #111; color: #fff; grid-column: 1 / -1; min-height: 130px; } /* trải hết hàng cuối khi lưới có 9 ô (5 Free Tools + 3 Convert + ô đen) */
 .hm-tool.is-dark .hm-tool-kind { color: rgba(255, 255, 255, 0.6); }
 .hm-tool.is-dark small { color: rgba(255, 255, 255, 0.75); }
 .hm-tool.is-dark i { color: var(--lime); }
@@ -1178,10 +1178,46 @@ a.hm-tool:hover { background: #ebebe7; }
 .cyd-table tr.is-removed td:nth-child(2) { color: #111; }
 .cyd-table tr.is-kept td:nth-child(2) { color: var(--signal); }
 
-/* Ô đã bị sửa trong danh sách "Xem các ô đã sửa" (Cắt khoảng trắng thừa): nền cobalt nhạt + chữ mono để
+/* Ô đã bị sửa ("Xem các ô đã sửa" của Cắt khoảng trắng thừa) hoặc bị gắn cờ sai định dạng ("Xem các ô sai định dạng"): nền cobalt nhạt + chữ mono để
    thấy rõ các ký hiệu khoảng trắng (␣ ⇥ ⏎ ⍽ ⟨ZW⟩). */
-.cyd-table td.is-changed {
+.cyd-table td.is-changed,
+.cyd-table td.is-flagged {
   background: rgba(47, 75, 255, 0.10); box-shadow: inset 0 0 0 1px rgba(47, 75, 255, 0.35);
   font-family: "IBM Plex Mono", monospace; font-size: 12.5px;
+}
+
+/* ===== Sai định dạng: bảng kiểu dữ liệu từng cột (dưới bảng dữ liệu đầu vào) =====
+   Mỗi cột 1 dòng: tên cột | kiểu (đã đoán sẵn, đổi được) | khuôn ngày (chỉ cột kiểu Ngày tháng) | số ô sai sau khi Chạy.
+   Dòng người dùng đã đổi kiểu có vạch cobalt bên trái (.is-edited). Các ô đặt grid-column cố định để cột thẳng
+   hàng dù ô khuôn ngày bị ẩn. */
+.ft-coltypes { border: 1px solid #111; margin-bottom: 18px; background: var(--bg); }
+.ft-coltypes-bar { display: flex; align-items: stretch; border-bottom: 1px solid #111; min-height: 40px; }
+.ft-coltypes-title {
+  display: flex; align-items: center; padding: 0 14px; background: #111; color: #fff;
+  font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.ft-coltypes-meta {
+  margin-left: auto; align-self: center; padding-right: 12px; color: var(--ink-faint);
+  font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.ft-coltypes-bar .btn { align-self: center; margin-right: 8px; }
+.ft-coltypes-hint { margin: 0; padding: 10px 14px; font-size: 12.5px; line-height: 1.5; color: var(--ink-dim); border-bottom: 1px solid var(--line); }
+.ft-coltypes-msg { margin: 0; padding: 16px 14px; font-size: 13px; line-height: 1.5; color: var(--ink-dim); }
+.ft-coltypes-msg.is-error { color: var(--danger); }
+.ft-coltypes-list { max-height: 300px; overflow-y: auto; }
+.ft-coltype-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 190px 112px 72px; gap: 10px; align-items: center;
+  padding: 7px 14px; border-bottom: 1px solid var(--line);
+}
+.ft-coltype-row:last-child { border-bottom: 0; }
+.ft-coltype-row.is-edited { box-shadow: inset 3px 0 0 var(--signal); background: rgba(47, 75, 255, 0.04); }
+.ft-coltype-name { grid-column: 1; font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-coltype-select { grid-column: 2; height: 34px; padding: 0 10px; font-size: 13px; }
+.ft-coltype-fmt { grid-column: 3; height: 34px; padding: 0 10px; font-size: 12.5px; }
+.ft-coltype-count { grid-column: 4; text-align: right; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--signal); white-space: nowrap; }
+@media (max-width: 640px) {
+  .ft-coltype-row { grid-template-columns: minmax(0, 1fr) 150px 72px; }
+  .ft-coltype-fmt { grid-column: 1 / 3; grid-row: 2; }
+  .ft-coltype-count { grid-column: 3; }
 }
 

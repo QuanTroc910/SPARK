@@ -30,6 +30,9 @@ from typing import Optional
 import pandas as pd
 
 from .attribute_handling import DuplicateKeep, _is_missing_text
+from .config import ColumnDType, ColumnNoiseConfig, NoiseType
+from .detectors import detect_format_noise
+from .pipeline import guess_column_dtype, guess_date_format
 
 
 class QuickToolError(Exception):
@@ -281,6 +284,110 @@ def preview_trim_changes(
         "changed_cell_count": int(mask.sum()),
         "changed_row_count": int(len(positions)),
         "shown_count": int(len(shown)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tool "Sai định dạng" (nhóm Tự động) -- quét MỌI cột cùng lúc, mỗi cột theo kiểu dữ liệu của nó (tự
+# đoán, người dùng sửa được ở giao diện). Lõi dùng lại NGUYÊN `detect_format_noise()` của luồng Attribute
+# Noise đầy đủ, nên "thế nào là sai định dạng" giống hệt Workspace cũ (email cần @, SĐT chỉ chữ số và vài
+# ký tự +-(), ngày đúng khuôn, số nguyên/số thực parse được; ô trống/thiếu KHÔNG bị tính là sai -- đã có
+# tool Điền/Xoá ô trống lo).
+# ---------------------------------------------------------------------------
+
+# 5 kiểu có "khuôn" để kiểm tra; category/text không có khuôn nên không bao giờ bị gắn cờ.
+FORMAT_CHECKED_DTYPES = (
+    ColumnDType.INTEGER, ColumnDType.FLOAT, ColumnDType.EMAIL, ColumnDType.PHONE, ColumnDType.DATE,
+)
+FORMAT_ACTIONS = ("report", "clear_cell", "remove_row")
+
+
+def auto_column_types(df: pd.DataFrame) -> dict:
+    """Kiểu từng cột do thuật toán tự đoán (cùng hàm giao diện dùng để điền sẵn) -- dùng khi request
+    không gửi `column_types`, để tool vẫn chạy được "một phát" không cần khai gì."""
+    types = {}
+    for col in df.columns:
+        dtype = guess_column_dtype(df[col])
+        spec = {"dtype": dtype}
+        if dtype == ColumnDType.DATE.value:
+            spec["date_format"] = guess_date_format(df[col]) or "%Y-%m-%d"
+        types[str(col)] = spec
+    return types
+
+
+def find_format_errors(df: pd.DataFrame, column_types: dict) -> pd.DataFrame:
+    """Bảng True/False cùng hình dạng với `df`: True = ô sai định dạng so với kiểu cột đã chọn.
+    `column_types` = {tên cột: {"dtype": "email"|"phone"|"date"|"integer"|"float"|"category"|"text",
+    "date_format": "%Y-%m-%d" (chỉ cần với kiểu date)}}. Cột không có trong `column_types` hoặc có kiểu
+    không kiểm tra (category/text) thì cả cột là False."""
+    mask = pd.DataFrame(False, index=df.index, columns=df.columns)
+    for col, spec in column_types.items():
+        if col not in df.columns:
+            raise QuickToolError(f"Cột không tồn tại: {col}")
+        spec = spec or {}
+        try:
+            dtype = ColumnDType(spec.get("dtype"))
+        except ValueError:
+            raise QuickToolError(f"Kiểu dữ liệu không hợp lệ ở cột '{col}': {spec.get('dtype')}")
+        if dtype not in FORMAT_CHECKED_DTYPES:
+            continue
+        date_format = (spec.get("date_format") or "").strip() or None
+        if dtype == ColumnDType.DATE and date_format and "%" not in date_format:
+            raise QuickToolError(f"Khuôn ngày ở cột '{col}' phải dạng %Y-%m-%d (có dấu %), nhận được: {date_format}")
+        cfg = ColumnNoiseConfig(column=col, dtype=dtype, noise_types=[NoiseType.FORMAT_NOISE], date_format=date_format)
+        mask[col] = detect_format_noise(df[col], cfg).to_numpy()
+    return mask
+
+
+def quick_fix_format_noise(df: pd.DataFrame, mask: pd.DataFrame, action: str) -> tuple[pd.DataFrame, dict]:
+    """Áp 1 trong 3 cách lên các ô bị gắn cờ (`mask` từ `find_format_errors`):
+      "report"     -- chỉ báo, KHÔNG sửa gì (mặc định an toàn);
+      "clear_cell" -- đổi ô sai thành ô trống (rồi có thể điền lại bằng tool Điền/xoá ô trống);
+      "remove_row" -- xoá cả dòng có ít nhất 1 ô sai.
+    stats ngoài 4 field chung còn có `flagged_cell_count`/`flagged_row_count` (số ô/dòng sai, tính trên
+    dữ liệu ĐẦU VÀO, không phụ thuộc cách xử lý)."""
+    if action not in FORMAT_ACTIONS:
+        raise QuickToolError(f"action không hợp lệ: {action}")
+    row_flagged = mask.any(axis=1)
+    flagged_cells = int(mask.to_numpy().sum())
+    if action == "remove_row":
+        result = df[~row_flagged].reset_index(drop=True)
+        stats = _stats(df, result)
+    elif action == "clear_cell":
+        result = df.mask(mask, "")
+        stats = _stats(df, result, cells_changed=flagged_cells)
+    else:
+        result = df
+        stats = _stats(df, result)
+    stats["flagged_cell_count"] = flagged_cells
+    stats["flagged_row_count"] = int(row_flagged.sum())
+    return result, stats
+
+
+def preview_format_errors(df: pd.DataFrame, mask: pd.DataFrame, limit: int = 100) -> dict:
+    """Dữ liệu cho nút "Xem các ô sai định dạng": các DÒNG có ít nhất 1 ô sai (theo thứ tự trong file,
+    tối đa `limit` dòng), giá trị GỐC giữ nguyên, kèm cờ từng ô.
+      rows / row_numbers   -- như `preview_trim_changes` (header + dòng; số dòng gốc 1-based);
+      cell_flagged         -- True = ô đó sai định dạng (cùng hình dạng với phần dữ liệu của `rows`);
+      flagged_cell_count / flagged_row_count -- thống kê TOÀN BỘ file (không bị cắt bởi `limit`);
+      column_error_counts  -- {tên cột: số ô sai} chỉ gồm cột có lỗi (giao diện hiện cạnh bảng kiểu cột)."""
+    row_flagged = mask.any(axis=1).to_numpy()
+    positions = row_flagged.nonzero()[0]
+    shown = positions[:limit]
+    flags = mask.to_numpy()
+    rows = [[str(c) for c in df.columns]]
+    cell_flagged = []
+    for pos in shown:
+        rows.append(["" if v is None else str(v) for v in df.iloc[pos].tolist()])
+        cell_flagged.append([bool(f) for f in flags[pos].tolist()])
+    return {
+        "rows": rows,
+        "row_numbers": [int(pos) + 1 for pos in shown],
+        "cell_flagged": cell_flagged,
+        "flagged_cell_count": int(flags.sum()),
+        "flagged_row_count": int(len(positions)),
+        "shown_count": int(len(shown)),
+        "column_error_counts": {str(c): int(mask[c].sum()) for c in mask.columns if mask[c].any()},
     }
 
 

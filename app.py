@@ -50,14 +50,19 @@ from attribute_noise.pipeline import (
     detect_noise,
     get_flagged_rows,
     guess_column_dtype,
+    guess_date_format,
     load_data,
 )
 from attribute_noise.quick_tools import (
     QuickToolError,
+    auto_column_types,
+    find_format_errors,
     quick_fill_or_remove_blanks,
     quick_remove_duplicates,
     preview_duplicate_rows,
+    preview_format_errors,
     preview_trim_changes,
+    quick_fix_format_noise,
     quick_remove_empty_rows,
     quick_trim_whitespace,
 )
@@ -1600,10 +1605,40 @@ def noise_tool_remove_empty_rows():
     return _noise_tool_response(result_df, stats)
 
 
+@app.route("/api/noise-tools/format-noise", methods=["POST"])
+@login_required
+def noise_tool_format_noise():
+    """Free Tool 5: Sai định dạng -- quét MỌI cột theo kiểu dữ liệu của từng cột. Field `column_types`
+    (JSON {cột: {dtype, date_format}}) là kiểu người dùng đã xác nhận/sửa ở giao diện; thiếu field này
+    thì backend tự đoán kiểu (auto_column_types). `action`: report (chỉ báo, mặc định) / clear_cell
+    (để trống ô sai) / remove_row (xoá dòng có ô sai) -- xem quick_tools.py."""
+    try:
+        df = _read_df_for_noise_tool(request)
+        raw = request.form.get("column_types", "").strip()
+        if raw:
+            try:
+                column_types = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise QuickToolError(f"column_types không phải JSON hợp lệ: {exc}")
+            if not isinstance(column_types, dict):
+                raise QuickToolError("column_types phải là object {tên cột: {dtype, date_format}}")
+        else:
+            column_types = auto_column_types(df)
+        action = request.form.get("action", "report")
+        mask = find_format_errors(df, column_types)
+        result_df, stats = quick_fix_format_noise(df, mask, action)
+        format_preview = preview_format_errors(df, mask, limit=PREVIEW_DATA_ROWS)
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
+    return _noise_tool_response(result_df, stats, {"format_preview": format_preview})
+
+
 # ===========================================================================
-# TOOL "CẦN CẤU HÌNH" (6 tool, giao diện Denoise): Sai định dạng / Ngoài
-# khoảng / Giá trị bất thường / Không nhất quán / Thiếu giá trị nâng cao /
-# Rule liên cột. Vận hành GIỐNG 4 Free Tools ở trên (không file_id, xong
+# TOOL "CẦN CẤU HÌNH" (5 tool, giao diện Denoise): Ngoài khoảng / Giá trị
+# bất thường / Không nhất quán / Thiếu giá trị nâng cao / Rule liên cột. ("Sai
+# định dạng" đã chuyển sang nhóm Tự động -- route /api/noise-tools/format-noise.) Vận hành GIỐNG 4 Free Tools ở trên (không file_id, xong
 # trong 1 request, @login_required) nhưng KHÁC ở chỗ cần người dùng khai cột
 # + tham số, nên chia 2 nhịp: mode="detect" (chỉ phát hiện, trả các dòng bị
 # gắn cờ + danh sách cách xử lý hợp lệ) rồi mode="apply" (phát hiện lại trên
@@ -1612,7 +1647,6 @@ def noise_tool_remove_empty_rows():
 # kiểu cột × loại lỗi ở attribute_handling.py), không viết logic mới.
 # ===========================================================================
 CONFIG_TOOL_NOISE_TYPE = {
-    "format-noise": NoiseType.FORMAT_NOISE,
     "out-of-range": NoiseType.OUT_OF_RANGE,
     "outlier": NoiseType.OUTLIER,
     "inconsistent-category": NoiseType.INCONSISTENT_CATEGORY,
@@ -1647,6 +1681,11 @@ def noise_tool_inspect():
         {
             "columns": [str(c) for c in df.columns],
             "guessed_dtypes": {str(c): guess_column_dtype(df[c]) for c in df.columns},
+            # Khuôn ngày đoán sẵn cho các cột được đoán là "date" (tool Sai định dạng dùng để điền sẵn ô khuôn ngày).
+            "guessed_date_formats": {
+                str(c): guess_date_format(df[c]) or "%Y-%m-%d"
+                for c in df.columns if guess_column_dtype(df[c]) == "date"
+            },
             "row_count": int(len(df)),
             "preview_rows": _df_preview_rows(df),
         }

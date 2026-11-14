@@ -107,6 +107,30 @@ def guess_column_dtype(series: pd.Series, sample_size: int = 200) -> str:
     return ColumnDType.TEXT.value
 
 
+def guess_date_format(series: pd.Series, sample_size: int = 200) -> Optional[str]:
+    """Đoán khuôn ngày (chuẩn strptime) của 1 cột ngày -- thử lần lượt `_COMMON_DATE_FORMATS`,
+    khuôn đầu tiên khớp từ 90% giá trị mẫu trở lên thì trả về; không khuôn nào khớp thì trả None
+    (caller tự dùng khuôn mặc định). Cùng ngưỡng 90% và cùng cách lấy mẫu với `guess_column_dtype()`.
+    Lưu ý như đã ghi ở `_COMMON_DATE_FORMATS`: không phân biệt được dd/mm với mm/dd khi mọi ngày
+    đều <= 12, nên đây chỉ là gợi ý -- người dùng luôn sửa lại được ở ô khuôn ngày."""
+    non_empty = series.astype(str).str.strip()
+    non_empty = non_empty[non_empty != ""]
+    if non_empty.empty:
+        return None
+    sample = non_empty.head(sample_size)
+    for fmt in _COMMON_DATE_FORMATS:
+        def is_date(v: str, fmt: str = fmt) -> bool:
+            try:
+                datetime.strptime(v, fmt)
+                return True
+            except ValueError:
+                return False
+
+        if sample.apply(is_date).sum() / len(sample) >= 0.9:
+            return fmt
+    return None
+
+
 @dataclass
 class NoiseFinding:
     """1 bản ghi noise cụ thể: ở dòng nào, cột nào, loại gì, giá trị bị lỗi là gì.
