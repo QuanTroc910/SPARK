@@ -54,12 +54,31 @@ body { overflow-x: clip; }
 }
 .ws-skip:focus { transform: translateY(0); outline: 2px solid #111; }
 
+/* ===== Bề rộng khung nội dung (header / main / footer cùng dùng .container) =====
+   --ws-cmax = "trần" (bề rộng tối đa của khung), --ws-pad = lề trái/phải trong khung,
+   --ws-cw   = bề rộng PHẦN NỘI DUNG (trần trừ 2 lề, nhưng không vượt màn hình) -- đường
+   kẻ dọc nền và mega menu "Product" dùng biến này để luôn khớp mép các khối.
+   Dùng % (không dùng vw) để không bị lệch bởi thanh cuộn.
+   Mặc định 1440px / 24px = đúng như trước. 3 chế độ XEM THỬ chọn bằng body[data-width]
+   (công tắc nổi ở góc phải dưới, code ở cuối workspace.js):
+     (không đặt) = Hiện tại, trần 1440px
+     wide        = Có trần rộng hơn, trần 1760px
+     fluid       = Không trần, giãn theo màn hình, chừa lề 48px mỗi bên
+   Ghi đè .container của style.css ngay tại đây, không sửa style.css.
+   --ws-cw khai báo trên body (không phải :root) vì phải đọc được --ws-cmax đã bị
+   body[data-width] ghi đè. */
+:root { --ws-cmax: 1440px; --ws-pad: 24px; }
+body { --ws-cw: min(calc(var(--ws-cmax) - 2 * var(--ws-pad)), calc(100% - 2 * var(--ws-pad))); }
+body[data-width="wide"]  { --ws-cmax: 1760px; }
+body[data-width="fluid"] { --ws-cmax: 100%; --ws-pad: 48px; }
+.container { max-width: var(--ws-cmax); padding-left: var(--ws-pad); padding-right: var(--ws-pad); }
+
 /* ===== Đường kẻ dọc mờ chạy suốt trang (CYD chia khung nội dung thành 6
    phần bằng các đường kẻ rất nhạt, nằm DƯỚI mọi khối có nền). ===== */
 .ws-gridlines { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
 .ws-gridlines::before {
   content: ""; position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: min(1392px, calc(100vw - 48px));
+  width: var(--ws-cw);
   background-image: linear-gradient(to right, rgba(17, 17, 17, 0.07) 1px, transparent 1px);
   background-size: calc(100% / 6) 100%;
 }
@@ -110,7 +129,7 @@ body { overflow-x: clip; }
 /* ===== Mega menu (dropdown "Product") -- vuông góc, viền đen, 4 cột ===== */
 .ws-megamenu {
   position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  width: min(1392px, calc(100vw - 48px));
+  width: var(--ws-cw);
   background: var(--bg); border: 1px solid #111; border-top: none;
   display: grid; grid-template-columns: 1fr 1fr 1fr 280px;
 }
@@ -1136,3 +1155,23 @@ a.hm-tool:hover { background: #ebebe7; }
 #section-class-noise .method-grid.is-stacked .dir-num { margin-bottom: 12px; }
 #section-class-noise .stepper { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 900px) { .cf-row, .cf-row-3 { grid-template-columns: 1fr; } }
+
+/* ===== Công tắc XEM THỬ bề rộng (TẠM -- xoá sau khi đã chọn xong) =====
+   Nổi ở góc phải dưới, 3 nút chọn chế độ. JS dựng ở cuối workspace.js. */
+.ws-width-switch {
+  position: fixed; right: 16px; bottom: 16px; z-index: 100;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: calc(100vw - 32px);
+  background: var(--bg); border: 1px solid #111; padding: 8px 10px;
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.ws-width-switch-label { color: var(--ink-dim); margin-right: 2px; }
+.ws-width-switch button {
+  font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer;
+  background: transparent; color: #111; border: 1px solid #111; border-radius: 999px;
+  padding: 5px 11px; min-height: 28px;
+}
+.ws-width-switch button:hover { background: rgba(17, 17, 17, 0.06); }
+.ws-width-switch button.is-active { background: #111; color: #fff; }
+.ws-width-switch-now { color: #111; margin-left: 2px; }
+@media (max-width: 700px) { .ws-width-switch { display: none; } }
