@@ -1138,7 +1138,10 @@ $("ft-run-btn").addEventListener("click", async () => {
     formData.append("remove_empty_rows", $("opt-blank-remove-empty-rows").checked ? "true" : "false");
     formData.append("remove_empty_columns", $("opt-blank-remove-empty-columns").checked ? "true" : "false");
   } else if (tool === "format-noise") {
-    // Đang đọc cột (vd vừa nối tiếp từ bước trước) thì chờ xong để gửi đúng bảng kiểu cột mới nhất.
+    // Bảng kiểu cột phải KHỚP đầu vào hiện tại: đầu vào vừa đổi mà bảng chưa kịp đọc lại (vd dán text khác rồi bấm Chạy trong
+    // lúc đang chờ 600ms) thì đọc lại ngay, bỏ kiểu của bảng cũ -- không gửi nhầm tên cột không có trong đầu vào mới. Rồi chờ lần
+    // đọc đang chạy dở (vd vừa nối tiếp từ bước trước) xong để gửi đúng bảng mới nhất.
+    await refreshFtColumnTypes();
     if (state.ft.colPromise) await state.ft.colPromise;
     const cols = state.ft.colTypes;
     const badDate = (cols || []).find((c) => c.dtype === "date" && !String(c.dateFormat).includes("%"));
