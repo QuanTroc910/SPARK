@@ -57,6 +57,7 @@ from attribute_noise.quick_tools import (
     quick_fill_or_remove_blanks,
     quick_remove_duplicates,
     preview_duplicate_rows,
+    preview_trim_changes,
     quick_remove_empty_rows,
     quick_trim_whitespace,
 )
@@ -1543,11 +1544,17 @@ def noise_tool_trim_whitespace():
         result_df, stats = quick_trim_whitespace(
             df, collapse_repeated=collapse_repeated, remove_zero_width=remove_zero_width
         )
+        # Danh sách các ô đã bị sửa (cho nút "Xem các ô đã sửa" ở FE) -- tính trên DỮ LIỆU ĐẦU
+        # VÀO với đúng cùng 2 tuỳ chọn, nên khớp đúng tập ô vừa bị đổi.
+        trim_preview = preview_trim_changes(
+            df, collapse_repeated=collapse_repeated, remove_zero_width=remove_zero_width,
+            limit=PREVIEW_DATA_ROWS,
+        )
     except QuickToolError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
-    return _noise_tool_response(result_df, stats)
+    return _noise_tool_response(result_df, stats, {"trim_preview": trim_preview})
 
 
 @app.route("/api/noise-tools/fill-blanks", methods=["POST"])

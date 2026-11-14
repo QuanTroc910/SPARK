@@ -1487,9 +1487,10 @@
           <div class="panel-actions">
             <button class="btn btn-primary" id="ft-run-btn" type="button">Chạy</button>
             <span class="status-text" id="ft-status"></span>
-            <!-- Chỉ hiện sau khi chạy tool "Xoá dòng trùng": bấm để khung 01 đổi sang danh sách
-                 các dòng trùng, nút đổi thành "Xem dữ liệu"; bấm lại thì về như trước. -->
-            <button class="btn btn-ghost btn-small" id="ft-dup-btn" type="button" hidden>Xem các dòng trùng</button>
+            <!-- Chỉ hiện sau khi chạy tool "Xoá dòng trùng" hoặc "Cắt khoảng trắng thừa": bấm để khung 01
+                 đổi sang danh sách các dòng trùng / các ô đã sửa, nút đổi thành "Xem dữ liệu"; bấm lại thì
+                 về như trước. Chữ nút do workspace.js đặt (LIST_VIEW). -->
+            <button class="btn btn-ghost btn-small" id="ft-view-btn" type="button" hidden>Xem danh sách</button>
           </div>
           </div>
         </section>

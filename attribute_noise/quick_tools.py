@@ -224,6 +224,66 @@ def quick_trim_whitespace(
     return result, _stats(df, result, cells_changed)
 
 
+# Đổi ký tự khoảng trắng "nhìn không thấy" thành ký hiệu hiện được, CHỈ để hiển thị danh sách ô đã
+# sửa (xem `preview_trim_changes`) -- nếu không, giá trị trước/sau khi cắt trông y hệt nhau.
+_VISIBLE_WHITESPACE = {
+    ord(" "): "\u2423",       # ␣ dấu cách
+    ord("\t"): "\u21e5",      # ⇥ tab
+    ord("\n"): "\u23ce",      # ⏎ xuống dòng
+    ord("\r"): "\u240d",      # ␍ về đầu dòng
+    0x00A0: "\u237d",        # ⍽ non-breaking space
+}
+
+
+def _visible_whitespace(value) -> str:
+    text = _ZERO_WIDTH_PATTERN.sub("\u27e8ZW\u27e9", str(value))  # ⟨ZW⟩ ký tự vô hình
+    return text.translate(_VISIBLE_WHITESPACE)
+
+
+def preview_trim_changes(
+    df: pd.DataFrame, collapse_repeated: bool = False, remove_zero_width: bool = True, limit: int = 100
+) -> dict:
+    """MỚI -- dữ liệu cho nút "Xem các ô đã sửa" của tool Cắt khoảng trắng thừa.
+
+    Dùng đúng `_clean_whitespace_advanced()` với đúng 2 tuỳ chọn như `quick_trim_whitespace()`
+    nên tập ô bị đánh dấu "đã sửa" KHỚP ĐÚNG tập ô thật sự bị đổi (test có kiểm chứng:
+    `changed_cell_count` == `stats.cells_changed`).
+
+    Trả về các DÒNG có ít nhất 1 ô bị sửa, theo thứ tự trong file. Ô đã sửa hiện giá trị TRƯỚC khi
+    sửa, khoảng trắng đổi thành ký hiệu hiện được (xem `_VISIBLE_WHITESPACE`); ô không đổi giữ nguyên.
+
+    Kết quả (dict, sẵn sàng jsonify):
+      rows            -- [header, ...dòng] tối đa `limit` dòng dữ liệu.
+      row_numbers     -- số thứ tự dòng GỐC (1-based, không tính dòng tiêu đề) của từng dòng trong `rows`.
+      cell_changed    -- cùng hình dạng với phần dữ liệu của `rows`: True = ô đó đã bị sửa.
+      changed_cell_count / changed_row_count -- thống kê TOÀN BỘ file (không bị cắt bởi `limit`);
+                         `shown_count` = số dòng thật sự trả về."""
+    changed = pd.DataFrame(index=df.index)
+    for col in df.columns:
+        cleaned = df[col].apply(lambda v: _clean_whitespace_advanced(v, collapse_repeated, remove_zero_width))
+        changed[col] = (cleaned != df[col]).to_numpy()
+    mask = changed.to_numpy()
+    row_has_change = mask.any(axis=1) if mask.size else mask.any(axis=0)
+    positions = row_has_change.nonzero()[0]
+    header = [str(c) for c in df.columns]
+    shown = positions[:limit]
+    rows = [header]
+    cell_changed = []
+    for pos in shown:
+        values = df.iloc[pos].tolist()
+        flags = mask[pos].tolist()
+        rows.append([_visible_whitespace(v) if f else ("" if v is None else str(v)) for v, f in zip(values, flags)])
+        cell_changed.append([bool(f) for f in flags])
+    return {
+        "rows": rows,
+        "row_numbers": [int(pos) + 1 for pos in shown],
+        "cell_changed": cell_changed,
+        "changed_cell_count": int(mask.sum()),
+        "changed_row_count": int(len(positions)),
+        "shown_count": int(len(shown)),
+    }
+
+
 def quick_fill_or_remove_blanks(
     df: pd.DataFrame, column: str, action: str, fixed_value: Optional[str] = None
 ) -> tuple[pd.DataFrame, dict]:

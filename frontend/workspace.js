@@ -55,7 +55,8 @@ function setError(el, message) {
 // duyệt cắt theo số này). Chỉ giới hạn HIỂN THỊ -- xử lý và file tải về luôn đủ toàn bộ dòng.
 const PREVIEW_ROWS = 100;
 // `opts` (tuỳ chọn): rowNumbers = số hiện ở cột "Dòng" thay cho 1,2,3... (vd số dòng GỐC trong file);
-// rowClasses = class CSS cho từng dòng (vd tô dòng bị xoá).
+// rowClasses = class CSS cho từng dòng (vd tô dòng bị xoá); cellClasses = class CSS cho từng ô
+// (mảng 2 chiều theo dòng x cột dữ liệu, vd tô ô đã sửa).
 function renderPreviewTable(table, rows, opts) {
   if (!rows || !rows.length) {
     table.innerHTML = "";
@@ -69,7 +70,8 @@ function renderPreviewTable(table, rows, opts) {
     body.map((row, i) => {
       const num = o.rowNumbers ? o.rowNumbers[i] : i + 1;
       const cls = o.rowClasses && o.rowClasses[i] ? ` class="${o.rowClasses[i]}"` : "";
-      return `<tr${cls}><td>${num}</td>` + row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("") + "</tr>";
+      const cc = o.cellClasses && o.cellClasses[i];
+      return `<tr${cls}><td>${num}</td>` + row.map((cell, k) => `<td${cc && cc[k] ? ` class="${cc[k]}"` : ""}>${escapeHtml(cell)}</td>`).join("") + "</tr>";
     }).join("") +
     "</tbody>";
 }
@@ -137,9 +139,10 @@ const state = {
   // (kind "csv" hoặc "json" -- JSON chỉ nối tiếp được sang JSON → CSV).
   pipe: { active: false, originalLabel: "", originalText: null, originalKind: "csv", currentText: null, currentKind: "csv", steps: [], forceNewUpload: false },
   // Trạng thái riêng từng nhóm: tool đang chọn, kiểu nhập, file đã chọn, bảng xem trước.
-  // dupView = kết quả "Xem các dòng trùng" của lần chạy Xoá dòng trùng gần nhất (null = chưa có / đã bị xoá);
-  // showing = khung 01 đang hiện danh sách dòng trùng thay cho đầu vào.
-  ft: { tool: "remove-duplicates", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, dupView: null },
+  // listView = danh sách của nút "Xem ..." sau lần chạy gần nhất: { kind: tên tool, data: dữ liệu backend trả, showing }
+  // (kind "remove-duplicates" = các dòng trùng, "trim-whitespace" = các ô đã sửa; null = chưa có / đã bị xoá);
+  // showing = khung 01 đang hiện danh sách đó thay cho đầu vào.
+  ft: { tool: "remove-duplicates", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, listView: null },
   cv: { tool: "delimiter", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, lastResult: null },
   // cf thêm: columns/guessed đọc từ /api/noise-tools/inspect, detect = kết quả nhịp "Phát hiện".
   cf: { tool: "format-noise", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null },
@@ -776,11 +779,11 @@ function renderPipePreview(g) {
 function renderInputArea(g) {
   const T = TOOLSEC[g];
   const st = state[g];
-  // Đang bấm "Xem các dòng trùng": khung 01 hiện danh sách dòng trùng thay cho đầu vào
+  // Đang bấm nút "Xem ..." (dòng trùng / ô đã sửa): khung 01 hiện danh sách đó thay cho đầu vào
   // (dù đầu vào đang là file, text dán hay kết quả bước trước). Bấm "Xem dữ liệu" thì cờ
   // showing tắt và các nhánh bên dưới dựng lại đúng trạng thái như trước.
-  if (g === "ft" && st.dupView && st.dupView.showing) {
-    renderDupList();
+  if (g === "ft" && st.listView && st.listView.showing) {
+    renderListView();
     $(T.toggle).hidden = true;
     $(T.dropzone).hidden = true;
     $(T.paste).hidden = true;
@@ -814,7 +817,7 @@ function showRawPreview(g, label, dims, rows, note) {
   renderInputArea(g);
 }
 function hideRawPreview(g) {
-  if (g === "ft") clearDupView();
+  if (g === "ft") clearListView();
   const st = state[g];
   st.rawPreviewActive = false;
   st.filePreview = null;
@@ -823,7 +826,7 @@ function hideRawPreview(g) {
   renderInputArea(g);
 }
 async function handleFileSelected(g, file) {
-  if (g === "ft") clearDupView(); // đầu vào đổi -> danh sách dòng trùng của lần chạy trước không còn đúng
+  if (g === "ft") clearListView(); // đầu vào đổi -> danh sách của lần chạy trước không còn đúng
   const st = state[g];
   st.selectedFile = file;
   const sizeText = `${(file.size / 1024).toFixed(1)} KB`;
@@ -933,8 +936,8 @@ function resetResult(g) {
   setError($(T.error), "");
   if (g === "cv") $("convert-json-card").hidden = true;
   if (g === "ft") {
-    clearDupView();
-    renderInputArea("ft"); // nếu đang hiện danh sách dòng trùng thì trả khung 01 về bình thường
+    clearListView();
+    renderInputArea("ft"); // nếu đang hiện danh sách thì trả khung 01 về bình thường
   }
   if (g === "cf") {
     $("cf-handling").hidden = true;
@@ -1141,47 +1144,74 @@ $("ft-run-btn").addEventListener("click", async () => {
   showResultTable("ft", TOOL_TAB_LABEL[tool], data.preview_rows, tableDims(data.stats.final_row_count, colCount));
   $(T.download).disabled = false;
   setStatus($(T.status), statusFromStats(data.stats), "is-ok");
-  // Phải đặt dupView TRƯỚC recordPipeStep (hàm đó dựng lại khung 01). Chạy xong luôn về chế độ
-  // xem bình thường (showing = false); chỉ tool Xoá dòng trùng mới có danh sách dòng trùng.
-  state.ft.dupView = tool === "remove-duplicates" && data.duplicate_preview ? { ...data.duplicate_preview, showing: false } : null;
+  // Phải đặt listView TRƯỚC recordPipeStep (hàm đó dựng lại khung 01). Chạy xong luôn về chế độ
+  // xem bình thường (showing = false); chỉ 2 tool có danh sách để xem (xem LIST_VIEW).
+  const lv = LIST_VIEW[tool];
+  state.ft.listView = lv && data[lv.field] ? { kind: tool, data: data[lv.field], showing: false } : null;
   recordPipeStep(TOOL_TAB_LABEL[tool], data.result_text, "csv", inp.label, fresh);
-  renderDupButton();
+  renderListButton();
   renderContinuePanel("ft");
 });
 
-/* ----- Nút "Xem các dòng trùng" ⇄ "Xem dữ liệu" (chỉ tool Xoá dòng trùng, sau khi đã chạy) ----- */
-function clearDupView() {
-  state.ft.dupView = null;
-  renderDupButton();
+/* ----- Nút "Xem ..." ⇄ "Xem dữ liệu" (tool Xoá dòng trùng và Cắt khoảng trắng thừa, sau khi đã chạy) -----
+   Bấm: khung 01 đổi từ đầu vào sang danh sách (dòng trùng / ô đã sửa), nút thành "Xem dữ liệu".
+   Bấm lại: khung 01 về y hệt trước đó. Cấu hình riêng từng tool: */
+const LIST_VIEW = {
+  "remove-duplicates": {
+    field: "duplicate_preview",        // tên field backend trả về
+    open: "Xem các dòng trùng",         // chữ nút khi đang xem đầu vào
+    none: "Không có dòng trùng",        // chữ nút (mờ) khi không có gì để xem
+    count: (d) => d.group_row_count,
+    tag: "Dòng trùng",
+    dims: (d) => `${d.group_row_count} dòng trùng · ${d.removed_row_count} dòng đã xoá`,
+    truncated: (d) => `Hiện ${d.shown_count}/${d.group_row_count} dòng trùng đầu tiên. `,
+    note: 'Cột "Dòng" là số thứ tự dòng trong đầu vào · các dòng cùng nhóm trùng nằm cạnh nhau · "Giữ" = bản được giữ lại, "Xoá" = bản đã bị xoá.',
+    // Cột "Dòng" = số dòng GỐC, cột "Kết quả" = Giữ / Xoá; dòng bị xoá tô riêng (class is-removed).
+    tableOpts: (d) => ({ rowNumbers: d.row_numbers, rowClasses: d.row_status.map((x) => (x === "remove" ? "is-removed" : "is-kept")) }),
+  },
+  "trim-whitespace": {
+    field: "trim_preview",
+    open: "Xem các ô đã sửa",
+    none: "Không có ô nào cần sửa",
+    count: (d) => d.changed_cell_count,
+    tag: "Ô đã sửa",
+    dims: (d) => `${d.changed_cell_count} ô đã sửa · ${d.changed_row_count} dòng`,
+    truncated: (d) => `Hiện ${d.shown_count}/${d.changed_row_count} dòng có ô đã sửa đầu tiên. `,
+    note: 'Cột "Dòng" là số thứ tự dòng trong đầu vào · ô tô nền là ô đã bị sửa, hiện giá trị TRƯỚC khi sửa · ␣ dấu cách · ⇥ tab · ⏎ xuống dòng · ⍽ non-breaking space · ⟨ZW⟩ ký tự vô hình.',
+    // Ô đã sửa tô nền (class is-changed).
+    tableOpts: (d) => ({ rowNumbers: d.row_numbers, cellClasses: d.cell_changed.map((row) => row.map((c) => (c ? "is-changed" : ""))) }),
+  },
+};
+function clearListView() {
+  state.ft.listView = null;
+  renderListButton();
 }
-// Hiện/ẩn nút và đặt chữ: chưa chạy -> ẩn; chạy xong mà không có dòng trùng -> mờ, báo "Không có dòng trùng";
-// có dòng trùng -> "Xem các dòng trùng" (đang xem đầu vào) hoặc "Xem dữ liệu" (đang xem danh sách trùng).
-function renderDupButton() {
-  const btn = $("ft-dup-btn");
-  const d = state.ft.dupView;
-  btn.hidden = !(d && state.ft.tool === "remove-duplicates");
+// Hiện/ẩn nút và đặt chữ: chưa chạy (hoặc đang ở tab của tool khác) -> ẩn; chạy xong mà không có gì để xem
+// -> mờ, báo "Không có ..."; có -> "Xem các ..." (đang xem đầu vào) hoặc "Xem dữ liệu" (đang xem danh sách).
+function renderListButton() {
+  const btn = $("ft-view-btn");
+  const v = state.ft.listView;
+  btn.hidden = !(v && state.ft.tool === v.kind);
   if (btn.hidden) return;
-  btn.disabled = d.group_row_count === 0;
-  btn.textContent = d.group_row_count === 0 ? "Không có dòng trùng" : d.showing ? "Xem dữ liệu" : "Xem các dòng trùng";
+  const cfg = LIST_VIEW[v.kind];
+  const empty = cfg.count(v.data) === 0;
+  btn.disabled = empty;
+  btn.textContent = empty ? cfg.none : v.showing ? "Xem dữ liệu" : cfg.open;
 }
-// Dựng danh sách dòng trùng vào thẻ xem trước của khung 01: cột "Dòng" = số dòng GỐC trong đầu vào,
-// cột "Kết quả" = Giữ / Xoá; các dòng bị xoá được tô riêng (class is-removed).
-function renderDupList() {
-  const d = state.ft.dupView;
-  const dims = `${d.group_row_count} dòng trùng · ${d.removed_row_count} dòng đã xoá`;
-  let note = 'Cột "Dòng" là số thứ tự dòng trong đầu vào · các dòng cùng nhóm trùng nằm cạnh nhau · "Giữ" = bản được giữ lại, "Xoá" = bản đã bị xoá.';
-  if (d.shown_count < d.group_row_count) note = `Hiện ${d.shown_count}/${d.group_row_count} dòng trùng đầu tiên. ` + note;
-  fillPreviewCard("ft", "Dòng trùng", dims, d.rows, note, {
-    rowNumbers: d.row_numbers,
-    rowClasses: d.row_status.map((x) => (x === "remove" ? "is-removed" : "is-kept")),
-  });
+// Dựng danh sách vào thẻ xem trước của khung 01.
+function renderListView() {
+  const v = state.ft.listView;
+  const cfg = LIST_VIEW[v.kind];
+  const d = v.data;
+  const shownAll = d.shown_count >= (v.kind === "remove-duplicates" ? d.group_row_count : d.changed_row_count);
+  fillPreviewCard("ft", cfg.tag, cfg.dims(d), d.rows, (shownAll ? "" : cfg.truncated(d)) + cfg.note, cfg.tableOpts(d));
 }
-$("ft-dup-btn").addEventListener("click", () => {
-  const d = state.ft.dupView;
-  if (!d || d.group_row_count === 0) return;
-  d.showing = !d.showing;
+$("ft-view-btn").addEventListener("click", () => {
+  const v = state.ft.listView;
+  if (!v || LIST_VIEW[v.kind].count(v.data) === 0) return;
+  v.showing = !v.showing;
   renderInputArea("ft");
-  renderDupButton();
+  renderListButton();
 });
 
 // Gọi backend + khoá nút trong lúc chờ + báo lỗi inline. Trả data hoặc null.
