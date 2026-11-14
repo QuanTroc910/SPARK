@@ -1398,12 +1398,25 @@ $("ft-paste-input").addEventListener("input", () => {
   ftPasteTimer = setTimeout(refreshFtColumnTypes, 600);
 });
 
+// Bảng dữ liệu (khung 01) có thể nằm cách nút "Xem ..." cả nghìn px -- nhất là tool Sai định dạng, vì giữa bảng và nút còn có
+// bảng kiểu dữ liệu từng cột. Bấm nút xong mà bảng nằm ngoài tầm nhìn thì người dùng không thấy gì đổi. Nên sau mỗi lần đổi
+// giữa "đầu vào" ⇄ "danh sách", đưa bảng vào GIỮA màn hình (chỉ cuộn khi bảng chưa thấy trọn vẹn dưới thanh header dính).
+function revealFtInputCard() {
+  requestAnimationFrame(() => {
+    const card = $("ft-raw-preview");
+    const headerH = document.querySelector(".ws-header").offsetHeight;
+    const r = card.getBoundingClientRect();
+    if (r.top >= headerH && r.bottom <= window.innerHeight) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
 $("ft-view-btn").addEventListener("click", () => {
   const v = state.ft.listView;
   if (!v || LIST_VIEW[v.kind].count(v.data) === 0) return;
   v.showing = !v.showing;
   renderInputArea("ft");
   renderListButton();
+  revealFtInputCard();
 });
 
 // Gọi backend + khoá nút trong lúc chờ + báo lỗi inline. Trả data hoặc null.
