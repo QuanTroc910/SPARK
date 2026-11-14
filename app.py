@@ -1507,6 +1507,23 @@ def _noise_tool_response(result_df: pd.DataFrame, stats: dict, extra: Optional[d
     return jsonify(payload)
 
 
+@app.route("/api/noise-tools/normalize", methods=["POST"])
+@login_required
+def noise_tool_normalize():
+    """Đọc đầu vào (file CSV/Excel hoặc text) bằng ĐÚNG bộ đọc mọi tool Free Tools dùng rồi trả lại CSV chuẩn, KHÔNG sửa gì
+    (mọi ô giữ nguyên chữ gốc). Dùng cho nút "Bắt đầu lại từ gốc": trình duyệt giữ lại file gốc người dùng đã đưa vào, gửi lên đây
+    để lấy lại bản CSV của dữ liệu GỐC (Excel không đọc được dạng chữ trong trình duyệt nên cần backend). Cùng shape response
+    với các route noise-tools khác (result_text + preview_rows + stats)."""
+    try:
+        df = _read_df_for_noise_tool(request)
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc được file: {exc}"}), 400
+    n = len(df)
+    return _noise_tool_response(df, {"original_row_count": n, "final_row_count": n, "removed_row_count": 0, "cells_changed": 0})
+
+
 @app.route("/api/noise-tools/remove-duplicates", methods=["POST"])
 @login_required
 def noise_tool_remove_duplicates():

@@ -134,10 +134,11 @@ const PUBLIC_SECTIONS = new Set(["home", "guide", "security", "privacy"]);
 const state = {
   section: "home", // 1 trong SECTIONS -- khối đang hiện (mặc định: trang chủ)
   // Bộ nhớ NỐI TIẾP dùng chung cho cả 3 nhóm tool (xem phần "BA NHÓM TOOL").
-  // originalText/Kind = kết quả ĐẦU TIÊN của chuỗi ("Bắt đầu lại từ gốc" quay
-  // về đây), currentText/Kind = kết quả mới nhất = đầu vào của tool kế tiếp
+  // originalSource = ĐẦU VÀO THẬT lúc chuỗi bắt đầu ({file|text, kind}: file hoặc text người dùng đưa vào), "Bắt đầu lại từ gốc" quay về đây
+  // (xem loadPipeOriginal). originalText/Kind = kết quả ĐẦU TIÊN của chuỗi, chỉ còn là DỰ PHÒNG khi không ghi nhớ được đầu vào thật.
+  // currentText/Kind = kết quả mới nhất = đầu vào của tool kế tiếp
   // (kind "csv" hoặc "json" -- JSON chỉ nối tiếp được sang JSON → CSV).
-  pipe: { active: false, originalLabel: "", originalText: null, originalKind: "csv", currentText: null, currentKind: "csv", steps: [], forceNewUpload: false },
+  pipe: { active: false, originalLabel: "", originalSource: null, originalText: null, originalKind: "csv", currentText: null, currentKind: "csv", steps: [], forceNewUpload: false },
   // Trạng thái riêng từng nhóm: tool đang chọn, kiểu nhập, file đã chọn, bảng xem trước.
   // listView = danh sách của nút "Xem ..." sau lần chạy gần nhất: { kind: tên tool, data: dữ liệu backend trả, showing }
   // (kind "remove-duplicates" = các dòng trùng, "trim-whitespace" = các ô đã sửa; null = chưa có / đã bị xoá);
@@ -857,15 +858,17 @@ function collectInput(g, formData) {
     formData.append("text", p.currentText);
     return { label: p.originalLabel };
   }
+  // Loại đầu vào gốc: chỉ tool JSON → CSV của Convert nhận JSON, mọi tool khác nhận CSV/Excel.
+  const kind = g === "cv" && st.tool === "json-to-csv" ? "json" : "csv";
   if (st.inputMode === "file") {
     if (!st.selectedFile) return { error: "Chưa chọn file nào." };
     formData.append("file", st.selectedFile);
-    return { label: st.selectedFile.name };
+    return { label: st.selectedFile.name, source: { file: st.selectedFile, kind } };
   }
   const text = $(T.paste).value;
   if (!text.trim()) return { error: "Chưa dán nội dung nào." };
   formData.append("text", text);
-  return { label: "văn bản dán tay" };
+  return { label: "văn bản dán tay", source: { text, kind } };
 }
 
 /* ----- Dải "đang nối tiếp" + 2 nút trên dải (dùng chung 3 nhóm) ----- */
@@ -900,11 +903,53 @@ document.querySelectorAll(".pipe-new-file-btn").forEach((btn) => {
     renderPipeStrips();
   });
 });
+// Lấy lại dữ liệu GỐC của chuỗi (đầu vào người dùng đã đưa vào lúc bắt đầu, TRƯỚC mọi bước xử lý):
+//  - text dán tay, hoặc file JSON: dùng lại nguyên văn (JSON là chữ, trình duyệt đọc được);
+//  - file CSV/Excel: gửi lại file gốc (trình duyệt vẫn giữ) lên /api/noise-tools/normalize để backend đọc bằng ĐÚNG bộ đọc của lần
+//    chạy đầu rồi trả CSV chuẩn -- Excel không đọc được dạng chữ trong trình duyệt, và CSV khác mã hoá cũng nên để backend đọc.
+// Trước đây "về gốc" chỉ quay về KẾT QUẢ BƯỚC ĐẦU TIÊN (dòng đã xoá ở bước 1 không quay lại) dù dải ghi "chưa xử lý bước nào".
+async function loadPipeOriginal() {
+  const p = state.pipe;
+  const src = p.originalSource;
+  if (!src) return { text: p.originalText, kind: p.originalKind }; // dự phòng: chuỗi không ghi nhớ được đầu vào thật
+  if (src.text !== undefined) return { text: src.text, kind: src.kind };
+  if (src.kind === "json") {
+    try {
+      return { text: await readFileAsText(src.file), kind: "json" };
+    } catch (err) {
+      throw new Error("Không đọc lại được file gốc (có thể file đã bị đổi hoặc xoá trên máy). Bấm \"Tải file khác\" để chọn lại.");
+    }
+  }
+  const fd = new FormData();
+  fd.append("file", src.file);
+  let response, data;
+  try {
+    response = await fetch("/api/noise-tools/normalize", { method: "POST", body: fd });
+    data = await response.json();
+  } catch (err) {
+    throw new Error("Không gọi được backend để lấy lại file gốc. Kiểm tra xem python3 app.py có đang chạy không.");
+  }
+  if (!response.ok) throw new Error(data.error || "Không đọc lại được file gốc.");
+  return { text: data.result_text, kind: "csv" };
+}
 document.querySelectorAll(".pipe-reset-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", async () => {
     const p = state.pipe;
-    p.currentText = p.originalText;
-    p.currentKind = p.originalKind;
+    const g = Object.keys(TOOLSEC).find((k) => $(TOOLSEC[k].strip).contains(btn));
+    const errEl = $(TOOLSEC[g].error);
+    setError(errEl, "");
+    btn.disabled = true; // đang lấy lại file gốc từ backend: chặn bấm chồng
+    let original;
+    try {
+      original = await loadPipeOriginal();
+    } catch (err) {
+      setError(errEl, err.message);
+      return;
+    } finally {
+      btn.disabled = false;
+    }
+    p.currentText = original.text;
+    p.currentKind = original.kind;
     p.steps = [];
     p.forceNewUpload = false;
     renderPipeStrips(); // đã tự đọc lại cột của Cần cấu hình theo đầu vào gốc (refreshCfColumns)
@@ -914,11 +959,12 @@ document.querySelectorAll(".pipe-reset-btn").forEach((btn) => {
 // Ghi nhận 1 bước vừa xong: kết quả thành đầu vào kế tiếp của cả 3 nhóm.
 // fresh = lần chạy này dùng file/text MỚI (không phải kết quả bước trước) ->
 // bắt đầu 1 chuỗi mới, bỏ chuỗi cũ.
-function recordPipeStep(label, text, kind, inputLabel, fresh) {
+function recordPipeStep(label, text, kind, inputLabel, fresh, source) {
   const p = state.pipe;
   if (!p.active || fresh) {
     p.active = false;
     p.active = true;
+    p.originalSource = source || null; // đầu vào THẬT của chuỗi mới (không có thì "về gốc" dùng dự phòng bên dưới)
     p.originalText = text;
     p.originalKind = kind;
     p.originalLabel = inputLabel;
@@ -1184,7 +1230,7 @@ $("ft-run-btn").addEventListener("click", async () => {
   // xem bình thường (showing = false); chỉ 2 tool có danh sách để xem (xem LIST_VIEW).
   const lv = LIST_VIEW[tool];
   state.ft.listView = lv && data[lv.field] ? { kind: tool, data: data[lv.field], showing: false } : null;
-  recordPipeStep(TOOL_TAB_LABEL[tool], data.result_text, "csv", inp.label, fresh);
+  recordPipeStep(TOOL_TAB_LABEL[tool], data.result_text, "csv", inp.label, fresh, inp.source);
   renderListButton();
   if (tool === "format-noise") {
     // Hiện số ô sai cạnh từng cột trong bảng kiểu dữ liệu. countsSig = chữ ký đầu vào SAU bước này (đầu vào
@@ -1860,7 +1906,7 @@ $("convert-run-btn").addEventListener("click", async () => {
     $("convert-json-dims").textContent = `${data.record_count} record`;
     $("convert-result-text").textContent = data.result_text;
     setStatus($(T.status), `✅ ${data.record_count} record (delimiter: ${delimiterLabel(data.used_delimiter)})`, "is-ok");
-    recordPipeStep(CV_TAB_LABEL[tool], data.result_text, "json", inp.label, fresh);
+    recordPipeStep(CV_TAB_LABEL[tool], data.result_text, "json", inp.label, fresh, inp.source);
   } else {
     $("convert-json-card").hidden = true;
     const colCount = data.preview_rows && data.preview_rows.length ? data.preview_rows[0].length : 0;
@@ -1870,7 +1916,7 @@ $("convert-run-btn").addEventListener("click", async () => {
     setStatus($(T.status), tool === "delimiter"
       ? `✅ ${dataRows} dòng dữ liệu · đã nhận diện delimiter gốc: ${delimiterLabel(data.used_from_delimiter)}`
       : `✅ ${dataRows} dòng dữ liệu · ${data.columns.length} cột`, "is-ok");
-    recordPipeStep(CV_TAB_LABEL[tool], data.result_text, "csv", inp.label, fresh);
+    recordPipeStep(CV_TAB_LABEL[tool], data.result_text, "csv", inp.label, fresh, inp.source);
   }
   renderContinuePanel("cv");
 });
@@ -2149,7 +2195,7 @@ $("cf-detect-btn").addEventListener("click", async () => {
     note.classList.add("is-only");
     setStatus($(T.status), "✅ Không phát hiện lỗi nào · dữ liệu giữ nguyên", "is-ok");
     if (data.result_text) {
-      recordPipeStep(`${label} (không đổi)`, data.result_text, "csv", inp.label, fresh);
+      recordPipeStep(`${label} (không đổi)`, data.result_text, "csv", inp.label, fresh, inp.source);
       $(T.download).disabled = false;
       renderContinuePanel("cf");
     }
@@ -2195,7 +2241,7 @@ $("cf-apply-btn").addEventListener("click", async () => {
   $(T.download).disabled = false;
   $("cf-handling").hidden = true;
   setStatus($(T.status), `${statusFromStats(data.stats)} · ${ACTION_LABELS[action] || action}`, "is-ok");
-  recordPipeStep(label, data.result_text, "csv", inp.label, det.fresh);
+  recordPipeStep(label, data.result_text, "csv", inp.label, det.fresh, inp.source);
   renderContinuePanel("cf");
 });
 
