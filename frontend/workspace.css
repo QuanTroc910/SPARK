@@ -1183,6 +1183,8 @@ a.hm-tool:hover { background: #ebebe7; }
 .cf-sum-count { font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--signal); white-space: nowrap; text-align: right; }
 .cf-sum-none { grid-column: 1 / 3; font-size: 12.5px; color: var(--ink-faint); }
 .cf-sum-action { grid-column: 1 / 3; height: 34px; padding: 0 10px; font-size: 13px; }
+/* Ô nhập giá trị của cách "điền giá trị cố định": hiện ngay dưới dòng của cột đó, rộng hết dòng. */
+.cf-sum-fixed { grid-column: 1 / -1; height: 34px; padding: 0 10px; font-size: 13px; }
 @container cfsum (min-width: 520px) {
   .cf-sum-row { grid-template-columns: minmax(0, 1fr) auto 250px; }
   .cf-sum-action { grid-column: 3; }

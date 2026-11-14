@@ -11,6 +11,7 @@ Chạy thử: python3 app.py -> server chạy ở http://localhost:5000
 import csv
 import io
 import json
+import math
 import os
 import re
 import threading
@@ -45,6 +46,7 @@ from attribute_noise.config import (
     RuleValueType,
 )
 from attribute_noise.cross_field_rules import FormulaError
+from attribute_noise.detectors import INTEGER_RE
 from attribute_noise.pipeline import (
     NoiseFinding,
     detect_noise,
@@ -1785,6 +1787,30 @@ def _config_tool_actions(column_configs, noise_key) -> list[str]:
     return [a.value for a in get_available_actions(column_configs[0].dtype, NoiseType(noise_key))]
 
 
+def _checked_fixed_value(column: str, dtype: ColumnDType, value) -> str:
+    """Kiểm tra giá trị cố định người dùng nhập có hợp kiểu cột không rồi trả về chuỗi sẽ ghi vào ô: cột Số nguyên phải là số
+    nguyên, cột Số thực phải là số hữu hạn (cột số thì cắt khoảng trắng đầu/cuối); kiểu khác ghi nguyên văn. Trước đây không kiểm
+    nên gõ chữ vào cột số vẫn bị ghi thẳng vào ô, biến ô lỗi thành ô sai kiểu.
+    Cột Số thực dùng `float()` như chính bộ detect (cùng định nghĩa "là số") nhưng loại thêm 3 thứ `float()` vẫn nhận mà không
+    nên ghi vào ô: "nan" (ô trông như số nhưng thực chất là ô thiếu), "inf" (lớn hơn mọi khoảng, lập tức bị gắn cờ lại) và "1_000"
+    (dấu gạch dưới Python chấp nhận nhưng Excel/CSV khác không đọc được)."""
+    text = str(value)
+    if dtype == ColumnDType.INTEGER:
+        if not INTEGER_RE.match(text.strip()):
+            raise QuickToolError(f"Giá trị cố định của cột '{column}' (kiểu số nguyên) phải là số nguyên, nhận được: {text}")
+        return text.strip()
+    if dtype == ColumnDType.FLOAT:
+        stripped = text.strip()
+        try:
+            is_number = math.isfinite(float(stripped)) and "_" not in stripped
+        except ValueError:
+            is_number = False
+        if not is_number:
+            raise QuickToolError(f"Giá trị cố định của cột '{column}' (kiểu số thực) phải là số, nhận được: {text}")
+        return stripped
+    return text
+
+
 def _cells_changed_by_column(before: pd.DataFrame, after: pd.DataFrame, columns: list) -> dict:
     """Số ô bị sửa giá trị ở TỪNG cột trong `columns`, chỉ tính trên các dòng còn lại sau xử lý (cùng cách đếm với
     `_summarize_change`, nhưng cho nhiều cột một lượt)."""
@@ -1888,8 +1914,10 @@ def noise_tool_configured():
                 if action not in _config_tool_actions([config_by_column[col]], noise_key):
                     raise QuickToolError(f"Cách xử lý không hợp lệ cho kiểu cột / loại lỗi này (cột '{col}', cách '{action}')")
                 fixed_value = spec.get("fixed_value")
-                if action == "fixed_value" and (fixed_value is None or str(fixed_value) == ""):
-                    raise QuickToolError(f"Chưa nhập giá trị cố định để điền vào cột '{col}'")
+                if action == "fixed_value":
+                    if fixed_value is None or str(fixed_value).strip() == "":
+                        raise QuickToolError(f"Chưa nhập giá trị cố định để điền vào cột '{col}'")
+                    fixed_value = _checked_fixed_value(col, config_by_column[col].dtype, fixed_value)
                 choices.append(HandlingChoice(column=col, noise_type=NoiseType(noise_key), action=HandlingAction(action), fixed_value=fixed_value))
             new_df, _stats = apply_handling(df, column_configs, findings, choices)
             rows_removed = len(df) - len(new_df)

@@ -159,8 +159,9 @@ const state = {
   cf: { tool: "out-of-range", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null,
         // colSig = "chữ ký" đầu vào mà cột hiện có được đọc từ đó; pendingSig = đầu vào đang được đọc dở; colSeq = chống chạy chồng.
         colSig: "", pendingSig: "", colSeq: 0,
-        // Tool "Không nhất quán" kiểm NHIỀU cột: icForms = các form đang khai [{uid, column, categories, threshold}], icUid = bộ đếm uid.
-        icForms: [], icUid: 0 },
+        // Tool kiểm NHIỀU cột (Không nhất quán, Ngoài khoảng -- xem CF_MULTI): forms[tên tool] = các form đang khai
+        // [{uid, column, dtype, ...ô riêng của tool}], formUid = bộ đếm uid dùng chung.
+        forms: {}, formUid: 0 },
 };
 
 // ====== Đăng nhập / tạo tài khoản (bước 4) -- trang này TỰ lo, không đá về
@@ -638,8 +639,10 @@ const CF_INFO = {
     headline: "BẮT GIÁ TRỊ<br>NGOÀI KHOẢNG",
     desc: "Tuổi 210, lương âm, điểm 11/10. Bạn khai min và max hợp lý cho một cột số, Denoise gắn cờ mọi giá trị nằm ngoài rồi kéo về biên, điền lại hoặc xoá dòng theo ý bạn.",
     mock: mockPair([[[]], [["is-hit"]], [[]], [[]], [["is-hit"]]], [[[]], [["is-fixed"]], [[]], [[]], [["is-fixed"]]], "Kéo về biên"),
-    steps: ["Chọn file và cột số cần kiểm tra.", "Gõ giá trị nhỏ nhất và lớn nhất hợp lệ, bấm Phát hiện.", "Chọn kéo về biên / điền lại / xoá dòng, bấm Áp dụng."],
+    steps: ["Chọn file; chọn cột số cần kiểm tra. Bấm Thêm cột kiểm tra để kiểm nhiều cột một lượt.", "Gõ giá trị nhỏ nhất và lớn nhất hợp lệ của từng cột, bấm Phát hiện.", "Xem bảng lỗi theo từng cột, chọn cách xử lý cho từng cột (kéo về biên / điền lại / xoá dòng) rồi bấm Áp dụng."],
     explainer: [
+      { t: "Cột nào được liệt kê", b: "Chỉ các cột số (số nguyên hoặc số thực) do Denoise đoán từ giá trị thật. Mỗi cột có khoảng hợp lệ riêng và mỗi cột chỉ khai một lần. Kiểu số nguyên hay số thực đã đoán sẵn, bạn đổi lại được." },
+      { t: "Chọn cách xử lý từng cột", b: "Mỗi cột có cách xử lý riêng, mặc định là chưa chọn để bấm Áp dụng không xoá nhầm. Cột nào chưa chọn thì không bị đụng tới. Nếu nhiều cột cùng chọn xoá dòng, dòng nào lỗi ở bất kỳ cột đó đều bị xoá." },
       { t: "Khoảng là do bạn quyết", b: "Không có khoảng đúng cho mọi file: tuổi nhân viên khác tuổi bệnh nhân. Denoise không tự đoán, bạn khai theo hiểu biết về dữ liệu của mình." },
       { t: "Kéo về biên nghĩa là gì", b: "Giá trị nhỏ hơn min thành min, lớn hơn max thành max. Giữ được dòng, chỉ sửa đúng ô lỗi. Khác với Giá trị bất thường (outlier) dựa trên thống kê, ở đây biên là con số cứng bạn chọn." },
       PRIVACY_COLUMN(),
@@ -1929,7 +1932,6 @@ $("convert-run-btn").addEventListener("click", async () => {
    Phát hiện -> Áp dụng (POST /api/noise-tools/configured, mode=detect|apply)
    ============================================================ */
 const CF_DTYPES = {
-  "out-of-range": ["integer", "float"],
   outlier: ["integer", "float"],
 };
 const OPERATORS = ["<", "<=", ">", ">=", "==", "!="];
@@ -2066,16 +2068,14 @@ function renderCfOptions() {
     renderCfRuleFields();
     return;
   }
-  if (tool === "inconsistent-category") {
-    renderCfCategoryForms(); // kiểm NHIỀU cột Nhóm một lượt (xem khối "Không nhất quán" bên dưới)
+  if (CF_MULTI[tool]) {
+    renderCfMultiForms(); // tool kiểm NHIỀU cột một lượt (xem khối CF_MULTI bên dưới)
     return;
   }
   const allowed = CF_DTYPES[tool];
   const dtype = cfDefaultDtype(firstCol, allowed);
   let extra = "";
-  if (tool === "out-of-range") {
-    extra = `<div class="cf-row"><div class="field"><label for="cf-min">Nhỏ nhất hợp lệ</label><input class="input" id="cf-min" type="number" step="any" placeholder="vd: 18" /></div><div class="field"><label for="cf-max">Lớn nhất hợp lệ</label><input class="input" id="cf-max" type="number" step="any" placeholder="vd: 65" /></div></div><p class="hint-note">Để trống 1 bên = không chặn bên đó</p>`;
-  } else if (tool === "outlier") {
+  if (tool === "outlier") {
     extra = `<div class="cf-row"><div class="field"><label>Phương pháp</label><div class="ft-seg" data-seg-for="cf-outlier-method"><button type="button" class="is-active" data-value="iqr">IQR</button><button type="button" data-value="zscore">Z-score</button></div><select class="select" id="cf-outlier-method" hidden><option value="iqr">IQR</option><option value="zscore">Z-score</option></select></div><div class="field"><label for="cf-outlier-threshold">Ngưỡng</label><input class="input" id="cf-outlier-threshold" type="number" step="any" value="1.5" /></div></div><p class="hint-note">IQR thường dùng 1.5 · Z-score thường dùng 3</p>`;
   }
   wrap.innerHTML = cfColumnSelect("cf-column", "Cột cần kiểm tra", firstCol) + cfDtypeSelect(allowed, dtype) + extra;
@@ -2092,128 +2092,203 @@ function renderCfOptions() {
   const method = $("cf-outlier-method");
   if (method) method.addEventListener("change", () => { $("cf-outlier-threshold").value = method.value === "zscore" ? "3" : "1.5"; });
 }
-/* ----- Không nhất quán: kiểm NHIỀU cột trong 1 lần phát hiện -----
-   Mỗi "form" = 1 cột Nhóm (category) + danh sách giá trị chuẩn + ngưỡng giống nhau riêng của cột đó. Nút "＋ Thêm cột kiểm tra" thêm form
-   mới (mỗi cột chỉ khai 1 lần). "Phát hiện" gửi tất cả form 1 lượt; kết quả hiện bảng "cột nào, bao nhiêu lỗi" kèm chọn cách xử lý
-   từng cột (renderCfMultiSummary). Kiểu dữ liệu luôn là Nhóm (category) nên chỉ liệt kê cột được đoán là Nhóm. */
+/* ----- Tool kiểm NHIỀU cột trong 1 lần phát hiện (Không nhất quán, Ngoài khoảng) -----
+   Mỗi "form" = 1 cột + các ô riêng của cột đó (giá trị chuẩn + ngưỡng / nhỏ nhất + lớn nhất). Nút "＋ Thêm cột kiểm tra" thêm form mới
+   (mỗi cột chỉ khai 1 lần). "Phát hiện" gửi tất cả form 1 lượt; kết quả hiện bảng "cột nào, bao nhiêu lỗi" kèm chọn cách xử lý từng cột
+   (renderCfMultiSummary). Mỗi tool chỉ liệt kê cột có kiểu hợp (kiểu do Denoise đoán): Không nhất quán = Nhóm, Ngoài khoảng = số.
+   Muốn tool khác (vd Giá trị bất thường) kiểm nhiều cột thì thêm 1 mục vào CF_MULTI -- khung form, bảng tổng hợp, backend dùng chung.
+   Mỗi mục: dtypes (kiểu cột được liệt kê; chỉ 1 kiểu thì ô "Kiểu dữ liệu" bị khoá), thông báo, preselect (bảng tổng hợp có chọn sẵn cách xử
+   lý đầu tiên không -- chỉ bật cho tool KHÔNG xoá dữ liệu), defaults (ô riêng + giá trị mặc định), fieldsHTML, toItem (gom 1 form thành item gửi backend). */
 const IC_DEFAULT_THRESHOLD = "1"; // 1 = chỉ bắt biến thể khác hoa/thường; hạ xuống để bắt thêm lỗi chính tả
-function cfCategoryColumns() {
-  return state.cf.columns.filter((c) => state.cf.guessed[c] === "category");
+const cfNumber = (v) => (String(v).trim() === "" ? null : Number(v));
+const CF_MULTI = {
+  "inconsistent-category": {
+    dtypes: ["category"],
+    waitFile: "Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ liệt kê các cột Nhóm (category) để bạn khai giá trị chuẩn.",
+    noColumns: "Không có cột nào được đoán là Nhóm (category) trong dữ liệu này. Cột Nhóm là cột có ít giá trị khác nhau lặp lại nhiều lần (giới tính, phòng ban...).",
+    noColumnsError: "Không có cột Nhóm (category) nào để kiểm tra.",
+    freeWord: "cột Nhóm",
+    preselect: true, // cách xử lý duy nhất là chuẩn hoá tự động, không xoá dữ liệu nên chọn sẵn
+    defaults: () => ({ categories: "", threshold: IC_DEFAULT_THRESHOLD }),
+    fieldsHTML: (f, i) =>
+      `<div class="field"><label>Danh sách giá trị chuẩn (cách nhau bởi dấu phẩy)</label><textarea class="input" rows="2" data-field="categories" placeholder="vd: Nam, Nữ" aria-label="Danh sách giá trị chuẩn ${i + 1}">${escapeHtml(f.categories)}</textarea></div>` +
+      `<div class="field"><label>Ngưỡng giống nhau (0.5 – 1)</label><input class="input" type="number" step="0.01" min="0.5" max="1" data-field="threshold" value="${escapeAttr(f.threshold)}" aria-label="Ngưỡng giống nhau ${i + 1}" /></div>` +
+      '<p class="hint-note">1 = chỉ bắt biến thể khác hoa/thường ("nam", "NAM"). Thấp hơn (vd 0.85) bắt thêm lỗi gõ nhẹ ("Sale" so với "Sales").</p>',
+    toItem: (f) => {
+      const cats = f.categories.split(",").map((x) => x.trim()).filter(Boolean);
+      if (!cats.length) return { error: `Cột "${f.column}": nhập ít nhất 1 giá trị chuẩn.` };
+      const threshold = String(f.threshold).trim() === "" ? Number(IC_DEFAULT_THRESHOLD) : Number(f.threshold);
+      if (!(threshold >= 0.5 && threshold <= 1)) return { error: `Cột "${f.column}": ngưỡng giống nhau phải từ 0.5 đến 1.` };
+      return { item: { column: f.column, dtype: "category", params: { valid_categories: cats, category_similarity_threshold: threshold } } };
+    },
+  },
+  "out-of-range": {
+    dtypes: ["integer", "float"],
+    waitFile: "Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ liệt kê các cột số để bạn khai khoảng hợp lệ.",
+    noColumns: "Không có cột số nào (Số nguyên / Số thực) trong dữ liệu này.",
+    noColumnsError: "Không có cột số nào để kiểm tra.",
+    freeWord: "cột số",
+    preselect: false, // có cách xử lý xoá dòng / điền giá trị: để người dùng chủ động chọn, bấm Áp dụng không xoá nhầm hàng loạt
+    defaults: () => ({ min: "", max: "" }),
+    fieldsHTML: (f, i) =>
+      `<div class="cf-row"><div class="field"><label>Nhỏ nhất hợp lệ</label><input class="input" type="number" step="any" data-field="min" value="${escapeAttr(f.min)}" placeholder="vd: 18" aria-label="Nhỏ nhất hợp lệ ${i + 1}" /></div>` +
+      `<div class="field"><label>Lớn nhất hợp lệ</label><input class="input" type="number" step="any" data-field="max" value="${escapeAttr(f.max)}" placeholder="vd: 65" aria-label="Lớn nhất hợp lệ ${i + 1}" /></div></div>` +
+      '<p class="hint-note">Ô nằm ngoài khoảng bị gắn cờ. Để trống 1 bên = không chặn bên đó.</p>',
+    toItem: (f) => {
+      const min = cfNumber(f.min);
+      const max = cfNumber(f.max);
+      if (Number.isNaN(min) || Number.isNaN(max)) return { error: `Cột "${f.column}": nhỏ nhất / lớn nhất phải là số.` };
+      if (min === null && max === null) return { error: `Cột "${f.column}": nhập ít nhất 1 trong 2 giá trị nhỏ nhất / lớn nhất.` };
+      if (min !== null && max !== null && min > max) return { error: `Cột "${f.column}": giá trị nhỏ nhất đang lớn hơn giá trị lớn nhất.` };
+      return { item: { column: f.column, dtype: f.dtype, params: { min_value: min, max_value: max } } };
+    },
+  },
+};
+function cfForms(tool) {
+  return state.cf.forms[tool] || (state.cf.forms[tool] = []);
 }
-function makeIcForm(column) {
-  return { uid: ++state.cf.icUid, column, categories: "", threshold: IC_DEFAULT_THRESHOLD };
+// Cột được liệt kê cho tool: cột có kiểu (đoán từ dữ liệu) nằm trong dtypes của tool.
+function cfMultiColumns(tool) {
+  return state.cf.columns.filter((c) => CF_MULTI[tool].dtypes.includes(state.cf.guessed[c]));
 }
-// Giữ các form còn hợp lệ với danh sách cột hiện tại (cột còn tồn tại, vẫn là Nhóm, không trùng cột); chưa có form nào thì tạo 1 form cho
-// cột Nhóm đầu tiên. Gọi mỗi lần dựng lại khối tuỳ chọn (đổi tab, đọc lại cột sau khi chuỗi đổi...) nên giữ được những gì người dùng đã gõ.
-function reconcileIcForms() {
-  const cats = cfCategoryColumns();
+function makeMultiForm(tool, column) {
+  const cfg = CF_MULTI[tool];
+  return Object.assign({ uid: ++state.cf.formUid, column, dtype: cfDefaultDtype(column, cfg.dtypes) }, cfg.defaults());
+}
+// Giữ các form còn hợp lệ với danh sách cột hiện tại (cột còn tồn tại, đúng kiểu, không trùng cột); chưa có form nào thì tạo 1 form cho
+// cột đầu tiên. Gọi mỗi lần dựng lại khối tuỳ chọn (đổi tab, đọc lại cột sau khi chuỗi đổi...) nên giữ được những gì người dùng đã gõ.
+function reconcileMultiForms(tool) {
+  const cols = cfMultiColumns(tool);
   const seen = new Set();
   const kept = [];
-  for (const f of state.cf.icForms) {
-    if (cats.includes(f.column) && !seen.has(f.column)) { seen.add(f.column); kept.push(f); }
+  for (const f of cfForms(tool)) {
+    if (cols.includes(f.column) && !seen.has(f.column)) { seen.add(f.column); kept.push(f); }
   }
-  state.cf.icForms = kept;
-  if (!kept.length && cats.length) state.cf.icForms = [makeIcForm(cats[0])];
+  state.cf.forms[tool] = kept;
+  if (!kept.length && cols.length) state.cf.forms[tool] = [makeMultiForm(tool, cols[0])];
 }
-function icFormByUid(uid) {
-  return state.cf.icForms.find((f) => String(f.uid) === String(uid));
+function multiFormByUid(uid) {
+  return cfForms(state.cf.tool).find((f) => String(f.uid) === String(uid));
 }
-function icFormHTML(f, i, cats, used) {
-  // Ô chọn cột của form này chỉ liệt kê cột Nhóm chưa được form khác dùng (cộng chính cột đang chọn).
-  const opts = cats.filter((c) => c === f.column || !used.has(c))
+function multiFormHTML(tool, f, i, cols, used) {
+  const cfg = CF_MULTI[tool];
+  // Ô chọn cột của form này chỉ liệt kê cột chưa được form khác dùng (cộng chính cột đang chọn).
+  const colOpts = cols.filter((c) => c === f.column || !used.has(c))
     .map((c) => `<option value="${escapeAttr(c)}"${c === f.column ? " selected" : ""}>${escapeHtml(c)}</option>`).join("");
-  const remove = state.cf.icForms.length > 1 ? '<button type="button" class="btn btn-ghost btn-small" data-role="ic-remove">✕ Xoá</button>' : "";
+  // Kiểu dữ liệu: tool chỉ có 1 kiểu (Nhóm) thì khoá cố định; tool có nhiều kiểu (Số nguyên / Số thực) thì chọn được, mặc định theo kiểu đoán.
+  const typeOpts = cfg.dtypes.map((d) => `<option value="${d}"${d === f.dtype ? " selected" : ""}>${DTYPE_LABELS[d]}</option>`).join("");
+  const typeSelect = `<select class="select" data-role="mf-dtype"${cfg.dtypes.length > 1 ? "" : " disabled"} aria-label="Kiểu dữ liệu ${i + 1}">${typeOpts}</select>`;
+  const remove = cfForms(tool).length > 1 ? '<button type="button" class="btn btn-ghost btn-small" data-role="mf-remove">✕ Xoá</button>' : "";
   return `<div class="cf-form" data-uid="${f.uid}">` +
     `<div class="cf-form-bar"><span class="cf-form-title">Cột kiểm tra ${i + 1}</span>${remove}</div>` +
     '<div class="cf-form-body">' +
-    `<div class="cf-row"><div class="field"><label>Cột cần kiểm tra</label><select class="select" data-role="ic-column" aria-label="Cột cần kiểm tra ${i + 1}">${opts}</select></div>` +
-    `<div class="field"><label>Kiểu dữ liệu</label><select class="select" disabled aria-label="Kiểu dữ liệu (cố định)"><option>${DTYPE_LABELS.category}</option></select></div></div>` +
-    `<div class="field"><label>Danh sách giá trị chuẩn (cách nhau bởi dấu phẩy)</label><textarea class="input" rows="2" data-role="ic-categories" placeholder="vd: Nam, Nữ" aria-label="Danh sách giá trị chuẩn ${i + 1}">${escapeHtml(f.categories)}</textarea></div>` +
-    `<div class="field"><label>Ngưỡng giống nhau (0.5 – 1)</label><input class="input" type="number" step="0.01" min="0.5" max="1" data-role="ic-threshold" value="${escapeAttr(f.threshold)}" aria-label="Ngưỡng giống nhau ${i + 1}" /></div>` +
-    '<p class="hint-note">1 = chỉ bắt biến thể khác hoa/thường ("nam", "NAM"). Thấp hơn (vd 0.85) bắt thêm lỗi gõ nhẹ ("Sale" so với "Sales").</p>' +
+    `<div class="cf-row"><div class="field"><label>Cột cần kiểm tra</label><select class="select" data-role="mf-column" aria-label="Cột cần kiểm tra ${i + 1}">${colOpts}</select></div>` +
+    `<div class="field"><label>Kiểu dữ liệu</label>${typeSelect}</div></div>` +
+    cfg.fieldsHTML(f, i) +
     '</div></div>';
 }
-function renderCfCategoryForms() {
+function renderCfMultiForms() {
+  const tool = state.cf.tool;
+  const cfg = CF_MULTI[tool];
   const wrap = $("cf-options");
-  const st = state.cf;
-  reconcileIcForms();
-  if (!st.columns.length) {
-    wrap.innerHTML = '<p class="ft-coltypes-msg">Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ liệt kê các cột Nhóm (category) để bạn khai giá trị chuẩn.</p>';
+  reconcileMultiForms(tool);
+  if (!state.cf.columns.length) {
+    wrap.innerHTML = `<p class="ft-coltypes-msg">${cfg.waitFile}</p>`;
     return;
   }
-  const cats = cfCategoryColumns();
-  if (!cats.length) {
-    wrap.innerHTML = '<p class="ft-coltypes-msg">Không có cột nào được đoán là Nhóm (category) trong dữ liệu này. Cột Nhóm là cột có ít giá trị khác nhau lặp lại nhiều lần (giới tính, phòng ban...).</p>';
+  const cols = cfMultiColumns(tool);
+  if (!cols.length) {
+    wrap.innerHTML = `<p class="ft-coltypes-msg">${cfg.noColumns}</p>`;
     return;
   }
-  const used = new Set(st.icForms.map((f) => f.column));
-  const free = cats.filter((c) => !used.has(c)).length;
-  wrap.innerHTML = st.icForms.map((f, i) => icFormHTML(f, i, cats, used)).join("") +
-    `<div class="cf-add-row"><button type="button" class="btn btn-ghost btn-small" data-role="ic-add"${free ? "" : " disabled"}>＋ Thêm cột kiểm tra</button>` +
-    `<span class="cf-add-hint">${free ? `Còn ${free} cột Nhóm chưa kiểm tra` : "Đã chọn hết các cột Nhóm"}</span></div>`;
+  const forms = cfForms(tool);
+  const used = new Set(forms.map((f) => f.column));
+  const free = cols.filter((c) => !used.has(c)).length;
+  wrap.innerHTML = forms.map((f, i) => multiFormHTML(tool, f, i, cols, used)).join("") +
+    `<div class="cf-add-row"><button type="button" class="btn btn-ghost btn-small" data-role="mf-add"${free ? "" : " disabled"}>＋ Thêm cột kiểm tra</button>` +
+    `<span class="cf-add-hint">${free ? `Còn ${free} ${cfg.freeWord} chưa kiểm tra` : `Đã chọn hết các ${cfg.freeWord}`}</span></div>`;
 }
-// Sự kiện gắn 1 lần lên #cf-options (nội dung bên trong bị dựng lại liên tục); chỉ phản ứng khi đang ở tool Không nhất quán.
+// Sự kiện gắn 1 lần lên #cf-options (nội dung bên trong bị dựng lại liên tục); chỉ phản ứng khi tool đang mở là tool nhiều cột.
 $("cf-options").addEventListener("change", (e) => {
-  if (state.cf.tool !== "inconsistent-category" || e.target.dataset.role !== "ic-column") return;
-  const f = icFormByUid(e.target.closest(".cf-form").dataset.uid);
+  if (!CF_MULTI[state.cf.tool]) return;
+  const role = e.target.dataset.role;
+  if (role !== "mf-column" && role !== "mf-dtype") return;
+  const f = multiFormByUid(e.target.closest(".cf-form").dataset.uid);
   if (!f) return;
+  if (role === "mf-dtype") { f.dtype = e.target.value; return; }
   f.column = e.target.value;
-  renderCfCategoryForms(); // danh sách cột của các form khác phải loại cột vừa chọn
+  f.dtype = cfDefaultDtype(f.column, CF_MULTI[state.cf.tool].dtypes); // đổi cột -> kiểu theo kiểu đoán sẵn của cột đó
+  renderCfMultiForms(); // danh sách cột của các form khác phải loại cột vừa chọn
 });
 $("cf-options").addEventListener("input", (e) => {
-  if (state.cf.tool !== "inconsistent-category") return;
+  if (!CF_MULTI[state.cf.tool] || !e.target.dataset.field) return;
   const form = e.target.closest(".cf-form");
-  const f = form && icFormByUid(form.dataset.uid);
-  if (!f) return;
-  if (e.target.dataset.role === "ic-categories") f.categories = e.target.value;
-  else if (e.target.dataset.role === "ic-threshold") f.threshold = e.target.value;
+  const f = form && multiFormByUid(form.dataset.uid);
+  if (f) f[e.target.dataset.field] = e.target.value;
 });
 $("cf-options").addEventListener("click", (e) => {
-  if (state.cf.tool !== "inconsistent-category") return;
-  const add = e.target.closest('[data-role="ic-add"]');
-  if (add) {
-    const used = new Set(state.cf.icForms.map((f) => f.column));
-    const next = cfCategoryColumns().find((c) => !used.has(c));
+  const tool = state.cf.tool;
+  if (!CF_MULTI[tool]) return;
+  if (e.target.closest('[data-role="mf-add"]')) {
+    const used = new Set(cfForms(tool).map((f) => f.column));
+    const next = cfMultiColumns(tool).find((c) => !used.has(c));
     if (!next) return;
-    const f = makeIcForm(next);
-    state.cf.icForms.push(f);
-    renderCfCategoryForms();
-    const box = document.querySelector(`#cf-options .cf-form[data-uid="${f.uid}"] [data-role="ic-categories"]`);
+    const f = makeMultiForm(tool, next);
+    cfForms(tool).push(f);
+    renderCfMultiForms();
+    const box = document.querySelector(`#cf-options .cf-form[data-uid="${f.uid}"] [data-field]`);
     if (box) { box.focus(); box.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
     return;
   }
-  const remove = e.target.closest('[data-role="ic-remove"]');
+  const remove = e.target.closest('[data-role="mf-remove"]');
   if (remove) {
     const uid = remove.closest(".cf-form").dataset.uid;
-    state.cf.icForms = state.cf.icForms.filter((f) => String(f.uid) !== uid);
-    renderCfCategoryForms();
+    state.cf.forms[tool] = cfForms(tool).filter((f) => String(f.uid) !== uid);
+    renderCfMultiForms();
   }
 });
-// Bảng tổng hợp sau "Phát hiện" (tool nhiều cột): mỗi cột đã khai 1 dòng = tên cột | số ô lỗi (và số dòng) | cách xử lý chọn riêng
-// từng cột (mặc định = cách đầu tiên backend cho phép; "Bỏ qua" = không đụng cột đó). Cột không có lỗi thì không cần chọn gì.
-function renderCfMultiSummary(perColumn) {
+// Bảng tổng hợp sau "Phát hiện" (tool nhiều cột): mỗi cột đã khai 1 dòng = tên cột | số ô lỗi (và số dòng) | cách xử lý chọn riêng từng
+// cột. Tool preselect (không xoá dữ liệu): mặc định = cách đầu tiên backend cho phép, "Bỏ qua" ở cuối. Tool khác: mặc định "— Chọn cách
+// xử lý —" (= bỏ qua) để bấm Áp dụng không xoá nhầm; cột nào chọn "điền giá trị cố định" thì hiện ô nhập ngay trong dòng.
+// Cột không có lỗi thì không cần chọn gì.
+function renderCfMultiSummary(perColumn, tool) {
+  const cfg = CF_MULTI[tool];
   const total = perColumn.reduce((a, p) => a + p.findings_count, 0);
   const withErrors = perColumn.filter((p) => p.findings_count > 0).length;
   const rows = perColumn.map((p) => {
     const has = p.findings_count > 0;
-    const opts = p.available_actions.map((a) => `<option value="${a}">${escapeHtml(ACTION_LABELS[a] || a)}</option>`).join("") + '<option value="skip">Bỏ qua, giữ nguyên</option>';
-    const action = has
-      ? `<select class="select cf-sum-action" data-role="sum-action" data-column="${escapeAttr(p.column)}" aria-label="Cách xử lý cột ${escapeAttr(p.column)}">${opts}</select>`
-      : '<span class="cf-sum-none">Không có lỗi</span>';
+    let action = '<span class="cf-sum-none">Không có lỗi</span>';
+    let fixed = "";
+    if (has) {
+      const actionOpts = p.available_actions.map((a) => `<option value="${a}">${escapeHtml(ACTION_LABELS[a] || a)}</option>`).join("");
+      const opts = cfg.preselect ? actionOpts + '<option value="skip">Bỏ qua, giữ nguyên</option>' : '<option value="skip">— Chọn cách xử lý —</option>' + actionOpts;
+      action = `<select class="select cf-sum-action" data-role="sum-action" data-column="${escapeAttr(p.column)}" aria-label="Cách xử lý cột ${escapeAttr(p.column)}">${opts}</select>`;
+      if (p.available_actions.includes("fixed_value")) {
+        fixed = `<input class="input cf-sum-fixed" data-role="sum-fixed" placeholder="Giá trị điền vào các ô lỗi" aria-label="Giá trị cố định cho cột ${escapeAttr(p.column)}" hidden />`;
+      }
+    }
     return `<div class="cf-sum-row${has ? " has-errors" : ""}"><span class="cf-sum-name" title="${escapeAttr(p.column)}">${escapeHtml(p.column)}</span>` +
-      `<span class="cf-sum-count">${p.findings_count} ô lỗi${has ? ` · ${p.flagged_rows_count} dòng` : ""}</span>${action}</div>`;
+      `<span class="cf-sum-count">${p.findings_count} ô lỗi${has ? ` · ${p.flagged_rows_count} dòng` : ""}</span>${action}${fixed}</div>`;
   }).join("");
   $("cf-multi").innerHTML =
     `<div class="cf-sum"><div class="ft-coltypes-bar"><span class="ft-coltypes-title">Lỗi theo từng cột</span>` +
     `<span class="ft-coltypes-meta">${total} ô lỗi · ${withErrors}/${perColumn.length} cột</span></div><div class="cf-sum-list">${rows}</div></div>`;
 }
+// Chọn "điền giá trị cố định" ở 1 cột -> hiện ô nhập giá trị của đúng dòng đó (đổi cách khác thì ẩn).
+$("cf-multi").addEventListener("change", (e) => {
+  if (e.target.dataset.role !== "sum-action") return;
+  const box = e.target.closest(".cf-sum-row").querySelector('[data-role="sum-fixed"]');
+  if (!box) return;
+  box.hidden = e.target.value !== "fixed_value";
+  if (!box.hidden) box.focus();
+});
 // Khối "Cách xử lý" dưới nút Phát hiện có 2 kiểu: nhiều cột (bảng tổng hợp) hoặc 1 cột/rule (1 ô chọn cách xử lý như cũ).
-function prepareCfHandling(multi, data) {
+function prepareCfHandling(multi, data, tool) {
   $("cf-handling-title").textContent = multi ? "Kết quả phát hiện theo từng cột" : "Cách xử lý mọi ô vừa bị gắn cờ";
   $("cf-multi").hidden = !multi;
   $("cf-single-handling").hidden = multi;
   $("cf-apply-row").hidden = multi && data.findings_count === 0; // không có lỗi nào thì không có gì để áp dụng
-  if (multi) renderCfMultiSummary(data.per_column);
+  if (multi) renderCfMultiSummary(data.per_column, tool);
 }
 function renderCfRuleFields() {
   const type = $("cf-rule-type").value;
@@ -2261,29 +2336,21 @@ function buildCfConfig() {
     }
     return { config: { tool, rule } };
   }
-  if (tool === "inconsistent-category") {
-    // Mỗi form = 1 cột: kiểu luôn là Nhóm (category). Gửi cả danh sách `items` để backend kiểm tất cả trong 1 lần.
-    const forms = state.cf.icForms;
-    if (!forms.length) return { error: "Không có cột Nhóm (category) nào để kiểm tra." };
+  if (CF_MULTI[tool]) {
+    // Mỗi form = 1 cột. Gửi cả danh sách `items` để backend kiểm tất cả trong 1 lần.
+    const forms = cfForms(tool);
+    if (!forms.length) return { error: CF_MULTI[tool].noColumnsError };
     const items = [];
     for (const f of forms) {
-      const cats = f.categories.split(",").map((x) => x.trim()).filter(Boolean);
-      if (!cats.length) return { error: `Cột "${f.column}": nhập ít nhất 1 giá trị chuẩn.` };
-      const threshold = String(f.threshold).trim() === "" ? Number(IC_DEFAULT_THRESHOLD) : Number(f.threshold);
-      if (!(threshold >= 0.5 && threshold <= 1)) return { error: `Cột "${f.column}": ngưỡng giống nhau phải từ 0.5 đến 1.` };
-      items.push({ column: f.column, dtype: "category", params: { valid_categories: cats, category_similarity_threshold: threshold } });
+      const r = CF_MULTI[tool].toItem(f);
+      if (r.error) return { error: r.error };
+      items.push(r.item);
     }
     return { config: { tool, items } };
   }
   const column = $("cf-column").value;
   const dtype = $("cf-dtype").value;
   const params = {};
-  if (tool === "out-of-range") {
-    params.min_value = num("cf-min");
-    params.max_value = num("cf-max");
-    if (params.min_value === null && params.max_value === null) return { error: "Nhập ít nhất 1 trong 2 giá trị nhỏ nhất / lớn nhất." };
-    if (params.min_value !== null && params.max_value !== null && params.min_value > params.max_value) return { error: "Giá trị nhỏ nhất đang lớn hơn giá trị lớn nhất." };
-  }
   if (tool === "outlier") {
     params.outlier_method = $("cf-outlier-method").value;
     params.outlier_threshold = num("cf-outlier-threshold") === null ? 1.5 : num("cf-outlier-threshold");
@@ -2317,7 +2384,7 @@ $("cf-detect-btn").addEventListener("click", async () => {
   const multi = Array.isArray(built.config.items) && Array.isArray(data.per_column);
   state.cf.detect = { data, config: built.config, inputLabel: inp.label, fresh, multi };
   const label = CF_TAB_LABEL[state.cf.tool];
-  prepareCfHandling(multi, data);
+  prepareCfHandling(multi, data, state.cf.tool);
   $(T.resultEmpty).hidden = true;
   $(T.resultCard).hidden = false;
   $(T.resultTag).textContent = multi ? `Phát hiện · ${label} · ${data.per_column.length} cột` : `Phát hiện · ${label}`;
@@ -2369,12 +2436,31 @@ $("cf-apply-btn").addEventListener("click", async () => {
   let applyExtra;
   let action = "";
   if (det.multi) {
-    // Nhiều cột: mỗi cột có cách xử lý riêng trong bảng tổng hợp; cột để "Bỏ qua" thì không gửi (không bị đụng tới).
+    // Nhiều cột: mỗi cột có cách xử lý riêng trong bảng tổng hợp; cột để "Bỏ qua" / chưa chọn thì không gửi (không bị đụng tới).
+    // Cột chọn "điền giá trị cố định" phải có giá trị (backend còn kiểm hợp kiểu cột: số nguyên / số).
     const actions = {};
+    let invalid = "";
     document.querySelectorAll('#cf-multi [data-role="sum-action"]').forEach((sel) => {
-      if (sel.value !== "skip") actions[sel.dataset.column] = { action: sel.value };
+      if (sel.value === "skip" || invalid) return;
+      const column = sel.dataset.column;
+      const spec = { action: sel.value };
+      if (sel.value === "fixed_value") {
+        const box = sel.closest(".cf-sum-row").querySelector('[data-role="sum-fixed"]');
+        const value = box ? box.value.trim() : "";
+        if (!value) { invalid = `Cột "${column}": chưa nhập giá trị cố định.`; return; }
+        spec.fixed_value = value;
+      }
+      actions[column] = spec;
     });
-    if (!Object.keys(actions).length) return setError($("cf-apply-error"), 'Chưa chọn cách xử lý cho cột nào (đang để "Bỏ qua" hết).');
+    if (invalid) return setError($("cf-apply-error"), invalid);
+    if (!Object.keys(actions).length) {
+      // Tool "preselect" (không xoá dữ liệu) để mặc định cách xử lý nên "hết cột" nghĩa là người dùng chủ động chọn "Bỏ qua" cả loạt;
+      // tool còn lại mặc định "— Chọn cách xử lý —" nên "hết cột" nghĩa là chưa chọn gì -- 2 trường hợp cần 2 câu nói khác nhau.
+      const preselect = CF_MULTI[state.cf.tool] && CF_MULTI[state.cf.tool].preselect;
+      return setError($("cf-apply-error"), preselect
+        ? 'Chưa chọn cách xử lý cho cột nào (đang để "Bỏ qua" hết).'
+        : "Chưa chọn cách xử lý cho cột nào. Chọn cách xử lý ở ít nhất 1 cột rồi bấm Áp dụng.");
+    }
     applyExtra = { actions };
   } else {
     action = $("cf-action").value;
