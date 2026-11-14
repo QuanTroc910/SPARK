@@ -1257,17 +1257,22 @@
           <!-- Nhịp 2: chọn cách xử lý -- chỉ hiện sau khi "Phát hiện" ra lỗi. Danh
                sách cách xử lý do backend trả (bảng kiểu cột × loại lỗi). -->
           <div class="cf-handling" id="cf-handling" hidden>
-            <p class="continue-title">Cách xử lý mọi ô vừa bị gắn cờ</p>
-            <div class="field">
-              <label for="cf-action">Cách xử lý</label>
-              <select class="select" id="cf-action"></select>
-            </div>
-            <div class="field" id="cf-fixed-value-wrap" hidden>
-              <label for="cf-fixed-value">Giá trị cố định</label>
-              <input class="input" id="cf-fixed-value" placeholder="vd: 0 · Không rõ · 2024-01-01" />
+            <p class="continue-title" id="cf-handling-title">Cách xử lý mọi ô vừa bị gắn cờ</p>
+            <!-- Tool kiểm NHIỀU cột một lượt (Không nhất quán): bảng "cột nào, bao nhiêu lỗi" + chọn cách xử lý từng cột, do
+                 workspace.js dựng (renderCfMultiSummary). Các tool 1 cột dùng khối #cf-single-handling bên dưới. -->
+            <div id="cf-multi" hidden></div>
+            <div id="cf-single-handling">
+              <div class="field">
+                <label for="cf-action">Cách xử lý</label>
+                <select class="select" id="cf-action"></select>
+              </div>
+              <div class="field" id="cf-fixed-value-wrap" hidden>
+                <label for="cf-fixed-value">Giá trị cố định</label>
+                <input class="input" id="cf-fixed-value" placeholder="vd: 0 · Không rõ · 2024-01-01" />
+              </div>
             </div>
             <p class="form-error" id="cf-apply-error" hidden></p>
-            <div class="panel-actions">
+            <div class="panel-actions" id="cf-apply-row">
               <button class="btn btn-accent" id="cf-apply-btn" type="button">Áp dụng</button>
               <span class="status-text" id="cf-apply-status"></span>
             </div>

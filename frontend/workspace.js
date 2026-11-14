@@ -158,7 +158,9 @@ const state = {
   // cf thêm: columns/guessed đọc từ /api/noise-tools/inspect, detect = kết quả nhịp "Phát hiện".
   cf: { tool: "out-of-range", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null,
         // colSig = "chữ ký" đầu vào mà cột hiện có được đọc từ đó; pendingSig = đầu vào đang được đọc dở; colSeq = chống chạy chồng.
-        colSig: "", pendingSig: "", colSeq: 0 },
+        colSig: "", pendingSig: "", colSeq: 0,
+        // Tool "Không nhất quán" kiểm NHIỀU cột: icForms = các form đang khai [{uid, column, categories, threshold}], icUid = bộ đếm uid.
+        icForms: [], icUid: 0 },
 };
 
 // ====== Đăng nhập / tạo tài khoản (bước 4) -- trang này TỰ lo, không đá về
@@ -658,9 +660,10 @@ const CF_INFO = {
     headline: "CHUẨN HOÁ GIÁ TRỊ<br>KHÔNG NHẤT QUÁN",
     desc: '"Nam", "nam", "NAM", " Nam " cùng một nghĩa nhưng là bốn giá trị khác nhau với máy. Bạn khai danh sách giá trị chuẩn, Denoise tìm biến thể gần giống và tự đưa về đúng giá trị chuẩn.',
     mock: mockPair([[["is-hit"]], [[]], [["is-hit"]], [[]]], [[["is-fixed"]], [[]], [["is-fixed"]], [[]]], "Chuẩn hoá"),
-    steps: ["Chọn file và cột nhóm (category).", "Gõ danh sách giá trị chuẩn, cách nhau bởi dấu phẩy, bấm Phát hiện.", "Xem các biến thể bị gắn cờ rồi bấm Áp dụng để chuẩn hoá."],
+    steps: ["Chọn file; chọn cột nhóm (category) cần kiểm. Bấm Thêm cột kiểm tra để kiểm nhiều cột một lượt.", "Gõ danh sách giá trị chuẩn của từng cột, cách nhau bởi dấu phẩy, bấm Phát hiện.", "Xem bảng lỗi theo từng cột, chọn cách xử lý cho từng cột rồi bấm Áp dụng."],
     explainer: [
-      { t: "Thế nào là gần giống", b: "Denoise so độ giống chuỗi (sau khi bỏ hoa/thường và khoảng trắng) với từng giá trị chuẩn. Ngưỡng mặc định 0.85: đủ bắt lỗi gõ nhẹ, đủ chặt để không gộp nhầm hai nhóm khác nhau." },
+      { t: "Thế nào là gần giống", b: "Denoise so độ giống chuỗi (sau khi bỏ hoa/thường và khoảng trắng) với từng giá trị chuẩn. Ngưỡng mặc định 1 chỉ bắt biến thể khác hoa/thường. Hạ xuống khoảng 0.85 để bắt thêm lỗi gõ nhẹ, nhưng càng thấp càng dễ gộp nhầm hai nhóm khác nhau." },
+      { t: "Cột nào được liệt kê", b: "Chỉ các cột Denoise đoán là nhóm (category): ít giá trị khác nhau, lặp lại nhiều lần như giới tính, phòng ban. Mỗi cột có danh sách giá trị chuẩn và ngưỡng riêng, và mỗi cột chỉ khai một lần." },
       { t: "Giá trị không khớp gì cả", b: "Một giá trị không giống bất kỳ giá trị chuẩn nào vẫn bị gắn cờ nhưng không tự sửa, vì không biết đưa về đâu. Hãy xem lại danh sách chuẩn hoặc xử lý tay." },
       PRIVACY_COLUMN(),
     ],
@@ -1928,7 +1931,6 @@ $("convert-run-btn").addEventListener("click", async () => {
 const CF_DTYPES = {
   "out-of-range": ["integer", "float"],
   outlier: ["integer", "float"],
-  "inconsistent-category": ["category"],
 };
 const OPERATORS = ["<", "<=", ">", ">=", "==", "!="];
 
@@ -2064,6 +2066,10 @@ function renderCfOptions() {
     renderCfRuleFields();
     return;
   }
+  if (tool === "inconsistent-category") {
+    renderCfCategoryForms(); // kiểm NHIỀU cột Nhóm một lượt (xem khối "Không nhất quán" bên dưới)
+    return;
+  }
   const allowed = CF_DTYPES[tool];
   const dtype = cfDefaultDtype(firstCol, allowed);
   let extra = "";
@@ -2071,8 +2077,6 @@ function renderCfOptions() {
     extra = `<div class="cf-row"><div class="field"><label for="cf-min">Nhỏ nhất hợp lệ</label><input class="input" id="cf-min" type="number" step="any" placeholder="vd: 18" /></div><div class="field"><label for="cf-max">Lớn nhất hợp lệ</label><input class="input" id="cf-max" type="number" step="any" placeholder="vd: 65" /></div></div><p class="hint-note">Để trống 1 bên = không chặn bên đó</p>`;
   } else if (tool === "outlier") {
     extra = `<div class="cf-row"><div class="field"><label>Phương pháp</label><div class="ft-seg" data-seg-for="cf-outlier-method"><button type="button" class="is-active" data-value="iqr">IQR</button><button type="button" data-value="zscore">Z-score</button></div><select class="select" id="cf-outlier-method" hidden><option value="iqr">IQR</option><option value="zscore">Z-score</option></select></div><div class="field"><label for="cf-outlier-threshold">Ngưỡng</label><input class="input" id="cf-outlier-threshold" type="number" step="any" value="1.5" /></div></div><p class="hint-note">IQR thường dùng 1.5 · Z-score thường dùng 3</p>`;
-  } else if (tool === "inconsistent-category") {
-    extra = `<div class="field"><label for="cf-categories">Danh sách giá trị chuẩn (cách nhau bởi dấu phẩy)</label><textarea class="input" id="cf-categories" rows="2" placeholder="vd: Nam, Nữ"></textarea></div><div class="field"><label for="cf-similarity">Ngưỡng giống nhau (0.5 – 1)</label><input class="input" id="cf-similarity" type="number" step="0.01" min="0.5" max="1" value="0.85" /></div>`;
   }
   wrap.innerHTML = cfColumnSelect("cf-column", "Cột cần kiểm tra", firstCol) + cfDtypeSelect(allowed, dtype) + extra;
   wrap.querySelectorAll(".ft-seg[data-seg-for]").forEach(wireSegmented);
@@ -2087,6 +2091,129 @@ function renderCfOptions() {
   });
   const method = $("cf-outlier-method");
   if (method) method.addEventListener("change", () => { $("cf-outlier-threshold").value = method.value === "zscore" ? "3" : "1.5"; });
+}
+/* ----- Không nhất quán: kiểm NHIỀU cột trong 1 lần phát hiện -----
+   Mỗi "form" = 1 cột Nhóm (category) + danh sách giá trị chuẩn + ngưỡng giống nhau riêng của cột đó. Nút "＋ Thêm cột kiểm tra" thêm form
+   mới (mỗi cột chỉ khai 1 lần). "Phát hiện" gửi tất cả form 1 lượt; kết quả hiện bảng "cột nào, bao nhiêu lỗi" kèm chọn cách xử lý
+   từng cột (renderCfMultiSummary). Kiểu dữ liệu luôn là Nhóm (category) nên chỉ liệt kê cột được đoán là Nhóm. */
+const IC_DEFAULT_THRESHOLD = "1"; // 1 = chỉ bắt biến thể khác hoa/thường; hạ xuống để bắt thêm lỗi chính tả
+function cfCategoryColumns() {
+  return state.cf.columns.filter((c) => state.cf.guessed[c] === "category");
+}
+function makeIcForm(column) {
+  return { uid: ++state.cf.icUid, column, categories: "", threshold: IC_DEFAULT_THRESHOLD };
+}
+// Giữ các form còn hợp lệ với danh sách cột hiện tại (cột còn tồn tại, vẫn là Nhóm, không trùng cột); chưa có form nào thì tạo 1 form cho
+// cột Nhóm đầu tiên. Gọi mỗi lần dựng lại khối tuỳ chọn (đổi tab, đọc lại cột sau khi chuỗi đổi...) nên giữ được những gì người dùng đã gõ.
+function reconcileIcForms() {
+  const cats = cfCategoryColumns();
+  const seen = new Set();
+  const kept = [];
+  for (const f of state.cf.icForms) {
+    if (cats.includes(f.column) && !seen.has(f.column)) { seen.add(f.column); kept.push(f); }
+  }
+  state.cf.icForms = kept;
+  if (!kept.length && cats.length) state.cf.icForms = [makeIcForm(cats[0])];
+}
+function icFormByUid(uid) {
+  return state.cf.icForms.find((f) => String(f.uid) === String(uid));
+}
+function icFormHTML(f, i, cats, used) {
+  // Ô chọn cột của form này chỉ liệt kê cột Nhóm chưa được form khác dùng (cộng chính cột đang chọn).
+  const opts = cats.filter((c) => c === f.column || !used.has(c))
+    .map((c) => `<option value="${escapeAttr(c)}"${c === f.column ? " selected" : ""}>${escapeHtml(c)}</option>`).join("");
+  const remove = state.cf.icForms.length > 1 ? '<button type="button" class="btn btn-ghost btn-small" data-role="ic-remove">✕ Xoá</button>' : "";
+  return `<div class="cf-form" data-uid="${f.uid}">` +
+    `<div class="cf-form-bar"><span class="cf-form-title">Cột kiểm tra ${i + 1}</span>${remove}</div>` +
+    '<div class="cf-form-body">' +
+    `<div class="cf-row"><div class="field"><label>Cột cần kiểm tra</label><select class="select" data-role="ic-column" aria-label="Cột cần kiểm tra ${i + 1}">${opts}</select></div>` +
+    `<div class="field"><label>Kiểu dữ liệu</label><select class="select" disabled aria-label="Kiểu dữ liệu (cố định)"><option>${DTYPE_LABELS.category}</option></select></div></div>` +
+    `<div class="field"><label>Danh sách giá trị chuẩn (cách nhau bởi dấu phẩy)</label><textarea class="input" rows="2" data-role="ic-categories" placeholder="vd: Nam, Nữ" aria-label="Danh sách giá trị chuẩn ${i + 1}">${escapeHtml(f.categories)}</textarea></div>` +
+    `<div class="field"><label>Ngưỡng giống nhau (0.5 – 1)</label><input class="input" type="number" step="0.01" min="0.5" max="1" data-role="ic-threshold" value="${escapeAttr(f.threshold)}" aria-label="Ngưỡng giống nhau ${i + 1}" /></div>` +
+    '<p class="hint-note">1 = chỉ bắt biến thể khác hoa/thường ("nam", "NAM"). Thấp hơn (vd 0.85) bắt thêm lỗi gõ nhẹ ("Sale" so với "Sales").</p>' +
+    '</div></div>';
+}
+function renderCfCategoryForms() {
+  const wrap = $("cf-options");
+  const st = state.cf;
+  reconcileIcForms();
+  if (!st.columns.length) {
+    wrap.innerHTML = '<p class="ft-coltypes-msg">Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ liệt kê các cột Nhóm (category) để bạn khai giá trị chuẩn.</p>';
+    return;
+  }
+  const cats = cfCategoryColumns();
+  if (!cats.length) {
+    wrap.innerHTML = '<p class="ft-coltypes-msg">Không có cột nào được đoán là Nhóm (category) trong dữ liệu này. Cột Nhóm là cột có ít giá trị khác nhau lặp lại nhiều lần (giới tính, phòng ban...).</p>';
+    return;
+  }
+  const used = new Set(st.icForms.map((f) => f.column));
+  const free = cats.filter((c) => !used.has(c)).length;
+  wrap.innerHTML = st.icForms.map((f, i) => icFormHTML(f, i, cats, used)).join("") +
+    `<div class="cf-add-row"><button type="button" class="btn btn-ghost btn-small" data-role="ic-add"${free ? "" : " disabled"}>＋ Thêm cột kiểm tra</button>` +
+    `<span class="cf-add-hint">${free ? `Còn ${free} cột Nhóm chưa kiểm tra` : "Đã chọn hết các cột Nhóm"}</span></div>`;
+}
+// Sự kiện gắn 1 lần lên #cf-options (nội dung bên trong bị dựng lại liên tục); chỉ phản ứng khi đang ở tool Không nhất quán.
+$("cf-options").addEventListener("change", (e) => {
+  if (state.cf.tool !== "inconsistent-category" || e.target.dataset.role !== "ic-column") return;
+  const f = icFormByUid(e.target.closest(".cf-form").dataset.uid);
+  if (!f) return;
+  f.column = e.target.value;
+  renderCfCategoryForms(); // danh sách cột của các form khác phải loại cột vừa chọn
+});
+$("cf-options").addEventListener("input", (e) => {
+  if (state.cf.tool !== "inconsistent-category") return;
+  const form = e.target.closest(".cf-form");
+  const f = form && icFormByUid(form.dataset.uid);
+  if (!f) return;
+  if (e.target.dataset.role === "ic-categories") f.categories = e.target.value;
+  else if (e.target.dataset.role === "ic-threshold") f.threshold = e.target.value;
+});
+$("cf-options").addEventListener("click", (e) => {
+  if (state.cf.tool !== "inconsistent-category") return;
+  const add = e.target.closest('[data-role="ic-add"]');
+  if (add) {
+    const used = new Set(state.cf.icForms.map((f) => f.column));
+    const next = cfCategoryColumns().find((c) => !used.has(c));
+    if (!next) return;
+    const f = makeIcForm(next);
+    state.cf.icForms.push(f);
+    renderCfCategoryForms();
+    const box = document.querySelector(`#cf-options .cf-form[data-uid="${f.uid}"] [data-role="ic-categories"]`);
+    if (box) { box.focus(); box.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+    return;
+  }
+  const remove = e.target.closest('[data-role="ic-remove"]');
+  if (remove) {
+    const uid = remove.closest(".cf-form").dataset.uid;
+    state.cf.icForms = state.cf.icForms.filter((f) => String(f.uid) !== uid);
+    renderCfCategoryForms();
+  }
+});
+// Bảng tổng hợp sau "Phát hiện" (tool nhiều cột): mỗi cột đã khai 1 dòng = tên cột | số ô lỗi (và số dòng) | cách xử lý chọn riêng
+// từng cột (mặc định = cách đầu tiên backend cho phép; "Bỏ qua" = không đụng cột đó). Cột không có lỗi thì không cần chọn gì.
+function renderCfMultiSummary(perColumn) {
+  const total = perColumn.reduce((a, p) => a + p.findings_count, 0);
+  const withErrors = perColumn.filter((p) => p.findings_count > 0).length;
+  const rows = perColumn.map((p) => {
+    const has = p.findings_count > 0;
+    const opts = p.available_actions.map((a) => `<option value="${a}">${escapeHtml(ACTION_LABELS[a] || a)}</option>`).join("") + '<option value="skip">Bỏ qua, giữ nguyên</option>';
+    const action = has
+      ? `<select class="select cf-sum-action" data-role="sum-action" data-column="${escapeAttr(p.column)}" aria-label="Cách xử lý cột ${escapeAttr(p.column)}">${opts}</select>`
+      : '<span class="cf-sum-none">Không có lỗi</span>';
+    return `<div class="cf-sum-row${has ? " has-errors" : ""}"><span class="cf-sum-name" title="${escapeAttr(p.column)}">${escapeHtml(p.column)}</span>` +
+      `<span class="cf-sum-count">${p.findings_count} ô lỗi${has ? ` · ${p.flagged_rows_count} dòng` : ""}</span>${action}</div>`;
+  }).join("");
+  $("cf-multi").innerHTML =
+    `<div class="cf-sum"><div class="ft-coltypes-bar"><span class="ft-coltypes-title">Lỗi theo từng cột</span>` +
+    `<span class="ft-coltypes-meta">${total} ô lỗi · ${withErrors}/${perColumn.length} cột</span></div><div class="cf-sum-list">${rows}</div></div>`;
+}
+// Khối "Cách xử lý" dưới nút Phát hiện có 2 kiểu: nhiều cột (bảng tổng hợp) hoặc 1 cột/rule (1 ô chọn cách xử lý như cũ).
+function prepareCfHandling(multi, data) {
+  $("cf-handling-title").textContent = multi ? "Kết quả phát hiện theo từng cột" : "Cách xử lý mọi ô vừa bị gắn cờ";
+  $("cf-multi").hidden = !multi;
+  $("cf-single-handling").hidden = multi;
+  $("cf-apply-row").hidden = multi && data.findings_count === 0; // không có lỗi nào thì không có gì để áp dụng
+  if (multi) renderCfMultiSummary(data.per_column);
 }
 function renderCfRuleFields() {
   const type = $("cf-rule-type").value;
@@ -2134,6 +2261,20 @@ function buildCfConfig() {
     }
     return { config: { tool, rule } };
   }
+  if (tool === "inconsistent-category") {
+    // Mỗi form = 1 cột: kiểu luôn là Nhóm (category). Gửi cả danh sách `items` để backend kiểm tất cả trong 1 lần.
+    const forms = state.cf.icForms;
+    if (!forms.length) return { error: "Không có cột Nhóm (category) nào để kiểm tra." };
+    const items = [];
+    for (const f of forms) {
+      const cats = f.categories.split(",").map((x) => x.trim()).filter(Boolean);
+      if (!cats.length) return { error: `Cột "${f.column}": nhập ít nhất 1 giá trị chuẩn.` };
+      const threshold = String(f.threshold).trim() === "" ? Number(IC_DEFAULT_THRESHOLD) : Number(f.threshold);
+      if (!(threshold >= 0.5 && threshold <= 1)) return { error: `Cột "${f.column}": ngưỡng giống nhau phải từ 0.5 đến 1.` };
+      items.push({ column: f.column, dtype: "category", params: { valid_categories: cats, category_similarity_threshold: threshold } });
+    }
+    return { config: { tool, items } };
+  }
   const column = $("cf-column").value;
   const dtype = $("cf-dtype").value;
   const params = {};
@@ -2146,12 +2287,6 @@ function buildCfConfig() {
   if (tool === "outlier") {
     params.outlier_method = $("cf-outlier-method").value;
     params.outlier_threshold = num("cf-outlier-threshold") === null ? 1.5 : num("cf-outlier-threshold");
-  }
-  if (tool === "inconsistent-category") {
-    const cats = $("cf-categories").value.split(",").map((s) => s.trim()).filter(Boolean);
-    if (!cats.length) return { error: "Nhập ít nhất 1 giá trị chuẩn." };
-    params.valid_categories = cats;
-    params.category_similarity_threshold = num("cf-similarity") === null ? 0.85 : num("cf-similarity");
   }
   return { config: { tool, column, dtype, params } };
 }
@@ -2179,11 +2314,13 @@ $("cf-detect-btn").addEventListener("click", async () => {
   formData.append("config", JSON.stringify(built.config));
   const data = await callBackend($("cf-detect-btn"), "Phát hiện", "/api/noise-tools/configured", formData, $(T.error));
   if (!data) return;
-  state.cf.detect = { data, config: built.config, inputLabel: inp.label, fresh };
+  const multi = Array.isArray(built.config.items) && Array.isArray(data.per_column);
+  state.cf.detect = { data, config: built.config, inputLabel: inp.label, fresh, multi };
   const label = CF_TAB_LABEL[state.cf.tool];
+  prepareCfHandling(multi, data);
   $(T.resultEmpty).hidden = true;
   $(T.resultCard).hidden = false;
-  $(T.resultTag).textContent = `Phát hiện · ${label}`;
+  $(T.resultTag).textContent = multi ? `Phát hiện · ${label} · ${data.per_column.length} cột` : `Phát hiện · ${label}`;
   $(T.resultDims).textContent = `${data.flagged_rows_count} dòng lỗi / ${data.total_rows} dòng`;
   $(T.download).disabled = true;
   $(T.cont).hidden = true;
@@ -2194,6 +2331,7 @@ $("cf-detect-btn").addEventListener("click", async () => {
     note.textContent = "Không phát hiện ô nào vi phạm với cấu hình này.";
     note.classList.add("is-only");
     setStatus($(T.status), "✅ Không phát hiện lỗi nào · dữ liệu giữ nguyên", "is-ok");
+    if (multi) $("cf-handling").hidden = false; // vẫn cho xem bảng "cột nào 0 lỗi"
     if (data.result_text) {
       recordPipeStep(`${label} (không đổi)`, data.result_text, "csv", inp.label, fresh, inp.source);
       $(T.download).disabled = false;
@@ -2206,7 +2344,12 @@ $("cf-detect-btn").addEventListener("click", async () => {
   note.classList.remove("is-only");
   note.hidden = !data.truncated;
   note.textContent = data.truncated ? `Chỉ hiện ${data.flagged_rows.length} dòng lỗi đầu tiên.` : "";
-  setStatus($(T.status), `⚑ ${data.findings_count} ô lỗi ở ${data.flagged_rows_count} dòng (tổng ${data.total_rows}). Chọn cách xử lý bên dưới.`, "is-ok");
+  if (multi) {
+    const colsWithErrors = data.per_column.filter((p) => p.findings_count > 0).length;
+    setStatus($(T.status), `⚑ ${data.findings_count} ô lỗi ở ${colsWithErrors} cột · ${data.flagged_rows_count} dòng (tổng ${data.total_rows}). Chọn cách xử lý từng cột bên dưới.`, "is-ok");
+  } else {
+    setStatus($(T.status), `⚑ ${data.findings_count} ô lỗi ở ${data.flagged_rows_count} dòng (tổng ${data.total_rows}). Chọn cách xử lý bên dưới.`, "is-ok");
+  }
   // Nhịp 2: danh sách cách xử lý do backend quyết theo kiểu cột × loại lỗi.
   const sel = $("cf-action");
   sel.innerHTML = data.available_actions.map((a) => `<option value="${a}">${ACTION_LABELS[a] || a}</option>`).join("");
@@ -2223,14 +2366,27 @@ $("cf-apply-btn").addEventListener("click", async () => {
   const det = state.cf.detect;
   if (!det) return setError($("cf-apply-error"), 'Bấm "Phát hiện" trước.');
   setError($("cf-apply-error"), "");
-  const action = $("cf-action").value;
-  const fixedValue = $("cf-fixed-value").value;
-  if (action === "fixed_value" && !fixedValue) return setError($("cf-apply-error"), "Chưa nhập giá trị cố định.");
+  let applyExtra;
+  let action = "";
+  if (det.multi) {
+    // Nhiều cột: mỗi cột có cách xử lý riêng trong bảng tổng hợp; cột để "Bỏ qua" thì không gửi (không bị đụng tới).
+    const actions = {};
+    document.querySelectorAll('#cf-multi [data-role="sum-action"]').forEach((sel) => {
+      if (sel.value !== "skip") actions[sel.dataset.column] = { action: sel.value };
+    });
+    if (!Object.keys(actions).length) return setError($("cf-apply-error"), 'Chưa chọn cách xử lý cho cột nào (đang để "Bỏ qua" hết).');
+    applyExtra = { actions };
+  } else {
+    action = $("cf-action").value;
+    const fixedValue = $("cf-fixed-value").value;
+    if (action === "fixed_value" && !fixedValue) return setError($("cf-apply-error"), "Chưa nhập giá trị cố định.");
+    applyExtra = { action, fixed_value: fixedValue };
+  }
   const formData = new FormData();
   const inp = collectInput("cf", formData);
   if (inp.error) return setError($("cf-apply-error"), inp.error);
   formData.append("mode", "apply");
-  formData.append("config", JSON.stringify(Object.assign({}, det.config, { action, fixed_value: fixedValue })));
+  formData.append("config", JSON.stringify(Object.assign({}, det.config, applyExtra)));
   const data = await callBackend($("cf-apply-btn"), "Áp dụng", "/api/noise-tools/configured", formData, $("cf-apply-error"));
   if (!data) return;
   const label = CF_TAB_LABEL[state.cf.tool];
@@ -2240,7 +2396,9 @@ $("cf-apply-btn").addEventListener("click", async () => {
   showResultTable("cf", label, data.preview_rows, tableDims(data.stats.final_row_count, colCount));
   $(T.download).disabled = false;
   $("cf-handling").hidden = true;
-  setStatus($(T.status), `${statusFromStats(data.stats)} · ${ACTION_LABELS[action] || action}`, "is-ok");
+  setStatus($(T.status), det.multi
+    ? `${statusFromStats(data.stats)} · đã xử lý ${(data.per_column || []).length} cột`
+    : `${statusFromStats(data.stats)} · ${ACTION_LABELS[action] || action}`, "is-ok");
   recordPipeStep(label, data.result_text, "csv", inp.label, det.fresh, inp.source);
   renderContinuePanel("cf");
 });

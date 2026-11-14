@@ -1737,10 +1737,21 @@ def _parse_config_tool_payload(form) -> dict:
     return cfg
 
 
+def _config_tool_items(cfg: dict) -> list:
+    """Danh sách cấu hình theo CỘT của 1 lần chạy: field `items` (NHIỀU cột -- tool "Không nhất quán" dùng, mỗi phần tử
+    {column, dtype, params}) hoặc chính `cfg` (đúng 1 cột -- cách gửi cũ của mọi tool theo cột, vẫn chạy y như trước)."""
+    items = cfg.get("items")
+    if items is None:
+        return [cfg]
+    if not isinstance(items, list) or not items or not all(isinstance(i, dict) for i in items):
+        raise QuickToolError("items phải là danh sách có ít nhất 1 cột, mỗi phần tử là {column, dtype, params}")
+    return items
+
+
 def _run_config_tool_detect(df: pd.DataFrame, cfg: dict):
-    """Chạy detect cho ĐÚNG 1 cấu hình. Trả về (column_configs,
-    cross_field_rules, findings, noise_key, column) -- column = None với rule
-    liên cột (noise cấp dòng, không gắn với 1 cột)."""
+    """Chạy detect cho 1 cấu hình (1 hoặc NHIỀU cột). Trả về (column_configs, cross_field_rules, findings, noise_key,
+    column) -- column = tên cột nếu đúng 1 cột, None nếu là rule liên cột (noise cấp dòng) hoặc nhiều cột; route dùng
+    `column_configs` rỗng để biết đó là rule."""
     tool = cfg["tool"]
     if tool == "cross-rule":
         rule = _cross_field_rule_from_json(cfg.get("rule") or {})
@@ -1748,16 +1759,22 @@ def _run_config_tool_detect(df: pd.DataFrame, cfg: dict):
         return [], [rule], findings, f"rule:{rule.rule_type.value}", None
 
     noise_type = CONFIG_TOOL_NOISE_TYPE[tool]
-    column = cfg.get("column")
-    if not column or column not in df.columns:
-        raise QuickToolError(f"Cột '{column}' không tồn tại trong file")
-    params = cfg.get("params") or {}
-    # Bỏ các tham số để trống ("" / None) để dataclass dùng giá trị mặc định.
-    params = {k: v for k, v in params.items() if v not in ("", None)}
-    item = {"column": column, "dtype": cfg.get("dtype") or "text", "noise_types": [noise_type.value], **params}
-    col_cfg = _config_from_json(item)
-    findings = detect_noise(df, [col_cfg])
-    return [col_cfg], [], findings, noise_type.value, column
+    column_configs = []
+    seen = set()
+    for entry in _config_tool_items(cfg):
+        column = entry.get("column")
+        if not column or column not in df.columns:
+            raise QuickToolError(f"Cột '{column}' không tồn tại trong file")
+        if column in seen:
+            raise QuickToolError(f"Cột '{column}' bị khai báo nhiều lần")
+        seen.add(column)
+        params = entry.get("params") or {}
+        # Bỏ các tham số để trống ("" / None) để dataclass dùng giá trị mặc định.
+        params = {k: v for k, v in params.items() if v not in ("", None)}
+        item = {"column": column, "dtype": entry.get("dtype") or "text", "noise_types": [noise_type.value], **params}
+        column_configs.append(_config_from_json(item))
+    findings = detect_noise(df, column_configs)
+    return column_configs, [], findings, noise_type.value, (column_configs[0].column if len(column_configs) == 1 else None)
 
 
 def _config_tool_actions(column_configs, noise_key) -> list[str]:
@@ -1768,6 +1785,21 @@ def _config_tool_actions(column_configs, noise_key) -> list[str]:
     return [a.value for a in get_available_actions(column_configs[0].dtype, NoiseType(noise_key))]
 
 
+def _cells_changed_by_column(before: pd.DataFrame, after: pd.DataFrame, columns: list) -> dict:
+    """Số ô bị sửa giá trị ở TỪNG cột trong `columns`, chỉ tính trên các dòng còn lại sau xử lý (cùng cách đếm với
+    `_summarize_change`, nhưng cho nhiều cột một lượt)."""
+    common = after.index.intersection(before.index)
+    result = {}
+    for column in columns:
+        if column not in before.columns or column not in after.columns:
+            result[column] = 0
+            continue
+        before_values = before.loc[common, column].fillna("").astype(str)
+        after_values = after.loc[common, column].fillna("").astype(str)
+        result[column] = int((before_values != after_values).sum())
+    return result
+
+
 @app.route("/api/noise-tools/configured", methods=["POST"])
 @login_required
 def noise_tool_configured():
@@ -1775,7 +1807,7 @@ def noise_tool_configured():
     try:
         cfg = _parse_config_tool_payload(request.form)
         df = _read_df_for_noise_tool(request)
-        column_configs, _rules, findings, noise_key, column = _run_config_tool_detect(df, cfg)
+        column_configs, _rules, findings, noise_key, _column = _run_config_tool_detect(df, cfg)
         actions = _config_tool_actions(column_configs, noise_key)
 
         if mode == "detect":
@@ -1792,6 +1824,20 @@ def noise_tool_configured():
             for i in indices[:CONFIG_TOOL_FLAGGED_LIMIT]:
                 values = ["" if v is None else str(v) for v in df.loc[i].tolist()]
                 rows.append({"row_number": int(i) + 1, "cells": values, "flagged": sorted(flagged[i])})
+            # Tổng hợp THEO TỪNG CỘT đã khai (theo đúng thứ tự khai): bao nhiêu ô lỗi, ở bao nhiêu dòng, cách xử lý hợp lệ.
+            # Rule liên cột (không gắn với cột nào) thì danh sách này rỗng.
+            findings_by_column: dict[str, list] = {}
+            for f in findings:
+                findings_by_column.setdefault(str(f.column), []).append(f)
+            per_column = []
+            for col_cfg in column_configs:
+                col_findings = findings_by_column.get(col_cfg.column, [])
+                per_column.append({
+                    "column": col_cfg.column,
+                    "findings_count": len(col_findings),
+                    "flagged_rows_count": len({int(f.row_index) for f in col_findings}),
+                    "available_actions": _config_tool_actions([col_cfg], noise_key),
+                })
             payload = {
                     "mode": "detect",
                     "total_rows": int(len(df)),
@@ -1801,6 +1847,7 @@ def noise_tool_configured():
                     "columns": [str(c) for c in df.columns],
                     "flagged_rows": rows,
                     "available_actions": actions,
+                    "per_column": per_column,
             }
             if not findings:
                 # Không có gì để sửa -> trả luôn CSV (không đổi) để FE vẫn nối
@@ -1811,33 +1858,58 @@ def noise_tool_configured():
             return jsonify(payload)
 
         # mode == "apply"
-        action = cfg.get("action") or ""
-        fixed_value = cfg.get("fixed_value")
-        if action not in actions:
-            raise QuickToolError("Cách xử lý không hợp lệ cho kiểu cột / loại lỗi này")
-        if action == "fixed_value" and (fixed_value is None or str(fixed_value) == ""):
-            raise QuickToolError("Chưa nhập giá trị cố định để điền vào")
-        if column is None:
+        per_column_result = None
+        if not column_configs:
             # Rule liên cột: không đi qua apply_handling() (hàm xử lý theo CỘT),
             # chỉ có xoá thẳng các dòng vi phạm theo row_index.
+            action = cfg.get("action") or ""
+            fixed_value = cfg.get("fixed_value")
+            if action not in actions:
+                raise QuickToolError("Cách xử lý không hợp lệ cho kiểu cột / loại lỗi này")
             flagged_idx = sorted({int(f.row_index) for f in findings})
             new_df = df.drop(index=flagged_idx) if action == "remove_row" else df
+            rows_removed, cells_changed = _summarize_change(df, new_df, None)
+            applied_actions = action
         else:
-            choice = HandlingChoice(
-                column=column,
-                noise_type=NoiseType(noise_key),
-                action=HandlingAction(action),
-                fixed_value=fixed_value,
-            )
-            new_df, _stats = apply_handling(df, column_configs, findings, [choice])
-        rows_removed, cells_changed = _summarize_change(df, new_df, column)
+            # Theo cột: field `actions` = {tên cột: {action, fixed_value}} cho NHIỀU cột một lượt; không có thì dùng cách gửi
+            # cũ (1 cột, action/fixed_value ở gốc config). Cột không có trong `actions` thì không bị đụng tới.
+            requested = cfg.get("actions")
+            if requested is None:
+                requested = {column_configs[0].column: {"action": cfg.get("action"), "fixed_value": cfg.get("fixed_value")}}
+            if not isinstance(requested, dict) or not requested:
+                raise QuickToolError("Chưa chọn cách xử lý cho cột nào")
+            config_by_column = {c.column: c for c in column_configs}
+            choices = []
+            for col, spec in requested.items():
+                if col not in config_by_column:
+                    raise QuickToolError(f"Cột '{col}' không nằm trong cấu hình phát hiện")
+                spec = spec or {}
+                action = spec.get("action") or ""
+                if action not in _config_tool_actions([config_by_column[col]], noise_key):
+                    raise QuickToolError(f"Cách xử lý không hợp lệ cho kiểu cột / loại lỗi này (cột '{col}', cách '{action}')")
+                fixed_value = spec.get("fixed_value")
+                if action == "fixed_value" and (fixed_value is None or str(fixed_value) == ""):
+                    raise QuickToolError(f"Chưa nhập giá trị cố định để điền vào cột '{col}'")
+                choices.append(HandlingChoice(column=col, noise_type=NoiseType(noise_key), action=HandlingAction(action), fixed_value=fixed_value))
+            new_df, _stats = apply_handling(df, column_configs, findings, choices)
+            rows_removed = len(df) - len(new_df)
+            changed = _cells_changed_by_column(df, new_df, [c.column for c in choices])
+            cells_changed = sum(changed.values())
+            findings_by_column = {}
+            for f in findings:
+                findings_by_column[str(f.column)] = findings_by_column.get(str(f.column), 0) + 1
+            per_column_result = [
+                {"column": c.column, "action": c.action.value, "findings_count": findings_by_column.get(c.column, 0), "cells_changed": changed[c.column]}
+                for c in choices
+            ]
+            applied_actions = choices[0].action.value if len(choices) == 1 else "multi"
         stats = {
             "original_row_count": int(len(df)),
             "final_row_count": int(len(new_df)),
             "removed_row_count": int(rows_removed),
             "cells_changed": int(cells_changed),
             "findings_count": len(findings),
-            "action": action,
+            "action": applied_actions,
         }
     except QuickToolError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -1845,7 +1917,7 @@ def noise_tool_configured():
         return jsonify({"error": f"Cấu hình không hợp lệ: {exc}"}), 400
     except Exception as exc:
         return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
-    return _noise_tool_response(new_df, stats)
+    return _noise_tool_response(new_df, stats, {"per_column": per_column_result} if per_column_result is not None else None)
 
 
 if __name__ == "__main__":
