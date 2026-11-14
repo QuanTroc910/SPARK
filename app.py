@@ -57,6 +57,7 @@ from attribute_noise.quick_tools import (
     QuickToolError,
     auto_column_types,
     blank_column_summary,
+    blank_rows_for_column,
     find_format_errors,
     quick_handle_blanks,
     quick_remove_duplicates,
@@ -1567,7 +1568,8 @@ def noise_tool_trim_whitespace():
 @login_required
 def noise_tool_blanks():
     """Free Tool 3: Ô trống -- GỘP 3 tool cũ (Xoá dòng trống + Điền/xoá ô trống + Thiếu giá trị nâng cao). Field:
-    `column_actions` (JSON {cột: {dtype, action, fixed_value}}, bỏ trống = không đụng cột nào), `remove_empty_rows`
+    `column_actions` (JSON {cột: {dtype, action, fixed_value, cell_values}}, bỏ trống = không đụng cột nào; `cell_values`
+    {số dòng gốc 1-based: giá trị} là giá trị RIÊNG từng ô của cách "fixed_value" = "Điền tay từng ô"), `remove_empty_rows`
     (mặc định true: xoá dòng mà MỌI cột đều trống), `remove_empty_columns` (mặc định false). Thứ tự xử lý và các cách xử lý
     hợp lệ theo kiểu cột: xem quick_tools.py (quick_handle_blanks)."""
     try:
@@ -1592,6 +1594,26 @@ def noise_tool_blanks():
     except Exception as exc:
         return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
     return _noise_tool_response(result_df, stats, {"blank_preview": blank_preview})
+
+
+@app.route("/api/noise-tools/blank-rows", methods=["POST"])
+@login_required
+def noise_tool_blank_rows():
+    """Danh sách các DÒNG (đủ mọi cột) có ô trống ở cột `column` -- cho bảng "Điền tay từng ô" của tool Ô trống. Cùng kiểu
+    đầu vào các route noise-tools khác (file hoặc text); field `limit` (mặc định = số dòng xem trước, tối đa 500). Không ghi
+    gì, chỉ đọc. Xem blank_rows_for_column()."""
+    try:
+        df = _read_df_for_noise_tool(request)
+        try:
+            limit = int(request.form.get("limit", PREVIEW_DATA_ROWS))
+        except ValueError:
+            raise QuickToolError("limit phải là số nguyên")
+        data = blank_rows_for_column(df, request.form.get("column", ""), max(1, min(limit, 500)))
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc được file: {exc}"}), 400
+    return jsonify(data)
 
 
 @app.route("/api/noise-tools/format-noise", methods=["POST"])

@@ -1452,6 +1452,9 @@
                khi đọc file/text (refreshFtBlankColumns) -- chỉ liệt kê cột CÓ ô trống; mỗi cột chọn kiểu + cách xử lý. Hai ô tick chung bên dưới. -->
           <div class="convert-options" id="convert-options-blanks" hidden>
             <div class="ft-coltypes ft-blanks" id="ft-blanks"></div>
+            <!-- Bảng "Điền tay từng ô": hiện khi 1 cột chọn cách "Điền tay từng ô" -- liệt kê các DÒNG có ô trống ở cột đó (đủ mọi
+                 cột để nhìn ngữ cảnh), gõ giá trị vào từng ô. Do workspace.js dựng (renderBlankManual). -->
+            <div class="ft-coltypes ft-blank-manual" id="ft-blank-manual" hidden></div>
             <label class="switch-row"><input type="checkbox" id="opt-blank-remove-empty-rows" checked /> Xoá dòng trống hoàn toàn</label>
             <p class="hint-note" id="opt-blank-rows-hint">Dòng mà mọi cột đều trống (kể cả "NA", "-", "?")</p>
             <label class="switch-row"><input type="checkbox" id="opt-blank-remove-empty-columns" /> Xoá luôn cột trống hoàn toàn</label>

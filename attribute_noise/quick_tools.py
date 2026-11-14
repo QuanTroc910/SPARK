@@ -553,9 +553,29 @@ class BlankOutcome:
     unfilled_count: int = 0       # số ô định điền nhưng vẫn trống (vd điền từ ô trên mà đó là dòng đầu, trung bình mà không có số nào)
 
 
+def _check_value_for_dtype(label: str, dtype: ColumnDType, text: str) -> str:
+    """Kiểm tra giá trị người dùng nhập có hợp kiểu cột không (số nguyên phải là số nguyên, số thực phải là số); cột số thì
+    trả về chuỗi đã cắt khoảng trắng. `label` = mô tả giá trị để đưa vào câu báo lỗi."""
+    if dtype == ColumnDType.INTEGER and not INTEGER_RE.match(text.strip()):
+        raise QuickToolError(f"{label} (kiểu số nguyên) phải là số nguyên, nhận được: {text}")
+    if dtype == ColumnDType.FLOAT:
+        try:
+            float(text.strip())
+        except ValueError:
+            raise QuickToolError(f"{label} (kiểu số thực) phải là số, nhận được: {text}")
+    if dtype in (ColumnDType.INTEGER, ColumnDType.FLOAT):
+        return text.strip()
+    return text
+
+
 def _validate_blank_actions(df: pd.DataFrame, column_actions: dict) -> dict:
-    """Kiểm tra `column_actions` = {tên cột: {"dtype": ..., "action": ..., "fixed_value": ...}}; trả về chỉ các cột có
-    cách xử lý khác "keep", kiểu đã đổi thành ColumnDType. Thiếu "dtype" thì tự đoán từ giá trị cột."""
+    """Kiểm tra `column_actions` = {tên cột: {"dtype": ..., "action": ..., "fixed_value": ..., "cell_values": ...}}; trả về chỉ
+    các cột có cách xử lý khác "keep", kiểu đã đổi thành ColumnDType. Thiếu "dtype" thì tự đoán từ giá trị cột.
+
+    Cách "fixed_value" (giao diện gọi là "Điền tay từng ô") có 2 nguồn giá trị, dùng được riêng hoặc cùng lúc:
+      - `cell_values` {số dòng GỐC 1-based: giá trị} -- giá trị RIÊNG cho từng ô trống (ô để chuỗi rỗng = bỏ qua, vẫn trống);
+      - `fixed_value` -- giá trị CHUNG cho mọi ô trống của cột mà không có giá trị riêng.
+    Phải có ít nhất 1 trong 2."""
     specs = {}
     for col, spec in column_actions.items():
         if col not in df.columns:
@@ -574,22 +594,56 @@ def _validate_blank_actions(df: pd.DataFrame, column_actions: dict) -> dict:
             )
         if action == "keep":
             continue
-        fixed = spec.get("fixed_value")
+        fixed = None
+        cell_values: dict = {}     # {vị trí dòng 0-based: giá trị}
         if action == "fixed_value":
-            if fixed is None or str(fixed).strip() == "":
-                raise QuickToolError(f"Thiếu giá trị cố định để điền vào cột '{col}'")
-            fixed = str(fixed)
-            if dtype == ColumnDType.INTEGER and not INTEGER_RE.match(fixed.strip()):
-                raise QuickToolError(f"Giá trị cố định của cột '{col}' (kiểu số nguyên) phải là số nguyên, nhận được: {fixed}")
-            if dtype == ColumnDType.FLOAT:
+            raw_fixed = spec.get("fixed_value")
+            if raw_fixed is not None and str(raw_fixed).strip() != "":
+                fixed = _check_value_for_dtype(f"Giá trị cố định của cột '{col}'", dtype, str(raw_fixed))
+            raw_cells = spec.get("cell_values") or {}
+            if not isinstance(raw_cells, dict):
+                raise QuickToolError(f"cell_values của cột '{col}' phải là object {{số dòng: giá trị}}")
+            for key, value in raw_cells.items():
                 try:
-                    float(fixed.strip())
-                except ValueError:
-                    raise QuickToolError(f"Giá trị cố định của cột '{col}' (kiểu số thực) phải là số, nhận được: {fixed}")
-            if dtype in (ColumnDType.INTEGER, ColumnDType.FLOAT):
-                fixed = fixed.strip()
-        specs[col] = {"dtype": dtype, "action": action, "fixed_value": fixed}
+                    row_number = int(key)
+                except (TypeError, ValueError):
+                    raise QuickToolError(f"Số dòng không hợp lệ ở cột '{col}': {key}")
+                if not 1 <= row_number <= len(df):
+                    raise QuickToolError(f"Dòng {row_number} không tồn tại (file có {len(df)} dòng), cột '{col}'")
+                text = "" if value is None else str(value)
+                if text.strip() == "":
+                    continue                       # để trống = không điền ô này
+                cell_values[row_number - 1] = _check_value_for_dtype(f"Giá trị ở dòng {row_number} của cột '{col}'", dtype, text)
+            if fixed is None and not cell_values:
+                raise QuickToolError(f"Thiếu giá trị cố định để điền vào cột '{col}' (nhập giá trị chung hoặc điền tay từng ô)")
+        specs[col] = {"dtype": dtype, "action": action, "fixed_value": fixed, "cell_values": cell_values}
     return specs
+
+
+def blank_rows_for_column(df: pd.DataFrame, column: str, limit: int = 100) -> dict:
+    """Dữ liệu cho bảng "Điền tay từng ô": các DÒNG (đủ mọi cột) có ô trống ở cột `column`, theo thứ tự trong file, tối đa
+    `limit` dòng. Dòng trống hoàn toàn KHÔNG liệt kê (tool Ô trống mặc định xoá chúng; điền 1 ô vào dòng toàn trống không có
+    nghĩa) -- số dòng đó trả riêng ở `excluded_empty_rows`. `row_numbers` là số dòng GỐC (1-based), chính là khoá của
+    `cell_values` khi gửi lên `quick_handle_blanks`. `total_blank_rows` đếm TOÀN BỘ, không bị cắt bởi `limit`."""
+    if column not in df.columns:
+        raise QuickToolError(f"Cột không tồn tại: {column}")
+    work = df.reset_index(drop=True)
+    mask = blank_mask(work)
+    fully_empty = mask.all(axis=1) if len(work) and len(work.columns) else pd.Series(False, index=work.index)
+    selected = work.index[mask[column] & ~fully_empty]
+    shown = selected[:limit]
+    columns = [str(c) for c in work.columns]
+    rows = [["" if v is None else str(v) for v in work.iloc[int(pos)].tolist()] for pos in shown]
+    return {
+        "column": str(column),
+        "column_index": columns.index(str(column)),
+        "columns": columns,
+        "rows": rows,
+        "row_numbers": [int(pos) + 1 for pos in shown],
+        "total_blank_rows": int(len(selected)),
+        "shown_count": int(len(shown)),
+        "excluded_empty_rows": int((mask[column] & fully_empty).sum()),
+    }
 
 
 def quick_handle_blanks(
@@ -650,13 +704,32 @@ def quick_handle_blanks(
             filled, _still = _fill_down_series(result[col], blank_kept[col])
             result[col] = filled
 
-    impute_specs = [(c, sp) for c, sp in specs.items() if sp["action"] in _BLANK_IMPUTE_ACTIONS and c in flagged_by_col]
+    # "Điền tay từng ô": giá trị RIÊNG của từng dòng ghi thẳng vào ô (chỉ ô đang trống và dòng còn giữ lại; dòng đã bị xoá thì
+    # bỏ qua -- "xoá" thắng). Ô nào không có giá trị riêng thì rơi xuống nhánh giá trị chung (fixed_value) bên dưới.
+    own_values_by_col: dict = {}
+    for col, spec in specs.items():
+        if spec["action"] == "fixed_value" and spec["cell_values"] and col in flagged_by_col:
+            own = {int(pos): spec["cell_values"][int(pos)] for pos in flagged_by_col[col] if int(pos) in spec["cell_values"]}
+            for pos, value in own.items():
+                result.at[pos, col] = value
+            own_values_by_col[col] = set(own)
+
+    def _targets(col, spec):
+        """Các ô trống của cột mà cách xử lý này còn phải điền (đã trừ ô được điền tay riêng)."""
+        done = own_values_by_col.get(col, set())
+        return [pos for pos in flagged_by_col[col] if int(pos) not in done]
+
+    impute_specs = [
+        (c, sp) for c, sp in specs.items()
+        if sp["action"] in _BLANK_IMPUTE_ACTIONS and c in flagged_by_col
+        and not (sp["action"] == "fixed_value" and (sp["fixed_value"] is None or not _targets(c, sp)))
+    ]
     impute_specs.sort(key=lambda item: item[1]["action"] == "impute_knn")     # KNN xếp cuối
     if impute_specs:
         configs = [ColumnNoiseConfig(column=c, dtype=sp["dtype"], noise_types=[NoiseType.MISSING_VALUE]) for c, sp in impute_specs]
         findings = [
             NoiseFinding(row_index=int(pos), column=c, noise_type=NoiseType.MISSING_VALUE.value, value=result.at[pos, c])
-            for c, _sp in impute_specs for pos in flagged_by_col[c]
+            for c, sp in impute_specs for pos in _targets(c, sp)
         ]
         choices = [
             HandlingChoice(column=c, noise_type=NoiseType.MISSING_VALUE, action=_BLANK_IMPUTE_ACTIONS[sp["action"]], fixed_value=sp["fixed_value"])

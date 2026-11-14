@@ -1249,9 +1249,30 @@ a.hm-tool:hover { background: #ebebe7; }
   .ft-blank-action { grid-column: 3; grid-row: 1; }
   .ft-blank-fixed { grid-column: 1 / 4; grid-row: 2; }
 }
+/* Nút "✎ Điền tay · đã điền k/N ô" thay cho ô nhập giá trị trong dòng (cách "Điền tay từng ô"): bấm để mở/đóng bảng điền tay.
+   Chiếm đúng vị trí .ft-blank-fixed (cả hàng dưới/hàng 3); chữ dài thì cắt "…". Cột đang mở bảng thì tô viền cobalt (.is-open). */
+.ft-blank-manual-btn { width: 100%; justify-content: flex-start; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-blank-manual-btn.is-open { border-color: var(--signal); color: var(--signal); background: rgba(47, 75, 255, 0.06); }
+
+/* ===== Bảng "Điền tay từng ô" (dưới danh sách cột; dùng lại khung .ft-coltypes) =====
+   Bảng các DÒNG có ô trống ở cột đang điền: Dòng | cột đích (ô nhập, tô nền cobalt nhạt) | các cột còn lại để xem ngữ cảnh.
+   Cuộn dọc khi nhiều dòng, cuộn ngang khi nhiều cột; hàng tiêu đề dính trên (từ .results-table). */
+.ft-manual-general { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.ft-manual-general label {
+  font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-dim); white-space: nowrap;
+}
+.ft-manual-general .input { flex: 1; min-width: 0; height: 34px; padding: 0 10px; font-size: 13px; }
+.ft-manual-wrap { border: 0; border-radius: 0; max-height: 320px; }
+.ft-manual-table th.is-target, .ft-manual-table td.is-target { background: rgba(47, 75, 255, 0.07); }
+.ft-manual-table th.is-target { color: var(--signal); }
+.ft-manual-table td { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+.ft-manual-table td.is-target { max-width: none; padding: 5px 8px; }
+.ft-manual-num { color: var(--ink-faint); font-family: "IBM Plex Mono", monospace; }
+.ft-manual-input { width: 100%; min-width: 130px; height: 30px; padding: 0 8px; font-size: 13px; }
 /* Điện thoại: thanh tiêu đề bảng chỉ còn tên + nút Đặt lại (bỏ dòng "N cột có ô trống" cho đỡ chật). */
 @media (max-width: 640px) {
-  .ft-blanks .ft-coltypes-meta { display: none; }
-  .ft-blanks .ft-coltypes-bar .btn { margin-left: auto; }
+  .ft-blanks .ft-coltypes-meta, .ft-blank-manual .ft-coltypes-meta { display: none; }
+  .ft-blanks .ft-coltypes-bar .btn, .ft-blank-manual .ft-coltypes-bar .btn { margin-left: auto; }
 }
 

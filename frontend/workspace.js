@@ -149,7 +149,10 @@ const state = {
         colTypes: null, colState: "idle", colError: "", colSig: "", colSeq: 0, colPromise: null, colCounts: null, countsSig: "",
         // Tool Ô trống: bảng các cột CÓ ô trống. blankCols = [{name, blanks, guessed, dtype, action, fixedValue}] (null = chưa có);
         // blankInfo = {empty_row_count, empty_columns, blank_actions} từ backend; blankState/blankSig/blankSeq/blankPromise như colXxx ở trên.
-        blankCols: null, blankInfo: null, blankState: "idle", blankError: "", blankSig: "", blankSeq: 0, blankPromise: null },
+        blankCols: null, blankInfo: null, blankState: "idle", blankError: "", blankSig: "", blankSeq: 0, blankPromise: null,
+        // Bảng "Điền tay từng ô": blankEditing = tên cột đang mở bảng (null = đóng); blankRowsCache = {tên cột: {state, data}}
+        // các dòng có ô trống backend trả về (đổi đầu vào thì làm mới cả object này); blankErrors = {tên cột: lỗi lần tải gần nhất}.
+        blankEditing: null, blankRowsCache: {}, blankErrors: {} },
   cv: { tool: "delimiter", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, lastResult: null },
   // cf thêm: columns/guessed đọc từ /api/noise-tools/inspect, detect = kết quả nhịp "Phát hiện".
   cf: { tool: "out-of-range", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null,
@@ -1131,8 +1134,16 @@ $("ft-run-btn").addEventListener("click", async () => {
     const actions = {};
     for (const c of state.ft.blankCols || []) {
       if (c.action === "keep") continue;
-      if (c.action === "fixed_value" && !String(c.fixedValue).trim()) return setError($(T.error), `Cột "${c.name}": chưa nhập giá trị để điền vào ô trống.`);
-      actions[c.name] = { dtype: c.dtype, action: c.action, fixed_value: c.action === "fixed_value" ? c.fixedValue : "" };
+      if (c.action === "fixed_value") {
+        // Chỉ gửi các ô đã gõ (bỏ ô rỗng). Cần ít nhất 1 giá trị: gõ vào ô trống trong bảng "Điền tay" hoặc "Giá trị chung".
+        const cells = Object.fromEntries(Object.entries(c.cellValues).filter(([, v]) => String(v).trim()));
+        if (!String(c.fixedValue).trim() && !Object.keys(cells).length) {
+          return setError($(T.error), `Cột "${c.name}": chưa điền giá trị nào. Bấm "✎ Điền tay" rồi gõ vào các ô trống, hoặc nhập "Giá trị chung".`);
+        }
+        actions[c.name] = { dtype: c.dtype, action: c.action, fixed_value: c.fixedValue, cell_values: cells };
+      } else {
+        actions[c.name] = { dtype: c.dtype, action: c.action, fixed_value: "" };
+      }
     }
     formData.append("column_actions", JSON.stringify(actions));
     formData.append("remove_empty_rows", $("opt-blank-remove-empty-rows").checked ? "true" : "false");
@@ -1415,7 +1426,7 @@ const BLANK_DTYPE_LABEL = Object.fromEntries(BLANK_DTYPE_OPTIONS);
 const BLANK_ACTION_LABELS = {
   keep: "Giữ nguyên",
   fill_down: "Điền từ ô phía trên",
-  fixed_value: "Điền giá trị cố định",
+  fixed_value: "Điền tay từng ô",
   impute_mean: "Điền trung bình",
   impute_median: "Điền trung vị",
   impute_knn: "Điền theo KNN",
@@ -1462,6 +1473,7 @@ async function refreshFtBlankColumns() {
     st.blankCols = null;
     st.blankInfo = null;
     st.blankState = "idle";
+    resetBlankManual();
     updateBlankHints();
     renderFtBlanks();
     return;
@@ -1475,6 +1487,7 @@ async function refreshFtBlankColumns() {
     st.blankCols = null;
     st.blankInfo = null;
     st.blankState = "loading";
+    resetBlankManual();
     updateBlankHints();
     renderFtBlanks();
   }
@@ -1502,8 +1515,9 @@ async function refreshFtBlankColumns() {
       const guessed = data.guessed_dtypes[name] || "text";
       const old = prevByName.get(name);
       const dtype = old && old.dtype !== old.guessed && st.blankInfo.blank_actions[old.dtype] ? old.dtype : guessed;
-      return { name, blanks: counts[name], guessed, dtype, action: "keep", fixedValue: "" };
+      return { name, blanks: counts[name], guessed, dtype, action: "keep", fixedValue: "", cellValues: {} };
     });
+    resetBlankManual(); // bảng mới -> các dòng đã tải và lựa chọn mở bảng của đầu vào cũ không còn đúng
     st.blankState = "ready";
     updateBlankHints();
     renderFtBlanks();
@@ -1518,10 +1532,14 @@ function ftBlankRowHTML(c, i) {
     `<span class="ft-blank-name" title="${escapeAttr(c.name)}"><span class="ft-coltype-name">${escapeHtml(c.name)}</span><span class="ft-blank-count">${c.blanks} ô trống</span>${whole}</span>` +
     `<select class="select ft-blank-dtype" data-role="dtype" title="Denoise đoán: ${escapeAttr(BLANK_DTYPE_LABEL[c.guessed] || c.guessed)}">${dtypeOpts}</select>` +
     `<select class="select ft-blank-action" data-role="action">${blankActionOptionsHTML(c)}</select>` +
-    `<input class="input ft-blank-fixed" data-role="fixed" value="${escapeAttr(c.fixedValue)}" placeholder="Giá trị điền" aria-label="Giá trị cố định cho cột ${escapeAttr(c.name)}"${c.action === "fixed_value" ? "" : " hidden"} />` +
+    `<button type="button" class="btn btn-ghost ft-blank-fixed ft-blank-manual-btn${state.ft.blankEditing === c.name ? " is-open" : ""}" data-role="manual-open"${c.action === "fixed_value" ? "" : " hidden"}>${escapeHtml(blankManualBtnText(c))}</button>` +
     "</div>";
 }
 function renderFtBlanks() {
+  renderFtBlanksList();
+  renderBlankManual();
+}
+function renderFtBlanksList() {
   const box = $("ft-blanks");
   const st = state.ft;
   if (st.blankState === "loading") { box.innerHTML = '<p class="ft-coltypes-msg">Đang đọc cột và đếm ô trống…</p>'; return; }
@@ -1540,7 +1558,9 @@ function syncBlankRow(row, c) {
   const sel = row.querySelector('[data-role="action"]');
   sel.innerHTML = blankActionOptionsHTML(c);
   sel.value = c.action;
-  row.querySelector('[data-role="fixed"]').hidden = c.action !== "fixed_value";
+  const btn = row.querySelector('[data-role="manual-open"]');
+  btn.hidden = c.action !== "fixed_value";
+  btn.textContent = blankManualBtnText(c);
   row.classList.toggle("is-edited", c.action !== "keep");
 }
 $("ft-blanks").addEventListener("change", (e) => {
@@ -1553,21 +1573,181 @@ $("ft-blanks").addEventListener("change", (e) => {
     // Cách xử lý đang chọn không còn hợp lệ với kiểu mới (vd "Điền trung bình" rồi đổi sang Văn bản) -> về "Giữ nguyên".
     if (!blankActionsFor(c.dtype).includes(c.action)) c.action = "keep";
     syncBlankRow(row, c);
+    renderBlankManual(); // cột đang mở bảng điền tay mà không còn cách "Điền tay" -> bảng tự ẩn
   } else if (role === "action") {
     c.action = e.target.value;
     syncBlankRow(row, c);
-    if (c.action === "fixed_value") row.querySelector('[data-role="fixed"]').focus();
+    if (c.action === "fixed_value") openBlankManual(c);        // chọn "Điền tay từng ô" -> mở luôn bảng các dòng có ô trống
+    else if (state.ft.blankEditing === c.name) closeBlankManual();
   }
 });
-$("ft-blanks").addEventListener("input", (e) => {
-  const row = e.target.closest(".ft-blank-row");
-  if (!row || e.target.dataset.role !== "fixed" || !state.ft.blankCols) return;
-  state.ft.blankCols[Number(row.dataset.i)].fixedValue = e.target.value;
-});
 $("ft-blanks").addEventListener("click", (e) => {
-  if (!e.target.closest('[data-role="reset"]') || !state.ft.blankCols) return;
-  state.ft.blankCols.forEach((c) => { c.dtype = c.guessed; c.action = "keep"; c.fixedValue = ""; });
-  renderFtBlanks();
+  const st = state.ft;
+  if (!st.blankCols) return;
+  if (e.target.closest('[data-role="reset"]')) {
+    st.blankCols.forEach((c) => { c.dtype = c.guessed; c.action = "keep"; c.fixedValue = ""; c.cellValues = {}; });
+    st.blankEditing = null;
+    renderFtBlanks();
+    return;
+  }
+  const btn = e.target.closest('[data-role="manual-open"]');
+  if (!btn) return;
+  const c = st.blankCols[Number(btn.closest(".ft-blank-row").dataset.i)];
+  if (st.blankEditing === c.name) closeBlankManual();
+  else openBlankManual(c);
+});
+
+/* ----- Bảng "Điền tay từng ô" -----
+   Chọn cách "Điền tay từng ô" cho 1 cột (hoặc bấm nút "✎ Điền tay" trong dòng) -> bên dưới danh sách cột hiện bảng các DÒNG có
+   ô trống ở cột đó (đủ mọi cột để nhìn ngữ cảnh; cột cần điền đứng ngay sau "Dòng" để luôn thấy dù bảng cuộn ngang). Gõ giá
+   trị vào từng ô. Ô nào để trống thì lấy "Giá trị chung" (nếu có), không thì giữ trống. Chỉ hiện 100 dòng đầu mỗi cột (backend
+   cắt); phần còn lại dùng giá trị chung. Giá trị gõ lưu ở c.cellValues {số dòng gốc: giá trị} và gửi lên khi bấm Chạy. */
+function manualFilledCount(c) {
+  return Object.values(c.cellValues).filter((v) => String(v).trim()).length;
+}
+// Tổng số ô trống của cột sẽ hiện trong bảng (đã trừ dòng trống hoàn toàn nếu đã tải xong; chưa tải thì dùng số ô trống thô).
+function manualTotal(c) {
+  const entry = state.ft.blankRowsCache[c.name];
+  return entry && entry.state === "ready" ? entry.data.total_blank_rows : c.blanks;
+}
+function blankManualBtnText(c) {
+  const common = String(c.fixedValue).trim() ? " + giá trị chung" : "";
+  return `✎ Điền tay · đã điền ${manualFilledCount(c)}/${manualTotal(c)} ô${common}`;
+}
+function resetBlankManual() {
+  state.ft.blankEditing = null;
+  state.ft.blankRowsCache = {};
+  state.ft.blankErrors = {};
+}
+function editingBlankCol() {
+  const st = state.ft;
+  return st.blankEditing && st.blankCols ? st.blankCols.find((x) => x.name === st.blankEditing && x.action === "fixed_value") || null : null;
+}
+// Cập nhật chữ của nút trong dòng và dòng đếm trên thanh tiêu đề bảng (không dựng lại bảng, để không mất con trỏ đang gõ).
+function updateBlankManualCounts(c) {
+  const i = state.ft.blankCols.indexOf(c);
+  const btn = document.querySelector(`#ft-blanks .ft-blank-row[data-i="${i}"] [data-role="manual-open"]`);
+  if (btn) btn.textContent = blankManualBtnText(c);
+  const meta = document.querySelector('#ft-blank-manual [data-role="manual-count"]');
+  if (meta && state.ft.blankEditing === c.name) meta.textContent = `${manualFilledCount(c)}/${manualTotal(c)} ô đã điền tay`;
+}
+// Nút của cột đang mở bảng thì tô viền (.is-open).
+function refreshBlankManualButtons() {
+  document.querySelectorAll("#ft-blanks .ft-blank-row").forEach((row) => {
+    const c = state.ft.blankCols[Number(row.dataset.i)];
+    const btn = row.querySelector('[data-role="manual-open"]');
+    if (btn) btn.classList.toggle("is-open", state.ft.blankEditing === c.name);
+  });
+}
+function openBlankManual(c) {
+  state.ft.blankEditing = c.name;
+  loadBlankRows(c.name);
+  // Danh sách cột cao tối đa 300px và tự cuộn: cuộn trong danh sách cho dòng vừa chọn hiện đủ (không cuộn cả trang).
+  const list = document.querySelector("#ft-blanks .ft-coltypes-list");
+  const rowEl = list && list.querySelector(`.ft-blank-row[data-i="${state.ft.blankCols.indexOf(c)}"]`);
+  if (rowEl) {
+    const lr = list.getBoundingClientRect(), rr = rowEl.getBoundingClientRect();
+    if (rr.bottom > lr.bottom) list.scrollTop += rr.bottom - lr.bottom;
+    else if (rr.top < lr.top) list.scrollTop -= lr.top - rr.top;
+  }
+  refreshBlankManualButtons();
+  renderBlankManual(true);
+  $("ft-blank-manual").scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function closeBlankManual() {
+  state.ft.blankEditing = null;
+  refreshBlankManualButtons();
+  renderBlankManual();
+}
+// Lấy từ backend các dòng có ô trống ở cột `name` (1 lần cho mỗi cột / mỗi đầu vào, kết quả nhớ trong blankRowsCache).
+async function loadBlankRows(name) {
+  const st = state.ft;
+  const cache = st.blankRowsCache;
+  if (cache[name]) return;
+  const src = ftInputSource();
+  if (!src) return;
+  cache[name] = { state: "loading" };
+  st.blankErrors[name] = "";
+  const fd = new FormData();
+  if (src.file) fd.append("file", src.file);
+  else fd.append("text", src.text);
+  fd.append("column", name);
+  let entry;
+  try {
+    const response = await fetch("/api/noise-tools/blank-rows", { method: "POST", body: fd });
+    const data = await response.json();
+    entry = response.ok ? { state: "ready", data } : { state: "error", error: data.error || "Không lấy được các dòng có ô trống." };
+  } catch (err) {
+    entry = { state: "error", error: "Không gọi được backend để lấy các dòng có ô trống." };
+  }
+  if (st.blankRowsCache !== cache) return; // đầu vào đã đổi trong lúc chờ: bỏ kết quả cũ
+  if (entry.state === "error") { delete cache[name]; st.blankErrors[name] = entry.error; } // lỗi thì cho thử lại lần mở sau
+  else cache[name] = entry;
+  const c = editingBlankCol();
+  if (c && c.name === name) renderBlankManual(true);
+  const col = st.blankCols && st.blankCols.find((x) => x.name === name);
+  if (col) updateBlankManualCounts(col);
+}
+function manualTableHTML(c, d) {
+  const others = d.columns.map((_, i) => i).filter((i) => i !== d.column_index);
+  const head = `<tr><th>Dòng</th><th class="is-target">${escapeHtml(c.name)}</th>${others.map((i) => `<th>${escapeHtml(d.columns[i])}</th>`).join("")}</tr>`;
+  const body = d.rows.map((r, k) => {
+    const n = d.row_numbers[k];
+    const cells = others.map((i) => `<td title="${escapeAttr(r[i])}">${escapeHtml(r[i])}</td>`).join("");
+    return `<tr><td class="ft-manual-num">${n}</td><td class="is-target"><input class="input ft-manual-input" data-row="${n}" value="${escapeAttr(c.cellValues[n] || "")}" placeholder="điền…" aria-label="Giá trị cho dòng ${n}, cột ${escapeAttr(c.name)}" /></td>${cells}</tr>`;
+  }).join("");
+  return `<div class="table-wrap ft-manual-wrap"><table class="results-table ft-manual-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+function renderBlankManual(focusFirst) {
+  const box = $("ft-blank-manual");
+  const c = editingBlankCol();
+  if (!c) { box.hidden = true; box.innerHTML = ""; return; }
+  box.hidden = false;
+  const entry = state.ft.blankRowsCache[c.name];
+  const err = state.ft.blankErrors[c.name];
+  let inner;
+  if (!entry && err) inner = `<p class="ft-coltypes-msg is-error">${escapeHtml(err)}</p>`;
+  else if (!entry || entry.state === "loading") inner = '<p class="ft-coltypes-msg">Đang lấy các dòng có ô trống…</p>';
+  else {
+    const d = entry.data;
+    const notes = [];
+    if (d.shown_count < d.total_blank_rows) notes.push(`Cột này có ${d.total_blank_rows} ô trống, hiện ${d.shown_count} dòng đầu. Ô ngoài danh sách (và ô bạn để trống) lấy giá trị chung bên dưới, không có thì giữ trống.`);
+    else notes.push("Gõ giá trị vào từng ô của cột được tô nền. Ô để trống lấy giá trị chung bên dưới, không có thì giữ trống.");
+    if (d.excluded_empty_rows > 0) notes.push(`${d.excluded_empty_rows} dòng trống hoàn toàn không liệt kê (xoá hay giữ chúng do ô tick "Xoá dòng trống hoàn toàn" bên dưới).`);
+    inner = d.total_blank_rows === 0
+      ? '<p class="ft-coltypes-msg">Cột này không có dòng nào cần điền tay (chỉ còn các dòng trống hoàn toàn).</p>'
+      : `<p class="ft-coltypes-hint">${escapeHtml(notes.join(" "))}</p>` +
+        '<div class="ft-manual-general"><label for="ft-manual-general-input">Giá trị chung</label>' +
+        `<input class="input" id="ft-manual-general-input" data-role="general" value="${escapeAttr(c.fixedValue)}" placeholder="vd 0 hoặc Chưa rõ" /></div>` +
+        manualTableHTML(c, d);
+  }
+  box.innerHTML =
+    `<div class="ft-coltypes-bar"><span class="ft-coltypes-title">Điền tay · ${escapeHtml(c.name)}</span>` +
+    `<span class="ft-coltypes-meta" data-role="manual-count">${manualFilledCount(c)}/${manualTotal(c)} ô đã điền tay</span>` +
+    '<button type="button" class="btn btn-ghost btn-small" data-role="manual-close">Đóng</button></div>' + inner;
+  if (focusFirst) {
+    const first = [...box.querySelectorAll(".ft-manual-input")].find((i) => !i.value) || box.querySelector(".ft-manual-input");
+    if (first) first.focus({ preventScroll: true });
+  }
+}
+$("ft-blank-manual").addEventListener("input", (e) => {
+  const c = editingBlankCol();
+  if (!c) return;
+  if (e.target.classList.contains("ft-manual-input")) c.cellValues[e.target.dataset.row] = e.target.value;
+  else if (e.target.dataset.role === "general") c.fixedValue = e.target.value;
+  else return;
+  updateBlankManualCounts(c);
+});
+$("ft-blank-manual").addEventListener("click", (e) => {
+  if (e.target.closest('[data-role="manual-close"]')) closeBlankManual();
+});
+// Enter trong 1 ô -> nhảy xuống ô kế tiếp (dòng cuối thì ở nguyên), để gõ liền một mạch.
+$("ft-blank-manual").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !e.target.classList.contains("ft-manual-input")) return;
+  e.preventDefault();
+  const inputs = [...$("ft-blank-manual").querySelectorAll(".ft-manual-input")];
+  const next = inputs[inputs.indexOf(e.target) + 1];
+  if (next) next.focus();
 });
 
 // Hai tool Free Tools có bảng cột (Sai định dạng, Ô trống) đều đọc cột qua /api/noise-tools/inspect; mỗi hàm tự bỏ qua nếu
