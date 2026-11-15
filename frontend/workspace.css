@@ -175,7 +175,7 @@ a.ws-megamenu-item:hover { background: #ebebe7; }
   font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.06em;
   text-transform: uppercase; color: rgba(255, 255, 255, 0.7); margin: 0 0 18px; line-height: 1.5;
 }
-.ws-megamenu-cta-title { font-size: 28px; font-weight: 600; line-height: 1.05; letter-spacing: -0.02em; text-transform: uppercase; margin: 0; }
+.ws-megamenu-cta-title { font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; text-transform: uppercase; margin: 0; }
 .ws-megamenu-cta-arrow { font-size: 30px; margin-top: 24px; line-height: 1; }
 
 /* ===== Nút (ghi đè .btn dùng chung: viên thuốc, mono viết hoa) ===== */
@@ -296,7 +296,7 @@ input[type="checkbox"] { accent-color: #111; width: 16px; height: 16px; }
   gap: 40px; align-items: center; margin-bottom: 26px;
 }
 .tool-hero-headline {
-  font-size: clamp(44px, 5vw, 72px); line-height: 0.95; font-weight: 600;
+  font-size: clamp(44px, 5vw, 72px); line-height: 1.2; font-weight: 600;
   letter-spacing: -0.03em; text-transform: uppercase; margin-bottom: 22px;
 }
 .tool-hero-desc { font-size: 19px; line-height: 1.4; color: var(--ink-dim); max-width: 46ch; }
@@ -484,7 +484,7 @@ a.continue-item:hover { background: #ebebe7; }
 .ft-rule { position: relative; height: 1px; margin-top: 56px; }
 .ft-rule::before { content: ""; position: absolute; top: 0; left: 50%; width: 100vw; height: 1px; transform: translateX(-50%); background: #111; }
 .ft-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding-top: 40px; }
-.ft-h2 { font-size: clamp(30px, 3vw, 40px); font-weight: 600; letter-spacing: -0.025em; text-transform: uppercase; line-height: 1; }
+.ft-h2 { font-size: clamp(30px, 3vw, 40px); font-weight: 600; letter-spacing: -0.025em; text-transform: uppercase; line-height: 1.2; }
 .ft-section-meta { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); padding-bottom: 6px; }
 .tool-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin: 28px 0 0; }
 .tool-steps > div { border-top: 1px solid #111; padding-top: 14px; }
@@ -567,7 +567,7 @@ body.ws-auth-mode .ws-auth { display: grid; }
   text-transform: uppercase; color: var(--ink-dim); margin-bottom: 14px;
 }
 .ws-auth-title {
-  font-size: clamp(44px, 4.5vw, 64px); line-height: 0.95; font-weight: 600;
+  font-size: clamp(44px, 4.5vw, 64px); line-height: 1.2; font-weight: 600;
   letter-spacing: -0.03em; text-transform: uppercase; margin-bottom: 16px;
 }
 .ws-auth-desc { font-size: 17px; line-height: 1.4; color: var(--ink-dim); margin-bottom: 28px; }
@@ -609,7 +609,7 @@ body.ws-auth-mode .ws-auth { display: grid; }
 }
 .ws-auth-right-body { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; max-width: 560px; padding: 40px 0; }
 .ws-auth-right-title {
-  font-size: clamp(40px, 3.8vw, 56px); line-height: 1; font-weight: 600;
+  font-size: clamp(40px, 3.8vw, 56px); line-height: 1.2; font-weight: 600;
   letter-spacing: -0.03em; text-transform: uppercase; margin-bottom: 28px;
 }
 .ws-auth-demo { border: 1px solid #fff; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
@@ -688,18 +688,15 @@ body.ws-guest .ws-only-user { display: none !important; }
   display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: 48px; align-items: center; padding: 64px 0 56px;
 }
+/* Tiêu đề chữ HOA to: tiếng Việt có dấu chồng (Ễ, Ệ, Ữ, Ạ...) nên line-height phải >= ~1.2, thấp hơn thì dấu của dòng dưới chạm chữ dòng trên. */
 .hm-hero-headline {
-  font-size: clamp(44px, 4.3vw, 64px); line-height: 0.95; font-weight: 600;
+  font-size: clamp(44px, 4.3vw, 64px); line-height: 1.2; font-weight: 600;
   letter-spacing: -0.035em; text-transform: uppercase; margin: 0 0 24px;
 }
 .hm-hero-headline span { color: var(--signal); }
 .hm-hero-desc { font-size: 19px; line-height: 1.45; color: var(--ink-dim); max-width: 50ch; margin: 0 0 28px; }
 .hm-hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .hm-hero-actions .btn { padding: 13px 20px; font-size: 11.5px; }
-.hm-hero-foot {
-  font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--ink-faint); margin: 18px 0 0;
-}
 
 /* Bảng demo (tái dùng .cyd-table) + 3 chú thích bên phải, mỗi chú thích có
    đường kẻ ngang nối về phía bảng, đầu đường là chấm vuông màu nhấn. */
@@ -832,7 +829,7 @@ a.hm-tool:hover { background: #ebebe7; }
 
 /* ===== TRANG CHỦ: về dự án + bảng thông số 2 cột ===== */
 .hm-about { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 56px; padding: 56px 0 80px; align-items: start; }
-.hm-about-title { font-size: clamp(26px, 2.6vw, 36px); font-weight: 600; letter-spacing: -0.025em; line-height: 1.12; margin: 0 0 18px; }
+.hm-about-title { font-size: clamp(26px, 2.6vw, 36px); font-weight: 600; letter-spacing: -0.025em; line-height: 1.2; margin: 0 0 18px; }
 .hm-about-desc { font-size: 15.5px; line-height: 1.6; color: var(--ink-dim); margin: 0 0 24px; max-width: 58ch; }
 .hm-spec { width: 100%; border-collapse: collapse; border: 1px solid #111; font-size: 13.5px; }
 .hm-spec th, .hm-spec td { padding: 13px 16px; border-bottom: 1px solid #111; text-align: left; vertical-align: top; }
@@ -849,7 +846,7 @@ a.hm-tool:hover { background: #ebebe7; }
   padding-bottom: 40px;
 }
 .tx-title {
-  font-size: clamp(44px, 5vw, 72px); line-height: 0.95; font-weight: 600;
+  font-size: clamp(44px, 5vw, 72px); line-height: 1.2; font-weight: 600;
   letter-spacing: -0.03em; text-transform: uppercase; margin: 0 0 22px;
 }
 .tx-desc { font-size: 18px; line-height: 1.45; color: var(--ink-dim); max-width: 50ch; margin: 0; }
@@ -991,7 +988,7 @@ a.hm-tool:hover { background: #ebebe7; }
 }
 #section-class-noise .panel-title {
   font-size: clamp(34px, 3.6vw, 52px); font-weight: 600; letter-spacing: -0.03em;
-  text-transform: uppercase; line-height: 0.98; margin-bottom: 16px;
+  text-transform: uppercase; line-height: 1.2; margin-bottom: 16px;
 }
 #section-class-noise .panel-desc { font-size: 16px; line-height: 1.5; color: var(--ink-dim); max-width: 80ch; margin-bottom: 26px; }
 #section-class-noise .panel-actions { border-top: 1px solid #111; margin-top: 28px; padding-top: 20px; }
