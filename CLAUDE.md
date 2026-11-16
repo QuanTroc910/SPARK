@@ -1436,9 +1436,9 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       FE (`renderCfMultiSummary`) hiện khung vàng ".cf-sum-warn" + dòng đỏ ".cf-sum-risk" chỉ hiện
       khi chọn cách xử lý đổi dữ liệu (không phải "skip"/"keep"). Kết quả detect KHÔNG đổi.
       Mẫu để thử: `data/sample_zero_inflated.csv` (cột `capital_gain` 80 ô = 0 + 20 ô 500-9000).
-    - Hai việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại" (Áp dụng đang dùng cấu
-      hình lúc Phát hiện dù form đã sửa); báo "Sẽ xoá N dòng" trước khi Áp dụng (3 tool Cần
-      cấu hình chưa có xác nhận/hoàn tác như Bước 5 cũ).
+    - [ĐÃ LÀM, mục 26] Hai việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại" (Áp dụng
+      dùng cấu hình lúc Phát hiện dù form đã sửa); báo "Sẽ xoá N dòng" trước khi Áp dụng. Vẫn chưa có
+      hộp xác nhận / hoàn tác như Bước 5 cũ cho 3 tool này (chỉ có dòng báo trước).
     - **Rule liên cột — đã rà, thiếu (cập nhật sau mục 24: (1), (5), (7) và lỗi chia cho 0 ĐÃ XONG ở
       tab "Biểu thức"; còn lại (2) một phần, (3), (4), vế xác định 1 cột):** (1) ~~không báo số dòng
       bị BỎ QUA~~ [ĐÃ LÀM cho Biểu thức: `expression_info`, riêng So sánh/Nếu–thì CŨ ở backend vẫn
@@ -1515,7 +1515,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 25. **Rule liên cột ĐỢT 2: Nếu – thì chạy chung bộ máy biểu thức + mặc định "— Chọn cách xử lý —" — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
     - **Nguồn gốc:** user chốt đợt 2 sau đợt 1 ("OKe làm đi"). Gồm: `=>`, `<=>`, `có(cột)`, tab Nếu–thì làm lại, và đổi mặc định cách xử
       lý của các rule còn lại (việc đã ghi sẵn trong kế hoạch). 2 việc nhỏ ở mục 23 ("Cấu hình đã đổi", "Sẽ xoá N dòng" cho 3 tool khác)
-      CHƯA làm vì user chưa yêu cầu.
+      lúc đó chưa làm; user yêu cầu sau và đã làm ở mục 26.
     - **Ngôn ngữ thêm:** `a => b` (hoặc `a -> b`) = `không a hoặc b` theo logic 3 giá trị: CHỈ sai khi a đúng mà b sai; a sai thì luôn
       đạt; a hoặc b chưa biết mà chưa chắc sai thì "chưa biết" (bị bỏ qua + đếm). Kết hợp từ PHẢI sang trái, ưu tiên thấp hơn `hoặc`.
       `a <=> b` = `(a => b) và (b => a)`, thấp nhất. Gõ nhầm `age => 18` (muốn `>=`) báo lỗi kèm gợi ý "viết >=". `có(cột)` (hay
@@ -1536,7 +1536,27 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       lõi); route đối chiếu pandas độc lập trên `noisy_employee_dataset_large.csv` (NẾU department = Sales THÌ salary >= 10 triệu -> 6 dòng
       vi phạm, 2 bỏ qua; `department = Sales => có(phone)` -> 1 dòng); Playwright tab Nếu–thì (chèn đúng ô, mẫu, lỗi từng vế, giữ nội dung);
       chạy lại test Biểu thức đợt 1 + toàn bộ test Phụ thuộc hàm; đạt trên pandas 3.0 và 2.2.
-    - **Chưa làm:** 2 việc nhỏ ở mục 23; kiểm tra cú pháp khi đang gõ; Nếu–thì không có chế độ "nhiều rule một lượt".
+    - **Chưa làm:** kiểm tra cú pháp khi đang gõ; Nếu–thì không có chế độ "nhiều rule một lượt".
+
+26. **Cần cấu hình: báo "cấu hình đã đổi" + báo trước "Sẽ xoá N dòng" — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** 2 việc nhỏ nợ từ mục 23, user bảo "làm hai việc nhỏ đó đi".
+    - **Cấu hình đã đổi** (`workspace.js`: `cfSignature()`, `cfCheckStale()`, khối `#cf-stale-note`): nút Áp dụng luôn dùng
+      cấu hình + bảng kết quả của lần Phát hiện cuối (`state.cf.detect`). Lúc Phát hiện lưu "chữ ký" = cấu hình đang khai
+      (`buildCfConfig()`) + chữ ký đầu vào (`cfInputSource().sig`), tính TRƯỚC khi chờ server. Mọi `input`/`change`/`click` trong
+      `#section-config` (hoãn `setTimeout 0` cho handler riêng chạy xong) và sau khi đọc lại cột (`cfInspect`) so lại: lệch thì hiện
+      khung vàng "Bấm Phát hiện lại trước khi Áp dụng" và KHOÁ nút Áp dụng (chọn khoá thay vì chỉ báo, vì Áp dụng sẽ chạy cấu hình
+      CŨ trên đầu vào có thể đã khác); sửa lại y như cũ thì hết báo. Áp dụng cho cả 3 tool theo cột lẫn Rule liên cột (cả 3 kiểu).
+      Sau Phát hiện ra 0 lỗi mà `recordPipeStep` đổi đầu vào sang kết quả thì cập nhật lại chữ ký (không tính là "đã đổi").
+    - **Sẽ xoá N dòng (a → b)** cho tool nhiều cột (`renderCfMultiPreview()`, `#cf-multi-preview`): backend
+      `/api/noise-tools/configured` (detect) thêm `per_column[].flagged_row_numbers` (số dòng 1-based có ô lỗi ở cột đó; bỏ nếu quá
+      `CONFIG_TOOL_ROW_LIST_LIMIT` = 300.000 dòng lỗi, khi đó FE nói "chưa tính trước được"). FE lấy HỢP các dòng của các cột đang
+      chọn "Xoá dòng" (khớp cách backend xoá: dòng lỗi ở bất kỳ cột nào đó đều bị xoá, dòng lỗi ở 2 cột chỉ tính 1 lần), cập nhật mỗi
+      lần đổi ô chọn cách xử lý, không gọi lại backend. Từ 20% số dòng trở lên thì tô đỏ + nhắc xem lại. Cách xử lý không xoá dòng
+      thì không hiện gì. Rule liên cột đã có dòng xem trước riêng từ mục 25.
+    - **Kiểm chứng:** Playwright `test_stale_ui.js` (sửa ngưỡng/thêm-xoá cột/sửa biểu thức → báo + khoá; sửa lại như cũ → hết báo;
+      Phát hiện lại → hết báo; xem trước = số backend xoá thật; 3 cột nhân viên 10+2+11 → 23 dòng) + ca dòng lỗi ở CẢ 2 cột (2+2 → HỢP
+      = 3, backend xoá đúng 3); chạy lại test IQR/Biểu thức/Nếu–thì/Phụ thuộc hàm (giao diện + backend) không hồi quy.
+    - **Chưa làm:** hộp xác nhận + hoàn tác như Bước 5 cũ cho 3 tool này; xem trước cho cách sửa giá trị (chỉ báo khi xoá dòng).
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -1628,8 +1648,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       + nhiều phương pháp IQR/Z-score trên 1 cột (mục 20-21). Commit `ce458b1`, `d59faf0`, `e02f5de`.
 - [x] Chỉnh giao diện: tiêu đề chữ hoa line-height 1.2, bỏ ghi chú hero, chân trang to hơn (mục 22).
 - [x] Cảnh báo IQR=0 ở tool Giá trị bất thường (mục 23, đã làm).
-- [ ] **(NỢ)** 2 việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại", báo "Sẽ xoá N dòng"
-      trước khi Áp dụng ở 3 tool Cần cấu hình — xem mục 23.
+- [x] 2 việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại" (khoá Áp dụng) + báo "Sẽ xoá N dòng
+      (a → b)" trước khi Áp dụng ở tool nhiều cột — xem mục 26.
 - [x] Phụ thuộc hàm: 1 cột xác định → nhiều cột phụ thuộc, đoán ô sai (so các cột còn lại), 2 cách xử lý
       "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" + xem trước (mục 23, commit `3ee977f`, `73978bc`).
 - [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).

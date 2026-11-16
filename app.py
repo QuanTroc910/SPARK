@@ -1691,6 +1691,7 @@ CONFIG_TOOL_NOISE_TYPE = {
     "inconsistent-category": NoiseType.INCONSISTENT_CATEGORY,
 }
 CONFIG_TOOL_FLAGGED_LIMIT = 200  # số dòng bị gắn cờ tối đa trả về cho FE hiện bảng
+CONFIG_TOOL_ROW_LIST_LIMIT = 300_000  # quá số dòng lỗi này thì không trả danh sách số dòng theo cột (tránh response quá nặng)
 
 
 def _df_preview_rows(df: pd.DataFrame, limit: int = PREVIEW_DATA_ROWS) -> list:
@@ -2020,6 +2021,10 @@ def noise_tool_configured():
                     "flagged_rows_count": len({int(f.row_index) for f in col_findings}),
                     "available_actions": _config_tool_actions([col_cfg], noise_key),
                 }
+                # Số dòng (1-based) có ô lỗi ở cột này: FE lấy HỢP các cột đang chọn "Xoá dòng" để báo trước "Sẽ xoá N dòng (a → b)"
+                # mà không phải gọi lại backend mỗi lần đổi ô chọn. Danh sách quá dài (file rất lớn) thì bỏ, FE tự nói là chưa tính trước được.
+                if len(indices) <= CONFIG_TOOL_ROW_LIST_LIMIT:
+                    entry["flagged_row_numbers"] = sorted({int(f.row_index) + 1 for f in col_findings})
                 rules = col_cfg.get_outlier_rules() if noise_key == NoiseType.OUTLIER.value else []
                 if len(rules) >= 2:
                     # Cột kiểm nhiều phương pháp: tách số ô mỗi phương pháp bắt được (tổng findings_count là HỢP nên không bằng

@@ -1206,6 +1206,7 @@ a.hm-tool:hover { background: #ebebe7; }
 /* Xem trước tác động của cách xử lý (Phụ thuộc hàm): khung xanh nhạt; cách xoá cả nhóm hiện đỏ để thấy nguy cơ xoá nhầm dòng đúng. */
 .cf-action-preview { margin: 0; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; color: var(--signal-dark); background: var(--signal-soft); border-left: 3px solid var(--signal); }
 .cf-action-preview.is-risk { color: #ae3a3a; background: #fbeaea; border-left-color: #ae3a3a; font-weight: 600; }
+.cf-stale-note { margin: 0; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; font-weight: 600; color: #7a4f00; background: #fff4d6; border-left: 3px solid #e0a100; }
 .cf-add-hint { font-size: 12.5px; color: var(--ink-dim); }
 .cf-sum { border: 1px solid #111; background: var(--bg); container: cfsum / inline-size; }
 .cf-sum-list { max-height: 320px; overflow-y: auto; }

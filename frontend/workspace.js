@@ -1980,6 +1980,7 @@ async function cfInspect(source, label, opts) {
   state.cf.columns = data.columns;
   state.cf.guessed = data.guessed_dtypes || {};
   renderCfOptions();
+  cfCheckStale(); // đọc xong cột của đầu vào mới: nếu khác lần Phát hiện cuối thì báo
   if (source.file && !opts.keepPreview) {
     const note = data.row_count > PREVIEW_ROWS ? `Xem trước ${PREVIEW_ROWS}/${data.row_count} dòng đầu · ${data.columns.length} cột đã đọc được.` : `${data.columns.length} cột đã đọc được.`;
     showRawPreview("cf", label, tableDims(data.row_count, data.columns.length), data.preview_rows, note);
@@ -2011,6 +2012,7 @@ function refreshCfColumns() {
       state.cf.columns = [];
       state.cf.guessed = {};
       renderCfOptions();
+      cfCheckStale();
     }
     return;
   }
@@ -2360,10 +2362,42 @@ function renderCfMultiSummary(perColumn, tool) {
   $("cf-multi").innerHTML =
     `<div class="cf-sum"><div class="ft-coltypes-bar"><span class="ft-coltypes-title">Lỗi theo từng cột</span>` +
     `<span class="ft-coltypes-meta">${total} ô lỗi · ${withErrors}/${perColumn.length} cột</span></div><div class="cf-sum-list">${rows}</div></div>`;
+  renderCfMultiPreview();
+}
+// Báo trước "Sẽ xoá N dòng (a → b)" cho tool nhiều cột: dòng bị xoá = HỢP các dòng lỗi của MỌI cột đang chọn "Xoá dòng" (khớp cách backend xoá:
+// nhiều cột cùng chọn xoá thì dòng lỗi ở BẤT KỲ cột nào cũng bị xoá, một dòng lỗi ở 2 cột chỉ tính một lần). Cách khác (điền, kéo về biên...)
+// không xoá dòng nên không hiện gì. Số dòng lấy từ per_column[].flagged_row_numbers của lần Phát hiện, không gọi lại backend.
+function renderCfMultiPreview() {
+  const box = $("cf-multi-preview");
+  const det = state.cf.detect;
+  box.classList.remove("is-risk");
+  if (!det || !det.multi) { box.hidden = true; box.textContent = ""; return; }
+  const byColumn = {};
+  det.data.per_column.forEach((p) => { byColumn[p.column] = p; });
+  const chosen = [];
+  document.querySelectorAll('#cf-multi [data-role="sum-action"]').forEach((sel) => {
+    if (sel.value === "remove_row") chosen.push(sel.dataset.column);
+  });
+  if (!chosen.length) { box.hidden = true; box.textContent = ""; return; }
+  const names = chosen.map((c) => `«${c}»`).join(", ");
+  if (chosen.some((c) => !byColumn[c] || !Array.isArray(byColumn[c].flagged_row_numbers))) {
+    box.textContent = `Cột ${names} chọn xoá dòng. Dữ liệu quá lớn nên chưa tính trước được số dòng sẽ xoá.`;
+    box.hidden = false;
+    return;
+  }
+  const rows = new Set();
+  chosen.forEach((c) => byColumn[c].flagged_row_numbers.forEach((n) => rows.add(n)));
+  const total = det.data.total_rows;
+  const n = rows.size;
+  box.textContent = `Sẽ xoá ${n} dòng (${total} → ${total - n} dòng) vì chọn «Xoá dòng» ở cột ${names}.` +
+    (total > 0 && n / total >= 0.2 ? ` Đây là ${Math.round((n / total) * 100)}% số dòng, hãy xem lại cho chắc.` : "");
+  if (total > 0 && n / total >= 0.2) box.classList.add("is-risk");
+  box.hidden = false;
 }
 // Chọn "điền giá trị cố định" ở 1 cột -> hiện ô nhập giá trị của đúng dòng đó (đổi cách khác thì ẩn).
 $("cf-multi").addEventListener("change", (e) => {
   if (e.target.dataset.role !== "sum-action") return;
+  renderCfMultiPreview();
   const row = e.target.closest(".cf-sum-row");
   // Cột có cảnh báo IQR = 0: chọn cách nào thực sự đổi dữ liệu (không phải "chưa chọn"/"giữ nguyên") thì hiện dòng đỏ nhắc nguy cơ mất dữ liệu thật.
   const risk = row.querySelector('[data-role="sum-risk"]');
@@ -2711,10 +2745,13 @@ $("cf-detect-btn").addEventListener("click", async () => {
   if (built.error) return setError($(T.error), built.error);
   formData.append("mode", "detect");
   formData.append("config", JSON.stringify(built.config));
+  // "Chữ ký" cấu hình + đầu vào LÚC GỬI (trước khi chờ server): người dùng sửa form trong lúc chờ thì lần sửa đó phải bị coi là "đã đổi".
+  const sigAtSend = cfSignature();
   const data = await callBackend($("cf-detect-btn"), "Phát hiện", "/api/noise-tools/configured", formData, $(T.error));
   if (!data) return;
   const multi = Array.isArray(built.config.items) && Array.isArray(data.per_column);
-  state.cf.detect = { data, config: built.config, inputLabel: inp.label, fresh, multi };
+  state.cf.detect = { data, config: built.config, inputLabel: inp.label, fresh, multi, sig: sigAtSend };
+  state.cf.stale = false;
   const label = CF_TAB_LABEL[state.cf.tool];
   prepareCfHandling(multi, data, state.cf.tool);
   $(T.resultEmpty).hidden = true;
@@ -2742,7 +2779,9 @@ $("cf-detect-btn").addEventListener("click", async () => {
       recordPipeStep(`${label} (không đổi)`, data.result_text, "csv", inp.label, fresh, inp.source);
       $(T.download).disabled = false;
       renderContinuePanel("cf");
+      state.cf.detect.sig = cfSignature(); // recordPipeStep đổi đầu vào sang kết quả này: không tính là "đã đổi"
     }
+    cfCheckStale();
     return;
   }
   $("cf-result-table-wrap").hidden = false;
@@ -2781,7 +2820,33 @@ $("cf-detect-btn").addEventListener("click", async () => {
   setError($("cf-apply-error"), "");
   setStatus($("cf-apply-status"), "", "");
   $("cf-handling").hidden = false;
+  cfCheckStale();
 });
+// ----- Báo "cấu hình đã đổi, bấm Phát hiện lại" -----
+// Nút Áp dụng LUÔN dùng cấu hình lúc bấm Phát hiện (state.cf.detect.config), dù người dùng đã sửa form sau đó; bảng kết quả bên dưới
+// cũng là của lần phát hiện đó. Nên khi form / đầu vào lệch khỏi lần Phát hiện cuối thì báo rõ và khoá Áp dụng cho tới khi Phát hiện lại.
+// Chữ ký = cấu hình đang khai (hoặc lỗi nếu đang khai dở) + chữ ký đầu vào; sửa rồi sửa lại y như cũ thì không còn bị coi là "đã đổi".
+function cfSignature() {
+  const built = buildCfConfig();
+  const src = cfInputSource();
+  return JSON.stringify([built.error ? `lỗi:${built.error}` : built.config, src ? src.sig : null]);
+}
+function cfCheckStale() {
+  const det = state.cf.detect;
+  const note = $("cf-stale-note");
+  const btn = $("cf-apply-btn");
+  const stale = !!det && !$("cf-handling").hidden && det.sig !== cfSignature();
+  note.hidden = !stale;
+  if (stale) {
+    note.textContent = "⚠ Cấu hình hoặc dữ liệu đầu vào đã đổi so với lần Phát hiện cuối, nên kết quả bên dưới không còn khớp. Bấm «Phát hiện» lại trước khi Áp dụng.";
+    btn.disabled = true;
+  } else if (state.cf.stale) {
+    btn.disabled = false; // chỉ mở lại khi chính mình đã khoá (không đụng nút lúc đang chờ server trả lời)
+  }
+  state.cf.stale = stale;
+}
+// Sau khi các xử lý riêng của form (đổi cột, thêm/xoá form, nút trong form...) chạy xong mới so sánh.
+["input", "change", "click"].forEach((evt) => $("section-config").addEventListener(evt, () => setTimeout(cfCheckStale, 0)));
 // Xem trước tác động của cách xử lý đang chọn (chỉ Phụ thuộc hàm): số liệu lấy từ fd_plan backend trả lúc Phát hiện.
 function renderCfActionPreview() {
   const box = $("cf-action-preview");
