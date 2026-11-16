@@ -47,6 +47,7 @@ from attribute_noise.config import (
     RuleValueType,
 )
 from attribute_noise.cross_field_rules import FormulaError, analyze_functional_dependency, describe_rule
+from attribute_noise.expression_rules import ExpressionError, evaluate_expression
 from attribute_noise.detectors import INTEGER_RE, detect_outlier, iqr_degenerate_info
 from attribute_noise.pipeline import (
     NoiseFinding,
@@ -539,7 +540,9 @@ def _cross_field_rule_from_json(item: dict) -> CrossFieldRuleConfig:
         then_value=item.get("then_value"),
         then_value_type=RuleValueType(item.get("then_value_type", "text")),
         formula=item.get("formula"),
-        tolerance=item.get("tolerance", 0.01),
+        # FE gửi null/"" khi người dùng để trống ô sai số -> dùng mặc định 0.01 (trước đây null làm hỏng phép so sánh)
+        tolerance=0.01 if item.get("tolerance") in (None, "") else float(item["tolerance"]),
+        expression=item.get("expression"),
         determinant_column=item.get("determinant_column"),
         dependent_column=item.get("dependent_column"),
     )
@@ -1837,6 +1840,23 @@ def _fd_cell_info(analyses: list) -> tuple[dict, dict]:
     return cells, summary
 
 
+def _expression_info(df: pd.DataFrame, rule: CrossFieldRuleConfig) -> dict:
+    """Rule "Biểu thức": báo cách bộ máy đã ĐỌC dữ liệu để người dùng tự kiểm tra, không âm thầm tin kết quả "0 lỗi". Gồm: mỗi cột được đọc thành kiểu
+    gì (Số/Ngày/Chữ, khuôn ngày), có bao nhiêu ô trống / không đọc được; số dòng bị BỎ QUA vì không tính được (ô trống, sai kiểu, chia cho 0);
+    cột Chữ bị so thứ tự (nhiều khả năng là ngày/số bị nhận nhầm). Tính lại biểu thức 1 lần nữa (vectơ hoá nên rất nhanh) thay vì lấy từ
+    detect_noise() vì pipeline chỉ giữ danh sách dòng vi phạm."""
+    result = evaluate_expression(df, rule.expression, rule.tolerance, rule.date_format)
+    return {
+        "expression": rule.expression,
+        "total_rows": int(len(df)),
+        "violating_rows": int(result.violations.sum()),
+        "skipped_rows": int(result.unknown.sum()),
+        "zero_division_rows": int(result.zero_division_rows),
+        "columns": result.columns,
+        "text_order_columns": result.text_order_columns,
+    }
+
+
 def _run_config_tool_detect(df: pd.DataFrame, cfg: dict):
     """Chạy detect cho 1 cấu hình (1 hoặc NHIỀU cột). Trả về (column_configs, cross_field_rules, findings, noise_key,
     column) -- column = tên cột nếu đúng 1 cột, None nếu là rule liên cột (noise cấp dòng) hoặc nhiều cột; route dùng
@@ -2023,6 +2043,8 @@ def noise_tool_configured():
                     "available_actions": actions,
                     "per_column": per_column,
             }
+            if noise_key == f"rule:{RuleType.EXPRESSION.value}":
+                payload["expression_info"] = _expression_info(df, cross_rules[0])
             if fd_summary:
                 payload["fd_analysis"] = fd_summary
                 # Xem trước tác động của từng cách xử lý (FE hiện dưới ô chọn cách xử lý, không cần gọi lại backend).
@@ -2123,7 +2145,7 @@ def noise_tool_configured():
         }
         if not column_configs and unresolved_groups is not None:
             stats["unresolved_groups"] = int(unresolved_groups)
-    except QuickToolError as exc:
+    except (QuickToolError, ExpressionError) as exc:  # ExpressionError đã có câu tiếng Việt chỉ rõ chỗ sai nên không thêm tiền tố
         return jsonify({"error": str(exc)}), 400
     except (FormulaError, ValueError, KeyError, TypeError, re.error) as exc:
         return jsonify({"error": f"Cấu hình không hợp lệ: {exc}"}), 400

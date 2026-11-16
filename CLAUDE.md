@@ -31,7 +31,17 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     `detect_functional_dependency_rule` + registry `CROSS_FIELD_RULE_DETECTORS`
     + `describe_rule()`. Formula dùng "máy diễn giải" `ast` tự viết tay
     (whitelist theo NODE TYPE: chỉ +,-,*,/, số, tên cột) -- KHÔNG dùng
-    `eval()`/`exec()` (đã test kỹ, xem `FormulaError`).
+    `eval()`/`exec()` (đã test kỹ, xem `FormulaError`). `describe_rule(cfg, df=None)`
+    nhận thêm `df` để rule biểu thức đổi tên cột người dùng gõ sang ĐÚNG tên cột thật.
+  - `expression_rules.py` — **MỚI (mục 24): bộ máy "Biểu thức"** gộp rule So sánh + Công thức
+    (`RuleType.EXPRESSION`, field `CrossFieldRuleConfig.expression`; dùng thêm `tolerance`,
+    `date_format`). Bộ tách từ + bộ phân tích tự viết (KHÔNG `eval`), tính theo CẢ CỘT bằng
+    pandas/numpy (100k dòng < 0,3s). API: `parse_expression()`, `expression_columns(df, expr)`,
+    `evaluate_expression(df, expr, tolerance, date_format) -> ExpressionResult` (violations,
+    unknown, columns_used, columns = cách đọc từng cột, zero_division_rows, text_order_columns),
+    `detect_expression_rule()` (đăng ký vào `CROSS_FIELD_RULE_DETECTORS`), `ExpressionError`
+    (message tiếng Việt chỉ rõ vị trí). Chỉ import `config.py` để `cross_field_rules.py` import
+    được mà không vòng tròn.
   - `pipeline.py` — `load_data()`, `detect_noise()` (nhận thêm
     `cross_field_rules` tuỳ chọn), `get_flagged_rows()`, `guess_column_dtype()`
     — **MỚI (mục 12)**: đoán `ColumnDType` hợp lý nhất cho 1 cột dựa trên GIÁ
@@ -407,7 +417,9 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     theo kiểu cột (số nguyên phải là số nguyên; số thực phải là số hữu hạn, loại
     `nan`/`inf`/`1_000`); `_checked_outlier_rules()` kiểm danh sách phương pháp (chỉ
     `iqr`/`zscore`, không trùng, ngưỡng số > 0). Rule liên cột (`cross-rule`) vẫn 1 rule
-    mỗi lần, cách xử lý chỉ có xoá dòng vi phạm / giữ nguyên. NGOẠI LỆ Phụ thuộc hàm: `rule`
+    mỗi lần, cách xử lý chỉ có xoá dòng vi phạm / giữ nguyên. Giao diện Denoise gửi
+    `rule_type` ∈ `expression` | `conditional` | `functional_dependency` (compare/formula cũ vẫn được
+    backend nhận cho giao diện cũ). Rule `expression` trả thêm `expression_info` (xem mục 24). NGOẠI LỆ Phụ thuộc hàm: `rule`
     nhận `dependent_columns` (danh sách) = 1 cột xác định → NHIỀU cột phụ thuộc;
     `_cross_rules_from_config()` tách thành từng rule A → Bi (dùng lại đúng hàm detect cũ, kiểm
     ĐỘC LẬP từng cột, báo lỗi 400 nếu cột không tồn tại / trùng cột xác định / chọn 2 lần), response
@@ -449,7 +461,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     "01 · ĐẦU VÀO / 02 · KẾT QUẢ", mỗi tool một tab (`data-tool`). Nhóm Free Tools: tab
     `remove-duplicates`, `trim-whitespace`, `format-noise` (Sai định dạng), `blanks` (Ô
     trống). Nhóm Cần cấu hình: `out-of-range`, `outlier`, `inconsistent-category`,
-    `cross-rule`. Nhóm Convert: `delimiter`, `csv-to-json`, `json-to-csv`.
+    `cross-rule` (3 kiểu: Biểu thức / Nếu – thì / Phụ thuộc hàm). Nhóm Convert: `delimiter`,
+    `csv-to-json`, `json-to-csv`.
   - **Bộ nhớ NỐI TIẾP (`state.pipe`, `recordPipeStep()`, `renderPipeStrips()`)**: kết
     quả 1 tool thành đầu vào của tool kế tiếp, xuyên cả 3 nhóm (bảng "Xử lý tiếp bằng"
     + dải đen "đã qua: …" với nút "Bắt đầu lại từ gốc" / "Tải file khác"). Khi đầu vào
@@ -780,6 +793,11 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     `demo.py`/`COLUMN_CONFIGS` chạy thẳng không cần sửa. Ground truth ghi
     theo GIÁ TRỊ cột `id` (ổn định dù dòng bị xáo trộn), không theo vị trí
     dòng như bộ gốc.
+  - `sample_zero_inflated.csv` — 100 dòng, cột `capital_gain` có 80 ô = 0 + 20 ô 500-9000: mẫu để thử cảnh báo
+    IQR = 0 ở tool Giá trị bất thường (mục 23).
+  - `sample_dates_vn.csv` — 30 dòng, tên cột tiếng Việt có dấu cách (`Mã`, `Ngày vào`, `Ngày ra`, `Lương`), ngày
+    dd/mm/yyyy, dòng 5 và 9 có Ngày ra TRƯỚC Ngày vào: mẫu để thử tab "Biểu thức" (`[Ngày ra] >= [Ngày vào]`,
+    tự nhận khuôn ngày, ép sai khuôn `%Y-%m-%d` thì báo mọi dòng chưa kiểm được; mục 24).
 
 ## Quyết định thiết kế quan trọng (đã thống nhất)
 
@@ -1418,16 +1436,15 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - Hai việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại" (Áp dụng đang dùng cấu
       hình lúc Phát hiện dù form đã sửa); báo "Sẽ xoá N dòng" trước khi Áp dụng (3 tool Cần
       cấu hình chưa có xác nhận/hoàn tác như Bước 5 cũ).
-    - **Rule liên cột — chưa sửa gì. Đã rà, thiếu:** (1) không báo số dòng bị BỎ QUA vì không
-      so sánh được → sai khuôn ngày ra "0 lỗi" (đã chạy thử: ngày dd/mm/yyyy với khuôn mặc
-      định → 0 dòng); (2) Phụ thuộc hàm gắn cờ CẢ nhóm mâu thuẫn mà chỉ có xoá/giữ → xoá
+    - **Rule liên cột — đã rà, thiếu (cập nhật sau mục 24: (1), (5), (7) và lỗi chia cho 0 ĐÃ XONG ở
+      tab "Biểu thức"; còn lại (2) một phần, (3), (4), vế xác định 1 cột):** (1) ~~không báo số dòng
+      bị BỎ QUA~~ [ĐÃ LÀM cho Biểu thức: `expression_info`, riêng So sánh/Nếu–thì CŨ ở backend vẫn
+      im lặng nhưng giao diện Denoise không còn dùng So sánh]; (2) Phụ thuộc hàm gắn cờ CẢ nhóm mâu thuẫn mà chỉ có xoá/giữ → xoá
       nhầm dòng đúng, nên thêm "sửa về giá trị phổ biến nhất"; (3) không có "bắt buộc có giá
       trị khi…" (ô trống luôn bị bỏ qua); (4) Nếu–thì chỉ 1 điều kiện mỗi vế, không VÀ/HOẶC;
-      (5) công thức chỉ số + − × ÷, không ngày/hàm/chữ, tên cột có dấu cách không gõ được
-      (dùng `ast`); (6) ~~Phụ thuộc hàm chỉ 1 cột→1 cột~~ [ĐÃ LÀM: 1 cột xác định → nhiều cột phụ thuộc, nút "＋ Thêm cột phụ thuộc"; còn lại: vế xác định vẫn 1 cột, và vẫn gắn cờ CẢ nhóm mâu thuẫn]; (7) UI mỗi lần 1 rule, kiểu giá trị
-      (Số/Ngày/Chữ) phải chọn tay nên dễ chọn vô nghĩa (age=Ngày) → mọi dòng bị bỏ qua.
-      Công thức chia cho 0 bị gắn cờ như vi phạm. Tốc độ công thức OK (100k dòng ~1.4s).
-    - **Hướng đã thảo luận cho Rule liên cột (user chưa chốt, đang gác):** gộp thành NGÔN NGỮ
+      (5) ~~công thức chỉ số + − × ÷, không ngày/hàm/chữ, tên cột có dấu cách không gõ được~~ [ĐÃ LÀM: số/ngày/chữ, [tên có dấu cách], so/ngay/chu]; (6) ~~Phụ thuộc hàm chỉ 1 cột→1 cột~~ [ĐÃ LÀM: 1 cột xác định → nhiều cột phụ thuộc, nút "＋ Thêm cột phụ thuộc"; còn lại: vế xác định vẫn 1 cột, và vẫn gắn cờ CẢ nhóm mâu thuẫn]; (7) UI mỗi lần 1 rule [vẫn đúng]; ~~kiểu giá trị phải chọn tay~~ [ĐÃ LÀM: tự nhận Số/Ngày/Chữ theo dữ liệu].
+      ~~Công thức chia cho 0 bị gắn cờ~~ [ĐÃ SỬA: chia cho 0 = chưa biết, được đếm riêng].
+    - **Hướng đã thảo luận cho Rule liên cột — ĐỢT 1 ĐÃ LÀM (mục 24); ĐỢT 2 CHƯA (Nếu–thì chạy chung bộ máy, `=>`, `<=>`, `có(cột)`):** gộp thành NGÔN NGỮ
       BIỂU THỨC `Biểu thức` (số học + so sánh + `và/hoặc/không` + `=>` kéo theo + `<=>` tương
       đương + `có(cột)` + tên cột `[tên có dấu cách]`), tự viết bộ phân tích (Pratt parser, KHÔNG
       `eval`), đánh giá logic 3 giá trị (đúng/sai/chưa biết; chỉ gắn cờ khi chắc chắn sai),
@@ -1443,6 +1460,55 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       qua cột kiểu id khi tự chọn form đầu.
     - Giữ nguyên từ trước (mục "Kế hoạch" cuối file): TTL/auto-xoá dữ liệu RAM + giới hạn dung
       lượng upload (user: "làm sau"); hỗ trợ thêm TSV/ODS/Parquet (hiện CSV/Excel).
+
+24. **Rule liên cột ĐỢT 1: tab "Biểu thức" gộp So sánh + Công thức — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user hỏi 3 rule còn lại (So sánh/Nếu–thì/Công thức) nên gộp ra sao → thống nhất:
+      gộp So sánh + Công thức (Công thức ⊇ So sánh trên số; So sánh hơn ở ngày/chữ nên chỉ gộp khi bộ máy
+      mới hiểu cả ngày/chữ), Nếu–thì để ĐỢT 2 (chạy chung bộ máy qua `=>`, giao diện vẫn là ô "nếu … thì …"),
+      Phụ thuộc hàm giữ riêng (so GIỮA các dòng, 3 kiểu kia xét TỪNG dòng).
+    - **Ngôn ngữ** (chi tiết ở docstring `expression_rules.py`): so sánh `< <= > >= = == != <>` (viết liền
+      `0 <= tuoi <= 120` = hai phép so), `+ - * /`, `và/va/and/&&`, `hoặc/hoac/or/||`, `không/khong/not/!`,
+      ngoặc, số, chữ `"..."`/`'...'` (nháy cong cũng được), cột `ten_cot` hoặc `[Tên có dấu cách]` (tên có
+      dấu `.` viết trần được), 3 hàm ép kiểu `so()`, `ngay(x[, "%d/%m/%Y"])`, `chu()`. KHÔNG `eval`: hàm lạ,
+      ký tự lạ, `=>` (để dành Nếu–thì) đều báo `ExpressionError`; đã chạy thử 3000 chuỗi rác ngẫu nhiên chỉ
+      ra `ExpressionError`, và các ca nhét mã (`__import__('os')`, `a.__class__`, `open(...)`).
+    - **Kiểu giá trị TỰ NHẬN theo dữ liệu** (`_Evaluator.infer`): Số nếu >= 90% ô đọc được và không phải
+      mã có số 0 đứng đầu (007, SĐT -> Chữ); Ngày nếu >= 90% ô khớp 1 trong `DATE_FORMAT_CANDIDATES`
+      (ISO, ISO+giờ kiểu Excel, dd/mm/yyyy ưu tiên hơn mm/dd khi hoà, dd-mm-yyyy, dd.mm.yyyy, yyyy/mm/dd);
+      còn lại Chữ. Ngày chỉ so theo NGÀY (bỏ giờ). Ô trống/"N/A"/"?"... = thiếu (cả với kiểu Chữ -- KHÁC
+      So sánh cũ, vốn coi ô trống kiểu Chữ là chuỗi rỗng). Hằng chữ tự đổi sang kiểu vế kia
+      (`ngay_vao > "2024-01-31"`, `n == "5"`). Ngày - Ngày = số ngày; Ngày ± Số = Ngày. Sai kiểu (Chữ so với
+      Số...) báo lỗi kèm gợi ý `so(cột)`/`ngay(cột)`.
+    - **LOGIC 3 GIÁ TRỊ** (kiểu `boolean` nullable của pandas = bảng chân trị Kleene): ô thiếu/không đọc
+      được/chia cho 0 -> "chưa biết", KHÔNG phải "sai". Chỉ gắn cờ khi CHẮC CHẮN sai (`sai và chưa biết` =
+      sai -> vẫn gắn cờ; `đúng và chưa biết` = chưa biết -> bỏ qua). Chia cho 0 trước đây bị gắn cờ như
+      vi phạm (lỗi của Công thức cũ), giờ là "chưa biết" và có đếm riêng (`zero_division_rows`).
+    - **KHÔNG IM LẶNG KHI BỎ QUA DÒNG (lỗi cũ: sai khuôn ngày ra "0 lỗi"):** route trả `expression_info`
+      {expression, total_rows, violating_rows, skipped_rows, zero_division_rows, columns:[{name, type,
+      date_format, blank, unreadable, readable}], text_order_columns}. FE (`renderExprInfo`, khối
+      `#cf-expr-info`) hiện: tóm tắt "N dòng · vi phạm · đạt · bỏ qua", "Cách đọc cột" (cột -> Số/Ngày/Chữ +
+      khuôn dd/mm/yyyy), khung VÀNG số dòng bị bỏ qua + cột nào có bao nhiêu ô trống/không đọc được, khung ĐỎ
+      khi một cột không đọc được ô nào (vd ép sai khuôn ngày) hoặc mọi dòng bị bỏ qua, cảnh báo khi cột Chữ
+      bị so thứ tự (`< >`, nhiều khả năng là ngày/số bị nhận nhầm). 0 lỗi mà còn dòng bị bỏ qua thì trạng
+      thái là "⚠ Không thấy dòng sai, nhưng K/N dòng chưa kiểm được" (KHÔNG báo ✅).
+    - **Giao diện:** `RULE_TYPES` = Biểu thức / Nếu – thì / Phụ thuộc hàm (đã bỏ nút So sánh, Công thức). Tab
+      Biểu thức: ô nhập (textarea), nút chèn nhanh `và`/`hoặc`/`không`/`( )` và chip tên cột (bấm chèn tại
+      con trỏ, `exprRef()` tự bọc `[ ]` khi tên có dấu cách/ký tự lạ/trùng từ khoá), mẫu "so sánh hai cột"
+      (cột A, toán tử, cột B) chèn thành `A op B`, ô "Khuôn ngày" (trống = tự nhận) + "Sai số khi so bằng
+      số" (mặc định 0.01, như Công thức cũ). `state.cf.ruleType` / `state.cf.expr` giữ kiểu rule và nội dung
+      ô khi form dựng lại (đổi file, đổi kiểu rule) nên không phải gõ lại. Backend vẫn nhận compare/formula/
+      conditional cho giao diện cũ (`index.html` dùng `/api/detect-noise`, đã kiểm tra cả 4 loại + expression).
+    - **Kiểm chứng (số liệu để trích):** 2.580 phép đối chiếu với So sánh/Công thức cũ trên dữ liệu ngẫu nhiên
+      (số, ngày ISO, chữ, 9 công thức; 6 phép so sánh; có ô trống/rác) = 0 khác biệt (so bằng dùng sai số 0 khi
+      đối chiếu So sánh vì So sánh cũ so bằng chính xác); 124 kiểm tra lõi (cú pháp, ưu tiên, bảng chân trị 3
+      giá trị, ngày/chữ/số, tên cột Unicode NFC/NFD, lỗi, fuzz); 100k dòng mỗi biểu thức < 0,3s (Công thức cũ
+      lặp từng dòng ~1,4s); route đối chiếu với pandas độc lập trên `noisy_employee_dataset_large.csv`
+      (`age >= 18 và age <= 65` -> 10 dòng vi phạm, 7 dòng bỏ qua); Playwright tab Biểu thức; lại chạy toàn bộ
+      test Phụ thuộc hàm (backend + giao diện) vì dùng chung file.
+    - **Giới hạn đã biết / chưa làm:** chưa có `có(cột)` ("bắt buộc có giá trị khi…"), `=>`, `<=>`; Nếu–thì
+      cũ vẫn 1 điều kiện mỗi vế; chữ so phân biệt hoa/thường (đã cắt khoảng trắng); `chu()`/`so()` không nhận
+      định dạng số kiểu "1.000,5"; không có kiểm tra cú pháp khi đang gõ (chỉ báo lỗi lúc bấm Phát hiện); cách
+      xử lý mặc định của rule Nếu–thì vẫn chọn sẵn "Xoá cả dòng" (chưa áp bài học mục 13).
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -1536,8 +1602,12 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 - [x] Cảnh báo IQR=0 ở tool Giá trị bất thường (mục 23, đã làm).
 - [ ] **(NỢ)** 2 việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại", báo "Sẽ xoá N dòng"
       trước khi Áp dụng ở 3 tool Cần cấu hình — xem mục 23.
-- [ ] **(NỢ)** Rule liên cột: báo số dòng bị bỏ qua + gộp thành ngôn ngữ biểu thức + sửa Phụ thuộc
-      hàm (xem mục 23). User tạm gác vì quá tải.
+- [x] Phụ thuộc hàm: 1 cột xác định → nhiều cột phụ thuộc, đoán ô sai (so các cột còn lại), 2 cách xử lý
+      "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" + xem trước (mục 23, commit `3ee977f`, `73978bc`).
+- [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).
+- [ ] **(NỢ)** Rule liên cột ĐỢT 2: Nếu–thì chạy chung bộ máy biểu thức (và/hoặc/không ở cả 2 vế, vế "thì" so với cột
+      khác), `=>`, `<=>`, `có(cột)` ("bắt buộc có giá trị khi…"). Đổi mặc định cách xử lý các rule còn lại sang
+      "— Chọn cách xử lý —".
 - [ ] Cập nhật lại file này mỗi khi làm xong 1 cụm việc lớn (lần này ghi bù mục 18-23 sau khi
       thấy file thiếu Denoise).
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá

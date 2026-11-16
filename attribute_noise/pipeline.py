@@ -219,7 +219,7 @@ def detect_noise(
         for rule_cfg in cross_field_rules:
             detector = CROSS_FIELD_RULE_DETECTORS[rule_cfg.rule_type]
             mask = detector(df, rule_cfg)
-            columns_label = describe_rule(rule_cfg)
+            columns_label = describe_rule(rule_cfg, df)
             display_value = rule_cfg.label or f"vi phạm rule {rule_cfg.rule_type.value}"
             for row_index in df.index[mask]:
                 findings.append(

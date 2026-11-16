@@ -27,6 +27,7 @@ from typing import Any, Optional
 import pandas as pd
 
 from .config import DEFAULT_MISSING_PLACEHOLDERS, CompareOperator, CrossFieldRuleConfig, RuleType, RuleValueType
+from .expression_rules import detect_expression_rule, expression_column_names, expression_columns
 
 # Ánh xạ CompareOperator (enum) -> hàm so sánh thật của module operator chuẩn.
 _COMPARE_FUNCS = {
@@ -406,12 +407,19 @@ def analyze_functional_dependency(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -
     return {"rows": rows, "groups": groups}
 
 
-def describe_rule(cfg: CrossFieldRuleConfig) -> str:
+def describe_rule(cfg: CrossFieldRuleConfig, df: Optional[pd.DataFrame] = None) -> str:
     """Chuỗi ngắn mô tả các cột liên quan tới rule -- dùng làm 'column' trong
     NoiseFinding để người dùng biết rule nào đã vi phạm. Dùng " & " (không
     dùng ",") để nối tên cột, vì "," đã được dùng làm dấu phân cách GIỮA CÁC
     LÝ DO khác nhau của 1 dòng trong get_flagged_rows() -- nếu dùng "," ở đây
-    sẽ làm frontend tách nhầm 1 rule thành 2 lý do riêng."""
+    sẽ làm frontend tách nhầm 1 rule thành 2 lý do riêng.
+
+    df (tuỳ chọn): bảng dữ liệu, chỉ rule EXPRESSION cần -- tên cột người dùng gõ có thể khác hoa/thường hoặc Unicode với cột thật, phải đổi sang
+    ĐÚNG tên cột thật thì giao diện mới tô được ô. Không truyền df thì dùng tên như người dùng gõ."""
+    if cfg.rule_type == RuleType.EXPRESSION:
+        if df is not None:
+            return " & ".join(str(c) for c in expression_columns(df, cfg.expression))
+        return " & ".join(expression_column_names(cfg.expression))
     if cfg.rule_type == RuleType.COMPARE:
         return f"{cfg.column_a} & {cfg.column_b}"
     if cfg.rule_type == RuleType.CONDITIONAL:
@@ -429,4 +437,5 @@ CROSS_FIELD_RULE_DETECTORS = {
     RuleType.CONDITIONAL: detect_conditional_rule,
     RuleType.FORMULA: detect_formula_rule,
     RuleType.FUNCTIONAL_DEPENDENCY: detect_functional_dependency_rule,
+    RuleType.EXPRESSION: detect_expression_rule,
 }

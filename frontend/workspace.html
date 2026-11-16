@@ -139,7 +139,7 @@
               </a>
               <a class="ws-megamenu-item" href="#" data-config-tool="cross-rule">
                 <span class="ws-megamenu-icon">⋈</span>
-                <span class="ws-megamenu-item-text"><strong>Rule liên cột</strong><small>So sánh · điều kiện · công thức · phụ thuộc</small></span>
+                <span class="ws-megamenu-item-text"><strong>Rule liên cột</strong><small>Biểu thức · nếu–thì · phụ thuộc hàm</small></span>
               </a>
             </div>
 
@@ -291,7 +291,7 @@
         <div class="hm-card"><span class="hm-card-num">/05</span><span class="hm-card-icon">Aa</span><h3>Không nhất quán</h3><p>"Nam", "nam", "NAM", " Nam " cùng một nghĩa. Tự chuẩn hoá về giá trị chuẩn bạn khai.</p><small>Cần cấu hình</small></div>
         <div class="hm-card"><span class="hm-card-num">/06</span><span class="hm-card-icon">⇥</span><h3>Khoảng trắng thừa</h3><p>Khoảng trắng đầu/cuối, lặp nhiều lần, ký tự vô hình. Luôn an toàn để sửa tự động.</p><small>Free Tools · Cần cấu hình</small></div>
         <div class="hm-card"><span class="hm-card-num">/07</span><span class="hm-card-icon">⧉</span><h3>Dòng trùng</h3><p>So toàn bộ cột hoặc chỉ vài cột bạn chọn. Giữ bản đầu hoặc bản cuối, xoá phần còn lại.</p><small>Free Tools · Cần cấu hình</small></div>
-        <div class="hm-card"><span class="hm-card-num">/08</span><span class="hm-card-icon">⇄</span><h3>Rule liên cột</h3><p>Mâu thuẫn giữa 2 cột: so sánh, điều kiện nếu-thì, công thức, phụ thuộc hàm. Bạn khai rule, Denoise kiểm tra từng dòng.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/08</span><span class="hm-card-icon">⇄</span><h3>Rule liên cột</h3><p>Mâu thuẫn giữa các cột: biểu thức (so sánh, tính toán), điều kiện nếu-thì, phụ thuộc hàm. Bạn khai rule, Denoise kiểm tra từng dòng.</p><small>Cần cấu hình</small></div>
         <div class="hm-card"><span class="hm-card-num">/09</span><span class="hm-card-icon">🏷</span><h3>Class noise</h3><p>Dòng có thể bị gán sai nhãn. 3 thuật toán độc lập: Confident Learning, Mutual k-NN, Ensemble biểu quyết.</p><small>Class Noise</small></div>
       </div>
 
@@ -317,7 +317,7 @@
       </div>
       <div class="hm-numbers">
         <div class="hm-number"><b>7</b><span>Loại nhiễu thuộc tính</span><small>missing · format · range · outlier · category · whitespace · duplicate</small></div>
-        <div class="hm-number"><b>4</b><span>Loại rule liên cột</span><small>so sánh · điều kiện · công thức · phụ thuộc hàm</small></div>
+        <div class="hm-number"><b>3</b><span>Loại rule liên cột</span><small>biểu thức · nếu-thì · phụ thuộc hàm</small></div>
         <div class="hm-number"><b>3</b><span>Thuật toán class noise</span><small>Confident Learning · Mutual k-NN · Ensemble</small></div>
         <div class="hm-number"><b>10</b><span>Cách xử lý</span><small>từ xoá dòng tới impute KNN, chọn theo kiểu cột × loại lỗi</small></div>
         <div class="hm-number"><b>7</b><span>Tool chạy ngay</span><small>4 Free Tools + 3 Convert, không cần cấu hình</small></div>
@@ -360,7 +360,7 @@
           <tr><th>Phát hiện</th><td>7 detector theo cột + 4 rule liên cột, tự viết, có test</td></tr>
           <tr><th>Class noise</th><td>Confident Learning (Random Forest) · Mutual k-NN · Ensemble 3 classifier</td></tr>
           <tr><th>Xử lý</th><td>Bảng quyết định kiểu cột × loại lỗi, chạy thử và hoàn tác</td></tr>
-          <tr><th>Công thức rule</th><td>Diễn giải bằng cây cú pháp có whitelist, không dùng eval()</td></tr>
+          <tr><th>Biểu thức rule</th><td>Diễn giải bằng cây cú pháp có whitelist, không dùng eval()</td></tr>
           <tr><th>Giao diện</th><td>HTML / CSS / JS thuần, không framework, không tracker</td></tr>
         </table>
       </div>
@@ -561,7 +561,7 @@
         <div class="tx-strip-item"><span class="tx-icon">▦</span><b>Dữ liệu</b><small>Chỉ trong bộ nhớ server, gắn với tài khoản</small></div>
         <div class="tx-strip-item"><span class="tx-icon">∗</span><b>Mật khẩu</b><small>Băm bằng thư viện chuẩn, không lưu bản rõ</small></div>
         <div class="tx-strip-item"><span class="tx-icon">◷</span><b>Phiên</b><small>Cookie có chữ ký, hết khi đăng xuất</small></div>
-        <div class="tx-strip-item"><span class="tx-icon">ƒ</span><b>Công thức</b><small>Diễn giải có whitelist, không eval()</small></div>
+        <div class="tx-strip-item"><span class="tx-icon">ƒ</span><b>Biểu thức</b><small>Diễn giải có whitelist, không eval()</small></div>
       </div>
 
       <div class="tx-layout">
@@ -571,7 +571,7 @@
           <a href="#sec-02"><i>02</i>Mật khẩu</a>
           <a href="#sec-03"><i>03</i>Phiên đăng nhập</a>
           <a href="#sec-04"><i>04</i>Quyền sở hữu file</a>
-          <a href="#sec-05"><i>05</i>Công thức rule liên cột</a>
+          <a href="#sec-05"><i>05</i>Biểu thức rule liên cột</a>
           <a href="#sec-06"><i>06</i>Giới hạn đã biết</a>
         </nav>
         <article class="tx-content">
@@ -610,8 +610,8 @@
             </ul>
           </section>
           <section class="tx-section" id="sec-05">
-            <h2 class="tx-h2"><span>05</span>Công thức rule liên cột</h2>
-            <p>Rule dạng công thức (ví dụ <code>tong == gia * so_luong</code>) được phân tích thành cây cú pháp và chỉ cho phép đúng bốn phép tính, số và tên cột. Không có <code>eval()</code>, không gọi hàm, không truy cập gì ngoài bảng dữ liệu.</p>
+            <h2 class="tx-h2"><span>05</span>Biểu thức rule liên cột</h2>
+            <p>Rule dạng biểu thức (ví dụ <code>tong == gia * so_luong</code> hay <code>tuoi &gt;= 18 và tuoi &lt;= 65</code>) được đọc bằng bộ phân tích tự viết thành cây cú pháp, và chỉ hiểu đúng: so sánh, bốn phép tính, và / hoặc / không, số, chữ, tên cột, cùng ba hàm ép kiểu <code>so</code>, <code>ngay</code>, <code>chu</code>. Không có <code>eval()</code>, không gọi được hàm nào khác, không truy cập gì ngoài bảng dữ liệu.</p>
           </section>
           <section class="tx-section" id="sec-06">
             <h2 class="tx-h2"><span>06</span>Giới hạn đã biết</h2>
@@ -1305,6 +1305,8 @@
                 <span class="cyd-table-tag" id="cf-result-tag">Kết quả</span>
                 <span class="cyd-table-right"><span class="cyd-table-dims" id="cf-result-dims"></span></span>
               </div>
+              <!-- Rule "Biểu thức": cách đọc từng cột (Số/Ngày/Chữ), số dòng bị bỏ qua và cảnh báo -- workspace.js renderExprInfo(), dữ liệu từ expression_info. -->
+              <div class="cf-expr-info" id="cf-expr-info" hidden></div>
               <div class="table-wrap" id="cf-result-table-wrap">
                 <table class="results-table" id="cf-result-table"></table>
               </div>
