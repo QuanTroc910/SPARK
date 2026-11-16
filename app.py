@@ -1780,15 +1780,44 @@ def _cross_rules_from_config(item: dict, df: pd.DataFrame) -> list[CrossFieldRul
     return [_cross_field_rule_from_json({**item, "dependent_column": dep}) for dep in dependents]
 
 
-def _fd_cell_info(df: pd.DataFrame, cross_rules: list) -> tuple[dict, dict]:
+FD_ACTIONS = ["fix_to_majority", "remove_suspect_rows", "remove_row", "keep"]  # Phụ thuộc hàm: cách an toàn (không xoá) đứng trước
+
+
+def _fd_analyses(df: pd.DataFrame, cross_rules: list) -> list:
+    """Phân tích "ô nào nghi sai" cho từng rule con A -> Bi: [(rule, analyze_functional_dependency(df, rule)), ...]. Tính 1 LẦN rồi truyền cho
+    _fd_cell_info (tô ô), _fd_plan (kế hoạch xử lý / xem trước) để detect và apply cùng 1 kết quả."""
+    return [(rule, analyze_functional_dependency(df, rule)) for rule in cross_rules]
+
+
+def _fd_plan(analyses: list) -> dict:
+    """Kế hoạch cho 2 cách xử lý dựa trên phân tích (chỉ các nhóm "xác định được": kết luận cột phụ thuộc sai + có giá trị đa số rõ ràng):
+      - fixes: {(row_index, cột): giá trị đa số} -- "Sửa về giá trị phổ biến nhất" ghi các ô lệch về giá trị đa số;
+      - suspect_rows: tập dòng lệch số đông -- "Chỉ xoá dòng nghi sai" xoá đúng các dòng này;
+      - unresolved_groups: số nhóm KHÔNG xác định được (hoà số lượng / có vẻ khác đối tượng nên nghi sai cột xác định / chưa có cột để so) --
+        cả 2 cách đều để nguyên các nhóm này, người dùng tự xử lý.
+    Mỗi rule con (mỗi cột phụ thuộc) tính riêng; 1 nhóm A xuất hiện ở nhiều rule con thì mỗi rule đếm 1 nhóm."""
+    fixes: dict = {}
+    suspect_rows: set = set()
+    unresolved = 0
+    for _rule, result in analyses:
+        for group in result["groups"]:
+            if group["suspect_rows"]:
+                suspect_rows.update(group["suspect_rows"])
+                for row_index in group["suspect_rows"]:
+                    fixes[(row_index, group["column"])] = group["majority_value"]
+            else:
+                unresolved += 1
+    return {"fixes": fixes, "suspect_rows": suspect_rows, "unresolved_groups": unresolved}
+
+
+def _fd_cell_info(analyses: list) -> tuple[dict, dict]:
     """Phụ thuộc hàm: gộp phân tích "ô nào nghi sai" (analyze_functional_dependency) của từng rule con A -> Bi. Trả:
       - cells: {row_index: {flagged: ô nghi sai, ref: ô mốc so sánh, hint: [câu ngắn], notes: [câu giải thích]}} (1 dòng có thể dính nhiều rule);
       - summary: {determinant: tên cột A, rules: [{column: Bi, groups: số nhóm mâu thuẫn, determinant/dependent/unknown: số nhóm theo kết luận}]}.
     Ô nào đã bị rule nào đó coi là nghi sai thì không còn là "mốc" nữa (nghi sai thắng). Chỉ là gợi ý để hiển thị, không đổi dòng bị gắn cờ."""
     cells: dict = {}
-    summary = {"determinant": cross_rules[0].determinant_column, "rules": []}
-    for rule in cross_rules:
-        result = analyze_functional_dependency(df, rule)
+    summary = {"determinant": analyses[0][0].determinant_column, "rules": []}
+    for rule, result in analyses:
         for row_index, info in result["rows"].items():
             merged = cells.setdefault(row_index, {"flagged": set(), "ref": set(), "hint": [], "notes": []})
             merged["flagged"] |= info["flagged"]
@@ -1871,6 +1900,8 @@ def _checked_outlier_rules(column: str, raw) -> list[tuple[str, float]]:
 def _config_tool_actions(column_configs, noise_key) -> list[str]:
     """Danh sách cách xử lý hợp lệ: theo bảng kiểu cột × loại lỗi; rule liên
     cột chỉ có 2 lựa chọn (xoá dòng vi phạm / giữ nguyên, chỉ xem)."""
+    if noise_key == f"rule:{RuleType.FUNCTIONAL_DEPENDENCY.value}":
+        return FD_ACTIONS
     if not column_configs:
         return ["remove_row", "keep"]
     return [a.value for a in get_available_actions(column_configs[0].dtype, NoiseType(noise_key))]
@@ -1937,7 +1968,9 @@ def noise_tool_configured():
             indices = sorted(flagged)
             # Phụ thuộc hàm: thay vì tô mọi ô A và B của cả nhóm mâu thuẫn, đoán ô nào nhiều khả năng sai (xem
             # analyze_functional_dependency): flagged = ô nghi sai (tô đậm), ref = ô mốc so sánh (tô nhạt), hint/notes = lý do.
-            fd_cells, fd_summary = _fd_cell_info(df, cross_rules) if noise_key == f"rule:{RuleType.FUNCTIONAL_DEPENDENCY.value}" else ({}, None)
+            is_fd = noise_key == f"rule:{RuleType.FUNCTIONAL_DEPENDENCY.value}"
+            fd_analyses = _fd_analyses(df, cross_rules) if is_fd else []
+            fd_cells, fd_summary = _fd_cell_info(fd_analyses) if is_fd else ({}, None)
             rows = []
             for i in indices[:CONFIG_TOOL_FLAGGED_LIMIT]:
                 values = ["" if v is None else str(v) for v in df.loc[i].tolist()]
@@ -1992,6 +2025,14 @@ def noise_tool_configured():
             }
             if fd_summary:
                 payload["fd_analysis"] = fd_summary
+                # Xem trước tác động của từng cách xử lý (FE hiện dưới ô chọn cách xử lý, không cần gọi lại backend).
+                plan = _fd_plan(fd_analyses)
+                payload["fd_plan"] = {
+                    "fix_to_majority": {"cells": len(plan["fixes"]), "rows": 0},
+                    "remove_suspect_rows": {"cells": 0, "rows": len(plan["suspect_rows"])},
+                    "remove_row": {"cells": 0, "rows": len(indices)},
+                    "unresolved_groups": plan["unresolved_groups"],
+                }
             if len(cross_rules) > 1:
                 # Rule liên cột tách thành nhiều rule con (Phụ thuộc hàm 1 -> nhiều cột): cho biết mỗi cột phụ thuộc có bao nhiêu dòng
                 # vi phạm (số dòng, không phải ô: 1 rule con = 1 cột phụ thuộc), để người dùng thấy cột nào đang mâu thuẫn.
@@ -2020,8 +2061,22 @@ def noise_tool_configured():
             if action not in actions:
                 raise QuickToolError("Cách xử lý không hợp lệ cho kiểu cột / loại lỗi này")
             flagged_idx = sorted({int(f.row_index) for f in findings})
-            new_df = df.drop(index=flagged_idx) if action == "remove_row" else df
-            rows_removed, cells_changed = _summarize_change(df, new_df, None)
+            unresolved_groups = None
+            if action in ("fix_to_majority", "remove_suspect_rows"):
+                # Chỉ đụng tới các nhóm "xác định được" (xem _fd_plan); nhóm còn lại giữ nguyên, báo số nhóm đó cho người dùng.
+                plan = _fd_plan(_fd_analyses(df, cross_rules))
+                unresolved_groups = plan["unresolved_groups"]
+                if action == "fix_to_majority":
+                    new_df = df.copy()
+                    for (row_index, column_name), value in plan["fixes"].items():
+                        new_df.at[row_index, column_name] = value
+                    rows_removed, cells_changed = 0, len(plan["fixes"])
+                else:
+                    new_df = df.drop(index=sorted(plan["suspect_rows"]))
+                    rows_removed, cells_changed = _summarize_change(df, new_df, None)
+            else:
+                new_df = df.drop(index=flagged_idx) if action == "remove_row" else df
+                rows_removed, cells_changed = _summarize_change(df, new_df, None)
             applied_actions = action
         else:
             # Theo cột: field `actions` = {tên cột: {action, fixed_value}} cho NHIỀU cột một lượt; không có thì dùng cách gửi
@@ -2066,6 +2121,8 @@ def noise_tool_configured():
             "findings_count": len(findings),
             "action": applied_actions,
         }
+        if not column_configs and unresolved_groups is not None:
+            stats["unresolved_groups"] = int(unresolved_groups)
     except QuickToolError as exc:
         return jsonify({"error": str(exc)}), 400
     except (FormulaError, ValueError, KeyError, TypeError, re.error) as exc:

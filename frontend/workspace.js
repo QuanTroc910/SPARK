@@ -541,6 +541,8 @@ const ACTION_LABELS = {
   auto_normalize_category: "Tự chuẩn hoá về giá trị chuẩn",
   auto_clean_whitespace: "Tự cắt khoảng trắng",
   keep: "Giữ nguyên (chỉ xem)",
+  fix_to_majority: "Sửa về giá trị phổ biến nhất",
+  remove_suspect_rows: "Chỉ xoá dòng nghi sai",
 };
 const DELIMITER_LABELS = { ",": "dấu phẩy (,)", ";": "dấu chấm phẩy (;)", "\t": "tab", "|": "dấu gạch đứng (|)" };
 function delimiterLabel(d) {
@@ -1030,6 +1032,8 @@ function statusFromStats(stats) {
     parts.push(stats.flagged_cell_count > 0 ? `tìm thấy ${stats.flagged_cell_count} ô sai định dạng` : "không thấy ô nào sai định dạng");
   }
   if (stats.columns_removed) parts.push(`đã xoá ${stats.columns_removed} cột`);
+  // Phụ thuộc hàm (2 cách xử lý theo gợi ý): các nhóm không xác định được ô sai thì giữ nguyên, nói rõ để người dùng tự xử lý.
+  if (stats.unresolved_groups) parts.push(`${stats.unresolved_groups} nhóm chưa xác định được ô sai, giữ nguyên`);
   return `✅ ${parts.join(" · ")}`;
 }
 // Tải xuống = kết quả MỚI NHẤT của chuỗi (pipe.currentText), đuôi theo loại.
@@ -2589,14 +2593,49 @@ $("cf-detect-btn").addEventListener("click", async () => {
   }
   // Nhịp 2: danh sách cách xử lý do backend quyết theo kiểu cột × loại lỗi.
   const sel = $("cf-action");
-  sel.innerHTML = data.available_actions.map((a) => `<option value="${a}">${ACTION_LABELS[a] || a}</option>`).join("");
+  // Phụ thuộc hàm (có fd_plan): mặc định "— Chọn cách xử lý —" (không chọn sẵn cách nào đổi dữ liệu, cùng bài học Bước 5 cũ) + hiện xem trước tác động.
+  state.cf.fdPlan = data.fd_plan || null;
+  state.cf.fdTotalRows = data.total_rows;
+  state.cf.fdDeterminant = data.fd_analysis ? data.fd_analysis.determinant : "";
+  sel.innerHTML = (data.fd_plan ? '<option value="">— Chọn cách xử lý —</option>' : "") +
+    data.available_actions.map((a) => `<option value="${a}">${ACTION_LABELS[a] || a}</option>`).join("");
+  renderCfActionPreview();
   $("cf-fixed-value-wrap").hidden = sel.value !== "fixed_value";
   setError($("cf-apply-error"), "");
   setStatus($("cf-apply-status"), "", "");
   $("cf-handling").hidden = false;
 });
+// Xem trước tác động của cách xử lý đang chọn (chỉ Phụ thuộc hàm): số liệu lấy từ fd_plan backend trả lúc Phát hiện.
+function renderCfActionPreview() {
+  const box = $("cf-action-preview");
+  const plan = state.cf.fdPlan;
+  const action = $("cf-action").value;
+  box.classList.remove("is-risk");
+  if (!plan || !action) { box.hidden = true; box.textContent = ""; return; }
+  const total = state.cf.fdTotalRows;
+  const left = plan.unresolved_groups
+    ? ` ${plan.unresolved_groups} nhóm chưa xác định được ô sai (hoà số lượng, hoặc nghi sai cột «${state.cf.fdDeterminant}») sẽ giữ nguyên để bạn tự xử lý.` : "";
+  let text;
+  if (action === "fix_to_majority") {
+    text = plan.fix_to_majority.cells
+      ? `Sẽ sửa ${plan.fix_to_majority.cells} ô về giá trị phổ biến nhất của nhóm; không xoá dòng nào.${left}`
+      : `Không có ô nào sửa được tự động.${left}`;
+  } else if (action === "remove_suspect_rows") {
+    const n = plan.remove_suspect_rows.rows;
+    text = n ? `Sẽ xoá ${n} dòng nghi sai (${total} → ${total - n} dòng).${left}` : `Không có dòng nào xoá được tự động.${left}`;
+  } else if (action === "remove_row") {
+    const n = plan.remove_row.rows;
+    text = `Sẽ xoá ${n} dòng (${total} → ${total - n} dòng), gồm cả các dòng có thể là đúng.`;
+    box.classList.add("is-risk");
+  } else {
+    text = "Không đổi gì, chỉ để xem hoặc tải file.";
+  }
+  box.textContent = text;
+  box.hidden = false;
+}
 $("cf-action").addEventListener("change", () => {
   $("cf-fixed-value-wrap").hidden = $("cf-action").value !== "fixed_value";
+  renderCfActionPreview();
 });
 $("cf-apply-btn").addEventListener("click", async () => {
   const T = TOOLSEC.cf;
@@ -2634,6 +2673,7 @@ $("cf-apply-btn").addEventListener("click", async () => {
     applyExtra = { actions };
   } else {
     action = $("cf-action").value;
+    if (!action) return setError($("cf-apply-error"), "Chọn cách xử lý trước khi bấm Áp dụng.");
     const fixedValue = $("cf-fixed-value").value;
     if (action === "fixed_value" && !fixedValue) return setError($("cf-apply-error"), "Chưa nhập giá trị cố định.");
     applyExtra = { action, fixed_value: fixedValue };

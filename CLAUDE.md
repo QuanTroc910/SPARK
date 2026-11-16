@@ -424,8 +424,16 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     `fd_analysis` {determinant, rules:[{column, groups, determinant, dependent, unknown}]}; FE thêm cột "Gợi ý" +
     chú thích `.ft-table-note.is-long`. Kiểm chứng trên `noisy_employee_dataset_large.csv`: `id → full_name` ra đúng 5
     nhóm = 5 id `duplicate_id_conflicting_data` trong file đáp án, cả 5 đều kết luận nghi sai `id`.
-    **Chưa làm:** cách xử lý vẫn "xoá cả dòng" = xoá HẾT dòng trong nhóm (kể cả dòng đúng), chưa có "chỉ xoá dòng nghi
-    sai" hay "sửa về giá trị phổ biến nhất"; vế xác định vẫn 1 cột.
+    **Cách xử lý Phụ thuộc hàm (4 cách, `FD_ACTIONS` ở app.py; mặc định "— Chọn cách xử lý —", không chọn sẵn cách đổi
+    dữ liệu):** `fix_to_majority` "Sửa về giá trị phổ biến nhất" (ghi các ô lệch về giá trị đa số, không xoá dòng),
+    `remove_suspect_rows` "Chỉ xoá dòng nghi sai", `remove_row` "Xoá cả dòng" (xoá HẾT dòng trong nhóm, kể cả dòng đúng),
+    `keep`. 2 cách đầu CHỈ đụng các nhóm "xác định được" (kết luận cột B sai + có giá trị đa số, không hoà — `_fd_plan()`);
+    nhóm hoà / nghi sai cột A / chưa xác định giữ nguyên và báo `stats.unresolved_groups`. Xem trước tác động không cần
+    gọi lại backend: detect trả `fd_plan` {fix_to_majority.cells, remove_suspect_rows.rows, remove_row.rows,
+    unresolved_groups}, FE hiện ở `#cf-action-preview` (cách xoá cả nhóm hiện đỏ). Rule liên cột khác (So sánh/Nếu–thì/
+    Công thức) KHÔNG đổi: vẫn chỉ Xoá cả dòng / Giữ nguyên, ô chọn mặc định "Xoá cả dòng" (chưa áp bài học mục 13).
+    **Chưa làm:** vế xác định vẫn 1 cột; chưa có "giữ dòng đầu, xoá các dòng sau" cho nhóm nghi sai cột A (id trùng,
+    không suy ra được dòng nào sai); hoàn tác cho tool này.
 - `frontend/` — **GIAO DIỆN HIỆN HÀNH "Denoise" (mục 18-22):** 4 file
   `workspace.html` + `workspace.css` + `workspace.js` + `workspace-flow.js`, HTML/CSS/JS
   thuần, MỘT trang duy nhất `GET /` gồm 9 khối đổi bằng `switchSection()` (KHÔNG điều

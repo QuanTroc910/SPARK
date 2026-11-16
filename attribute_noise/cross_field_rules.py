@@ -306,7 +306,10 @@ def analyze_functional_dependency(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -
     lương, tháng khác nhau giữa các dòng của cùng 1 nhân viên là bình thường -> không được tính "khác nhau" là bằng chứng khác đối tượng.
 
     Trả {"rows": {row_index: {"flagged": set tên cột nghi sai, "ref": set cột mốc so sánh, "hint": [câu ngắn], "notes": [câu giải thích]}},
-         "groups": [{"key": giá trị A, "verdict": "dependent" | "determinant" | "unknown", "rows": [row_index...]}]}."""
+         "groups": [{"key": giá trị A, "column": cột phụ thuộc, "verdict": "dependent" | "determinant" | "unknown", "rows": [row_index...],
+                     "majority_value": giá trị B đa số (chuỗi đầy đủ) hoặc None, "suspect_rows": [row_index dòng lệch số đông]}]}.
+    majority_value / suspect_rows chỉ có nghĩa khi kết luận "dependent" VÀ có giá trị đa số rõ ràng (không hoà): đó là nhóm "xác định được" mà
+    cách xử lý "sửa về giá trị phổ biến nhất" / "chỉ xoá dòng nghi sai" dựa vào. Các nhóm còn lại (hoà, nghi sai A, chưa xác định) để None / []."""
     det_col, dep_col = cfg.determinant_column, cfg.dependent_column
     empty: dict = {"rows": {}, "groups": []}
     if det_col not in df.columns or dep_col not in df.columns:
@@ -364,7 +367,8 @@ def analyze_functional_dependency(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -
             verdict = "dependent"
         else:
             verdict = "determinant"
-        groups.append({"key": a_text, "verdict": verdict, "rows": indices})
+        group_info = {"key": a_text, "column": dep_col, "verdict": verdict, "rows": indices, "majority_value": None, "suspect_rows": []}
+        groups.append(group_info)
 
         if verdict == "determinant":
             # Các dòng khác nhau ở phần lớn cột khác -> nhiều khả năng là các đối tượng khác nhau dùng chung A. Không biết dòng nào sai:
@@ -386,7 +390,10 @@ def analyze_functional_dependency(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -
                     put(row_index, {dep_col}, {det_col}, f"Chưa rõ {dep_col}", note)
             else:
                 majority = counts.index[0]
-                majority_text = _short(df.at[next(i for i in indices if group.at[i, "dep"] == majority), dep_col])
+                majority_row = next(i for i in indices if group.at[i, "dep"] == majority)
+                majority_text = _short(df.at[majority_row, dep_col])
+                group_info["majority_value"] = str(df.at[majority_row, dep_col]).strip()  # giá trị thật sẽ ghi vào ô (cắt khoảng trắng thừa, không rút gọn)
+                group_info["suspect_rows"] = [i for i in indices if group.at[i, "dep"] != majority]
                 for row_index in indices:
                     value = group.at[row_index, "dep"]
                     if value == majority:
