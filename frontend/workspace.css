@@ -1197,6 +1197,9 @@ a.hm-tool:hover { background: #ebebe7; }
 .cf-method-pick .ft-seg button { flex: 1; padding: 11px 12px; }
 .ft-seg button:disabled { opacity: 0.35; cursor: not-allowed; }
 .cf-method-remove { height: 40px; padding: 0 14px; }
+/* Cảnh báo IQR suy biến (cột đa số cùng 1 giá trị): khung vàng luôn hiện; dòng đỏ chỉ hiện khi chọn cách xử lý có đổi dữ liệu. */
+.cf-sum-warn { grid-column: 1 / -1; font-size: 12px; line-height: 1.5; color: #7a4f00; background: #fff4d6; border-left: 3px solid #e0a100; padding: 7px 10px; }
+.cf-sum-risk { grid-column: 1 / -1; font-size: 12px; line-height: 1.5; font-weight: 600; color: #ae3a3a; background: #fbeaea; padding: 7px 10px; }
 .cf-sum-methods { grid-column: 1 / -1; font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.02em; color: var(--ink-dim); }
 @media (max-width: 900px) {
   .cf-method-row, .cf-method-row.has-remove { grid-template-columns: 1fr; }

@@ -47,7 +47,7 @@ from attribute_noise.config import (
     RuleValueType,
 )
 from attribute_noise.cross_field_rules import FormulaError
-from attribute_noise.detectors import INTEGER_RE, detect_outlier
+from attribute_noise.detectors import INTEGER_RE, detect_outlier, iqr_degenerate_info
 from attribute_noise.pipeline import (
     NoiseFinding,
     detect_noise,
@@ -1909,6 +1909,13 @@ def noise_tool_configured():
                     ]
                     if len(rules) == 2:
                         entry["both_count"] = int((masks[0] & masks[1]).sum())
+                # Cảnh báo IQR suy biến (Q1 == Q3, vd cột 80% là số 0): IQR gắn cờ mọi giá trị khác -> giao diện báo người dùng trước khi
+                # họ chọn cách xử lý. Chỉ cảnh báo khi cột thật sự có ô bị gắn cờ; không đổi kết quả detect.
+                if col_findings and any(method == "iqr" for method, _t in rules):
+                    degenerate = iqr_degenerate_info(df[col_cfg.column])
+                    if degenerate:
+                        iqr_threshold = next(t for m, t in rules if m == "iqr")
+                        entry["warnings"] = [{"code": "iqr_zero", "method": "iqr", "threshold": iqr_threshold, **degenerate}]
                 per_column.append(entry)
             payload = {
                     "mode": "detect",

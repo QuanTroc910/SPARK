@@ -8,8 +8,15 @@ hệ thống detect → người dùng xem kết quả (Attribute: xử lý repl
 lý/handling cho Class noise CHƯA làm, xem roadmap cuối file).
 
 Tên hiển thị trên UI đã đổi từ "SPARK" (tên đặt tạm lúc đầu, không có ý nghĩa gì)
-thành "Dò & Xử Lý Nhiễu Dữ Liệu" — code/thư mục vẫn giữ nguyên tên `SPARK` cho
-tới khi có nhu cầu đổi tên repo thật sự.
+thành "Dò & Xử Lý Nhiễu Dữ Liệu", rồi thành thương hiệu **"Denoise"** (giao diện mới
+`frontend/workspace.html`, xem mục 18 và bullet `frontend/` bên dưới) — code/thư mục
+vẫn giữ nguyên tên `SPARK` cho tới khi có nhu cầu đổi tên repo thật sự.
+
+**TRẠNG THÁI HIỆN TẠI (đọc trước):** giao diện chính là **Denoise** (`workspace.html` +
+`workspace.js` + `workspace.css` + `workspace-flow.js`), `GET /` trả thẳng trang này.
+Phần mô tả "5 bước" dài ở mục `frontend/` bên dưới là của giao diện CŨ (`index.html` +
+`script.js` + `style.css`, vẫn mở được qua `/index.html`) — còn đúng cho file cũ đó nhưng
+KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 23 + cuối file.
 
 ## Kiến trúc hiện tại
 
@@ -66,6 +73,27 @@ tới khi có nhu cầu đổi tên repo thật sự.
     không so sánh GIỮA các dòng). `QuickToolError` là exception riêng
     (app.py bắt để trả HTTP 400), cùng cách `AccountError`/`ConversionError`
     đã làm cho các module khác.
+  - **Cập nhật sau mục 17 (mục 19-21):**
+    - `config.py`: `ColumnNoiseConfig.outlier_rules` (list `(phương pháp, ngưỡng)`,
+      mặc định `None`) + `get_outlier_rules()` — kiểm NHIỀU phương pháp outlier cùng
+      lúc trên 1 cột; `None`/rỗng thì dùng đúng cặp `outlier_method`/`outlier_threshold`
+      cũ (kết quả giữ nguyên, đã đối chiếu với bản cũ trên 360 ca).
+    - `detectors.py`: `outlier_bounds(valid_numeric, method, threshold)` là công thức
+      biên IQR/Z-score DÙNG CHUNG (trả `None` nếu z-score suy biến std=0);
+      `detect_outlier()` = HỢP các phương pháp (ô bị gắn cờ nếu bất thường theo BẤT KỲ
+      phương pháp nào).
+    - `attribute_handling.py::_resolve_cap_bounds()`: biên "kéo về biên" của outlier =
+      GIAO các khoảng (biên dưới = max các biên dưới, biên trên = min các biên trên),
+      vì ô bị gắn cờ khi ra ngoài khoảng của BẤT KỲ phương pháp nào.
+    - `quick_tools.py` thêm cho tool "Ô trống" (gộp 3 tool cũ) và "Sai định dạng":
+      `quick_handle_blanks()` (xử lý theo TỪNG cột: `column_actions` {cột: {dtype,
+      action, fixed_value, cell_values}}; `cell_values` = giá trị RIÊNG từng ô cho cách
+      "Điền tay từng ô"), `blank_column_summary()`, `blank_rows_for_column()`,
+      `preview_blank_changes()`, `blank_mask()`; `auto_column_types()`,
+      `find_format_errors()`, `quick_fix_format_noise()`, `preview_format_errors()` (Sai
+      định dạng quét MỌI cột); `preview_duplicate_rows()`, `preview_trim_changes()` (cho
+      nút "Xem các dòng trùng / ô đã sửa"). `quick_fill_or_remove_blanks()` và
+      `quick_remove_empty_rows()` vẫn còn trong file nhưng route riêng của chúng đã gỡ.
 - `class_noise/` — core logic phát hiện CLASS NOISE, cũng thuần Python,
   không phụ thuộc Flask (giống triết lý `attribute_noise/`). Dùng thuật
   toán **Confident Learning** (Northcutt et al., JAIR 2021) với **Random
@@ -345,7 +373,7 @@ tới khi có nhu cầu đổi tên repo thật sự.
     nguyên tắc "chỉ validate ở biên hệ thống" của dự án. `_csv_preview_rows()`
     đọc trước tối đa 21 dòng (1 header + 20 data) của CSV kết quả để FE hiện
     bảng xem trước, tránh FE phải tự viết 1 bộ phân tích CSV bằng JS.
-  - **Free Tools (mục 17):** 4 route `POST /api/noise-tools/remove-duplicates`,
+  - **Free Tools (mục 17) — ĐÃ ĐỔI, xem bullet "Routes cho giao diện Denoise" ngay dưới:** 4 route `POST /api/noise-tools/remove-duplicates`,
     `/trim-whitespace`, `/fill-blanks`, `/remove-empty-rows` (`@login_required`
     cả 4) — vận hành GIỐNG 3 route Convert File ở trên (không cần `file_id`/
     `UPLOADED_FILES`, xong trong ĐÚNG 1 request) nhưng KHÁC ở chỗ cần hiểu
@@ -358,7 +386,75 @@ tới khi có nhu cầu đổi tên repo thật sự.
     cộng `stats` (từ `quick_tools.py`) để FE hiện số dòng/số ô đã đổi. Bắt
     `QuickToolError` trả 400 kèm message rõ, bắt thêm `Exception` chung (file
     hỏng/parse lỗi...) cũng trả 400 thay vì để lộ lỗi 500 thô.
-- `frontend/` — HTML/CSS/JS thuần (chưa dùng framework), UI dạng "panel theo
+  - **Routes cho giao diện Denoise (mục 18-21), tất cả `@login_required`, KHÔNG có
+    `file_id`, xong trong 1 request:** `GET /` giờ trả `frontend/workspace.html`
+    (không còn `landing.html`; 2 file cũ vẫn mở được qua `/landing.html`,
+    `/index.html`). Nhóm "Tự động"/Free Tools: `POST /api/noise-tools/remove-duplicates`,
+    `/trim-whitespace`, `/format-noise`, `/blanks` (gộp Xoá dòng trống + Điền/xoá ô
+    trống + Thiếu giá trị nâng cao — 2 route cũ `/fill-blanks` và `/remove-empty-rows`
+    ĐÃ GỠ), `/blank-rows` (bảng các dòng có ô trống cho "Điền tay từng ô").
+    Dùng chung: `/inspect` (đọc tên cột + `guessed_dtypes` + 20 dòng xem trước của
+    file/text vừa chọn), `/normalize` (đọc lại đầu vào GỐC thành CSV chuẩn, dùng cho nút
+    "Bắt đầu lại từ gốc"). Nhóm "Cần cấu hình": MỘT route `POST /api/noise-tools/configured`
+    với field `mode` = `detect` | `apply` và `config` (JSON) — `config.tool` ∈
+    `out-of-range` | `outlier` | `inconsistent-category` | `cross-rule`. Tool theo cột
+    gửi `config.items` = danh sách {column, dtype, params} (NHIỀU cột 1 lượt; không có
+    `items` thì dùng cách gửi 1 cột cũ ở gốc config); detect trả `per_column` (số ô lỗi,
+    số dòng, `available_actions` từng cột; cột outlier có ≥2 phương pháp thêm `methods`
+    + `both_count`); apply nhận `actions` {cột: {action, fixed_value}} và gọi
+    `apply_handling()` MỘT lần với nhiều `HandlingChoice` (nhiều cột cùng chọn
+    `remove_row` thì xoá HỢP các dòng). `_checked_fixed_value()` kiểm giá trị cố định
+    theo kiểu cột (số nguyên phải là số nguyên; số thực phải là số hữu hạn, loại
+    `nan`/`inf`/`1_000`); `_checked_outlier_rules()` kiểm danh sách phương pháp (chỉ
+    `iqr`/`zscore`, không trùng, ngưỡng số > 0). Rule liên cột (`cross-rule`) vẫn 1 rule
+    mỗi lần, cách xử lý chỉ có xoá dòng vi phạm / giữ nguyên.
+- `frontend/` — **GIAO DIỆN HIỆN HÀNH "Denoise" (mục 18-22):** 4 file
+  `workspace.html` + `workspace.css` + `workspace.js` + `workspace-flow.js`, HTML/CSS/JS
+  thuần, MỘT trang duy nhất `GET /` gồm 9 khối đổi bằng `switchSection()` (KHÔNG điều
+  hướng sang trang khác): công khai — `#section-home` (hero, ticker, lưới tính năng, demo
+  tĩnh), `#section-guide`, `#section-security`, `#section-privacy`; cần đăng nhập — 3 nhóm
+  tool `#section-config` (Cần cấu hình), `#section-free-tools` (nhóm "Tự động"),
+  `#section-convert`, cộng `#section-class-noise` (4 bước) và `#section-profile`.
+  Chưa đăng nhập mà bấm khối cần tài khoản thì `#ws-auth` (đăng nhập/đăng ký chia đôi
+  màn hình) hiện đè lên. Header: Home / Product (menu lớn 3 nhóm tool) / Class Noise /
+  Guide + cụm tài khoản. Màu nhấn cobalt `#2f4bff`, chữ IBM Plex; khung rộng tối đa 1760px.
+  - `workspace.js`: trang chủ + 3 nhóm tool + auth + hồ sơ. Ba nhóm tool DÙNG CHUNG một bộ
+    máy (tiền tố `ft-` Free Tools, `cv-`/`convert-` Convert, `cf-` Cần cấu hình), bố cục
+    "01 · ĐẦU VÀO / 02 · KẾT QUẢ", mỗi tool một tab (`data-tool`). Nhóm Free Tools: tab
+    `remove-duplicates`, `trim-whitespace`, `format-noise` (Sai định dạng), `blanks` (Ô
+    trống). Nhóm Cần cấu hình: `out-of-range`, `outlier`, `inconsistent-category`,
+    `cross-rule`. Nhóm Convert: `delimiter`, `csv-to-json`, `json-to-csv`.
+  - **Bộ nhớ NỐI TIẾP (`state.pipe`, `recordPipeStep()`, `renderPipeStrips()`)**: kết
+    quả 1 tool thành đầu vào của tool kế tiếp, xuyên cả 3 nhóm (bảng "Xử lý tiếp bằng"
+    + dải đen "đã qua: …" với nút "Bắt đầu lại từ gốc" / "Tải file khác"). Khi đầu vào
+    đổi thì Cần cấu hình tự đọc lại danh sách cột (`refreshCfColumns`, chống chạy chồng
+    bằng `colSig`/`colSeq`). "Về gốc" gọi `/api/noise-tools/normalize` với file gốc
+    trình duyệt còn giữ (`originalSource`). "Tải file khác" PHẢI quên file cũ ở cả 3 nhóm
+    (`forgetSelectedFile`) — đã từng sót, gây lỗi chạy lại file cũ.
+  - **Khung kiểm NHIỀU cột `CF_MULTI` (mục 20-21)**: 3 tool Cần cấu hình theo cột dùng
+    chung 1 khung: mỗi form = 1 cột + ô riêng của tool; nút "＋ Thêm cột kiểm tra" (mỗi
+    cột khai 1 lần, danh sách chọn loại cột đã dùng); "Phát hiện" gửi tất cả form 1
+    lượt; kết quả là bảng "Lỗi theo từng cột" (cột nào, bao nhiêu lỗi, ô chọn cách xử lý
+    RIÊNG từng cột) + bảng bên phải tô ô lỗi của MỌI cột. Mỗi mục CF_MULTI khai: `dtypes`
+    (kiểu cột được liệt kê), `waitFile`/`noColumns` (lời nhắc), `preselect`, `defaults`,
+    `fieldsHTML`, `toItem`, tuỳ chọn `onClick`/`onInput` cho nút/ô riêng trong form.
+    `inconsistent-category`: chỉ cột Nhóm, kiểu khoá, ngưỡng giống nhau mặc định 1,
+    `preselect:true`. `out-of-range`: chỉ cột số, kiểu chỉnh được, nhỏ nhất/lớn nhất
+    riêng (bỏ trống 1 bên được). `outlier`: chỉ cột số, mỗi form có 1-2 hàng
+    "Phương pháp" (nút gạt IQR/Z-score + ngưỡng; nút "＋ Thêm phương pháp"; mặc định IQR
+    1.5, Z-score 3). Hai tool có `remove_row` (out-of-range, outlier) để `preselect:false`:
+    ô cách xử lý mặc định "— Chọn cách xử lý —" và cột chưa chọn thì KHÔNG bị đụng (tránh
+    xoá nhầm hàng loạt, cùng bài học mục 13).
+  - `workspace-flow.js` (IIFE, copy từ `script.js`, API `window.DenoiseFlow`): trong
+    Denoise chỉ nhánh **Class Noise 4 bước** được dùng (File & phương pháp → Nhãn & đặc
+    trưng → Kết quả → Xử lý=placeholder). Phần logic Attribute 5 bước còn nằm trong file
+    nhưng giao diện Denoise không còn mở nó (thay bằng 3 nhóm tool).
+  - `workspace.css`: biến CSS bề rộng khung; class dùng chung `.cyd-table*`, `.convert-*`,
+    `.ft-*`, `.cf-form*`, `.cf-sum*`, `.cf-method-*`; `@container` cho bảng lỗi theo cột.
+  - Cũ vẫn giữ (chưa xoá, chờ user nói): `index.html`, `script.js`, `style.css`,
+    `landing.html`, `landing.js` — lệnh đã dặn: KHÔNG sửa các file này nếu không được yêu cầu.
+- `frontend/` — **(GIAO DIỆN CŨ — `index.html` + `script.js` + `style.css`; giao diện
+  hiện hành là Denoise, xem bullet ngay dưới)** HTML/CSS/JS thuần (chưa dùng framework), UI dạng "panel theo
   bước" (chỉ 1 `.panel.is-active` hiện tại 1 thời điểm) với **5 bước**:
   1. Tải file lên → `POST /api/upload`.
   2. Hướng xử lý — chọn Attribute noise hay Class noise. **MỚI (mục 10):**
@@ -1235,6 +1331,93 @@ tới khi có nhu cầu đổi tên repo thật sự.
       và Playwright cũ (`playwright_test.js` 23 + `playwright_convert_test.js`
       16) SAU KHI thêm tính năng này, xác nhận không hồi quy.
 
+18. **Dựng lại giao diện "Denoise" (workspace.html) thay giao diện 5 bước cũ — ĐÃ XONG, đang dùng:**
+    - Nguồn gốc: user thấy UI cũ "dởm" so với trang tham khảo (CYD) → dựng lại theo khuôn
+      CYD nhưng GIỮ chữ/ý riêng của SPARK (không sao y claim của CYD; badge ghi đúng sự thật
+      "cần tài khoản, qua backend Flask"). Làm lần lượt: header + Free Tools → Convert +
+      đăng nhập → trang chủ/Guide/Bảo mật/Quyền riêng tư → Cần cấu hình + Class Noise → các
+      lần chỉnh sau phản hồi thật. 3 file cũ (`index/landing/convert/tools.html`) giữ lại.
+    - Quyết định "KHÔNG có chế độ phân tích cục bộ bằng JS" vẫn đúng: mọi xử lý gọi backend.
+    - Phân nhóm tool theo TIÊU CHÍ "có cần khai cấu hình không" (mục 17): "Tự động"/Free
+      Tools (không cần khai) vs "Cần cấu hình" (phải khai cột/tham số) vs Convert. Sai định
+      dạng chuyển sang Free Tools (quét MỌI cột, bảng kiểu dữ liệu từng cột sửa được).
+19. **Tool "Ô trống" gộp 3 tool cũ + "Điền tay từng ô":** Xoá dòng trống + Điền/xoá ô trống
+    + Thiếu giá trị nâng cao → 1 tool `/api/noise-tools/blanks`, cách xử lý đặt THEO TỪNG
+    cột (xoá dòng / điền từ ô phía trên `fill_down` / giá trị cố định / trung bình / trung vị /
+    KNN / giá trị phổ biến nhất — danh sách hợp lệ khác nhau theo kiểu cột, xem
+    `BLANK_ACTIONS_BY_DTYPE`; email/SĐT/ngày/chữ không có cách điền trung bình). Cách "điền tay"
+    mở bảng các dòng có ô trống (`/blank-rows`) để gõ riêng từng ô (`cell_values`). Giá trị
+    điền được kiểm theo kiểu cột (số nguyên phải là số nguyên...). Lỗi thật đã gặp + sửa:
+    `guess_column_dtype` từng đếm NA/-/? thành giá trị (đã dùng `_non_missing_values`);
+    chạy chồng (dán text rồi bấm Chạy ngay) hiện bảng cũ; "Tải file khác" giữ file cũ;
+    "Bắt đầu lại từ gốc" trả kết quả bước đầu thay vì gốc — đều đã sửa + test.
+20. **3 tool Cần cấu hình kiểm NHIỀU cột (Không nhất quán → Ngoài khoảng → Giá trị bất
+    thường):** yêu cầu của user: chỉ liệt kê cột đúng kiểu (hàm đoán kiểu cũ), có nút thêm
+    form cột, sau Phát hiện có bảng "cột nào bao nhiêu lỗi", xử lý được từng cột, bảng bên
+    phải tô lỗi của mọi cột. Làm 1 khung chung `CF_MULTI` (xem bullet frontend) + backend
+    `items`/`per_column`/`actions` (xem bullet routes). Quyết định có chủ đích:
+    - Cách xử lý mặc định "— Chọn cách xử lý —" với tool có `remove_row` (an toàn).
+    - Nhiều cột cùng chọn `remove_row` → xoá HỢP (dòng lỗi ở BẤT KỲ cột đó đều bị xoá).
+    - Giá trị cố định phải hợp kiểu cột (backend kiểm, kể cả cách gửi 1 cột cũ).
+    - Tool nào cũng liệt kê cột theo KIỂU ĐOÁN: cột số lẫn >10% chữ bị đoán là text nên
+      KHÔNG hiện ở tool số → xử lý bằng Sai định dạng trước rồi nối tiếp.
+    - Form đầu mặc định là cột đầu tiên đúng kiểu (thường là `id`) — chưa tự bỏ qua cột id.
+    - Kiểm chứng: dữ liệu nhân viên có đáp án (`noise_ground_truth_large.csv`): 3 cột 1
+      lượt bắt đúng 16 ô out_of_range cấy sẵn, bằng tổng 3 lần kiểm từng cột riêng.
+21. **Nhiều phương pháp (IQR + Z-score) trên 1 cột:** ô lỗi = HỢP các phương pháp; "kéo về biên"
+    = GIAO các khoảng (biên chặt hơn). Công thức biên dùng chung ở `outlier_bounds()` để
+    detect và cap không lệch. Backend trả `methods` + `both_count` (số ô cả hai cùng bắt)
+    để bảng lỗi ghi "IQR 1.5 bắt 4 ô · Z-score 3 bắt 2 ô · cả hai cùng bắt 2 ô" (số ô lỗi
+    của cột là HỢP nên không bằng tổng). Đã test đối chiếu bản cũ 360 ca + dữ liệu có ô
+    mỗi phương pháp bắt riêng (cột `d` seed 16523).
+22. **Chỉnh giao diện sau phản hồi thật:** tiêu đề chữ HOA to dùng `line-height` ≥ 1.2 (chữ
+    hoa tiếng Việt có dấu chồng Ễ/Ệ/Ữ/Ạ; 0.95-1.1 làm dấu dòng dưới chạm dòng trên — đã sửa
+    mọi tiêu đề lớn: hero, `.tx-title`, `.tool-hero-headline`, `.ft-h2`, class-noise,
+    auth, menu); bỏ dòng ghi chú "Cần tài khoản · xử lý qua backend Flask · không qua bên
+    thứ ba" dưới nút hero (giữ eyebrow "[ Denoise · dò & xử lý nhiễu dữ liệu ]"); chân trang
+    tăng cỡ chữ (câu mời 30-44px, link cột 15-20px, tiêu đề cột 12.5-15px, dòng cuối
+    12-14.5px, dùng `clamp` để co theo màn).
+23. **VIỆC NỢ / ĐÃ ĐỀ XUẤT NHƯNG CHƯA LÀM (user bảo tạm gác, nhớ NHẮC lại):**
+    - **[ĐÃ LÀM] Cảnh báo IQR suy biến ở tool Giá trị bất thường.** Cột "zero-inflated" (vd
+      80% là 0, giống `capital.gain` của Adult Income) → Q1=Q3=0 → vùng bình thường `[0,0]`
+      → IQR gắn cờ MỌI ô khác 0 (thử: 20/20) và "Kéo về biên" ép hết về 0 (mất dữ liệu thật);
+      Z-score chỉ gắn cờ 5 ô. Class Noise đã có chốt chặn (bỏ qua cột IQR=0, tự bỏ cột đó).
+      Tool này CỐ TÌNH KHÔNG tự bỏ qua cột mà chỉ CẢNH BÁO (người dùng quyết định): hàm
+      `iqr_degenerate_info()` ở `detectors.py` (Q1==Q3 và ≥4 ô số → trả giá trị phổ biến + tỉ lệ),
+      `/api/noise-tools/configured` (detect, tool outlier) trả `per_column[].warnings` =
+      `[{code:"iqr_zero", threshold, value, share, valid_count}]` khi cột có ô lỗi VÀ có luật IQR;
+      FE (`renderCfMultiSummary`) hiện khung vàng ".cf-sum-warn" + dòng đỏ ".cf-sum-risk" chỉ hiện
+      khi chọn cách xử lý đổi dữ liệu (không phải "skip"/"keep"). Kết quả detect KHÔNG đổi.
+      Mẫu để thử: `data/sample_zero_inflated.csv` (cột `capital_gain` 80 ô = 0 + 20 ô 500-9000).
+    - Hai việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại" (Áp dụng đang dùng cấu
+      hình lúc Phát hiện dù form đã sửa); báo "Sẽ xoá N dòng" trước khi Áp dụng (3 tool Cần
+      cấu hình chưa có xác nhận/hoàn tác như Bước 5 cũ).
+    - **Rule liên cột — chưa sửa gì. Đã rà, thiếu:** (1) không báo số dòng bị BỎ QUA vì không
+      so sánh được → sai khuôn ngày ra "0 lỗi" (đã chạy thử: ngày dd/mm/yyyy với khuôn mặc
+      định → 0 dòng); (2) Phụ thuộc hàm gắn cờ CẢ nhóm mâu thuẫn mà chỉ có xoá/giữ → xoá
+      nhầm dòng đúng, nên thêm "sửa về giá trị phổ biến nhất"; (3) không có "bắt buộc có giá
+      trị khi…" (ô trống luôn bị bỏ qua); (4) Nếu–thì chỉ 1 điều kiện mỗi vế, không VÀ/HOẶC;
+      (5) công thức chỉ số + − × ÷, không ngày/hàm/chữ, tên cột có dấu cách không gõ được
+      (dùng `ast`); (6) Phụ thuộc hàm chỉ 1 cột→1 cột; (7) UI mỗi lần 1 rule, kiểu giá trị
+      (Số/Ngày/Chữ) phải chọn tay nên dễ chọn vô nghĩa (age=Ngày) → mọi dòng bị bỏ qua.
+      Công thức chia cho 0 bị gắn cờ như vi phạm. Tốc độ công thức OK (100k dòng ~1.4s).
+    - **Hướng đã thảo luận cho Rule liên cột (user chưa chốt, đang gác):** gộp thành NGÔN NGỮ
+      BIỂU THỨC `Biểu thức` (số học + so sánh + `và/hoặc/không` + `=>` kéo theo + `<=>` tương
+      đương + `có(cột)` + tên cột `[tên có dấu cách]`), tự viết bộ phân tích (Pratt parser, KHÔNG
+      `eval`), đánh giá logic 3 giá trị (đúng/sai/chưa biết; chỉ gắn cờ khi chắc chắn sai),
+      nhận cả ký hiệu lẫn chữ tiếng Việt. Nâng cấp tab "Công thức" thành "Biểu thức"; "So
+      sánh"/"Nếu–thì" thành MẪU điền sẵn sinh ra biểu thức; Phụ thuộc hàm giữ riêng (xét theo
+      nhóm dòng). Đợt 1 chưa có ngày/hàm (code So sánh/Nếu–thì cũ giữ lại vì còn lo ngày
+      tháng tới đợt 2). Kèm 2 việc chung cho cả 4 kiểu: báo số dòng bỏ qua + tự điền kiểu
+      giá trị theo kiểu cột đoán. Test cần: biểu thức cho kết quả y hệt So sánh/Nếu–thì/Công
+      thức cũ, bảng chân trị 3 giá trị, thử nhét mã độc.
+    - Gợi ý cải thiện 3 tool khác chưa làm: điền sẵn giá trị chuẩn gợi ý từ dữ liệu (Không
+      nhất quán) và khoảng gợi ý (Ngoài khoảng); tick bỏ riêng từng dòng; chế độ "cả hai
+      phương pháp cùng đồng ý" cho outlier; mục "cột khác" cho cột bị đoán nhầm kiểu; bỏ
+      qua cột kiểu id khi tự chọn form đầu.
+    - Giữ nguyên từ trước (mục "Kế hoạch" cuối file): TTL/auto-xoá dữ liệu RAM + giới hạn dung
+      lượng upload (user: "làm sau"); hỗ trợ thêm TSV/ODS/Parquet (hiện CSV/Excel).
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -1318,6 +1501,19 @@ tới khi có nhu cầu đổi tên repo thật sự.
       cần cấu hình" (xoá dòng trùng/cắt khoảng trắng/điền-xoá ô trống đơn giản/xoá dòng trống hoàn
       toàn — loại cuối HOÀN TOÀN MỚI) vs 7+Class Noise vẫn ở Workspace (cần khai dtype/tham số/nhãn).
       Đã test 23 test độc lập + 26 Flask test client + 18 Playwright, không hồi quy bộ test cũ.
+- [x] Giao diện Denoise (mục 18): `workspace.html/.css/.js` + `workspace-flow.js`, `GET /` trỏ
+      thẳng vào đó; 3 nhóm tool nối tiếp được với nhau; đã test Playwright nhiều bộ.
+- [x] Tool "Ô trống" gộp + "Điền tay từng ô" (mục 19); Sai định dạng chuyển sang Free Tools.
+- [x] 3 tool Cần cấu hình kiểm nhiều cột (Không nhất quán, Ngoài khoảng, Giá trị bất thường)
+      + nhiều phương pháp IQR/Z-score trên 1 cột (mục 20-21). Commit `ce458b1`, `d59faf0`, `e02f5de`.
+- [x] Chỉnh giao diện: tiêu đề chữ hoa line-height 1.2, bỏ ghi chú hero, chân trang to hơn (mục 22).
+- [x] Cảnh báo IQR=0 ở tool Giá trị bất thường (mục 23, đã làm).
+- [ ] **(NỢ)** 2 việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại", báo "Sẽ xoá N dòng"
+      trước khi Áp dụng ở 3 tool Cần cấu hình — xem mục 23.
+- [ ] **(NỢ)** Rule liên cột: báo số dòng bị bỏ qua + gộp thành ngôn ngữ biểu thức + sửa Phụ thuộc
+      hàm (xem mục 23). User tạm gác vì quá tải.
+- [ ] Cập nhật lại file này mỗi khi làm xong 1 cụm việc lớn (lần này ghi bù mục 18-23 sau khi
+      thấy file thiếu Denoise).
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá
       chậm trên 284.807 dòng, đã huỷ giữa chừng) — cần chạy lại với
       n_estimators thấp hơn hoặc lấy mẫu con nếu muốn có số liệu so sánh
@@ -1356,11 +1552,13 @@ tới khi có nhu cầu đổi tên repo thật sự.
   mở trực tiếp file `frontend/index.html` nữa — từ khi có tài khoản đăng
   nhập, Flask tự phục vụ luôn frontend để cookie session hoạt động đúng,
   mở theo kiểu `file://` cũ sẽ báo "chưa kết nối backend" dù server vẫn
-  chạy bình thường). **MỚI (mục 16)**: `http://localhost:5000/` giờ ra
-  trang GIỚI THIỆU (`landing.html`, không bắt đăng nhập) — bấm "Bắt đầu"
-  mới sang app thật (`index.html`); muốn vào thẳng app lúc dev/test thì gõ
-  `http://localhost:5000/index.html`. Backend cần chạy ở 1 terminal riêng,
-  để yên không gõ lệnh khác vào đó.
+  chạy bình thường). **ĐÃ ĐỔI (mục 18)**: `http://localhost:5000/` giờ ra
+  thẳng giao diện **Denoise** (`workspace.html`): trang chủ công khai, các tool
+  cần đăng nhập (chưa đăng nhập thì form đăng nhập tự hiện). Giao diện cũ vẫn mở
+  được: `http://localhost:5000/index.html` (app 5 bước cũ) và `/landing.html`.
+  Backend cần chạy ở 1 terminal riêng, để yên không gõ lệnh khác vào đó.
+- Test tự động KHÔNG nằm trong repo (viết ở thư mục tạm mỗi phiên, mất khi máy ảo dựng lại).
+  Muốn chạy lại cần viết lại; các con số đã kiểm chứng ghi ở từng mục trên.
 
 ## Ghi chú giao tiếp
 

@@ -119,6 +119,24 @@ def outlier_bounds(valid_numeric: pd.Series, method: str, threshold: float) -> O
     return q1 - threshold * iqr, q3 + threshold * iqr
 
 
+def iqr_degenerate_info(series: pd.Series) -> Optional[dict]:
+    """Nhận biết IQR "suy biến": Q1 == Q3, tức đa số ô trong cột cùng 1 giá trị (vd cột có 80% là số 0, kiểu `capital.gain`).
+    Khi đó vùng "bình thường" của IQR co lại thành đúng 1 điểm [Q1, Q3], nên MỌI giá trị khác đều bị coi là bất thường -- kể cả những
+    giá trị là dữ liệu thật -- và "kéo về biên" sẽ ép hết về giá trị phổ biến, mất dữ liệu (xem CLAUDE.md mục 9, 23).
+
+    Trả None nếu IQR > 0 hoặc có dưới 4 ô số hợp lệ (cùng ngưỡng với detect_outlier(): quá ít điểm thì detect không chạy).
+    Ngược lại trả {"value": giá trị phổ biến (= Q1 = Q3), "share": tỉ lệ ô bằng đúng giá trị đó, "valid_count": số ô số hợp lệ}.
+    KHÔNG đổi kết quả detect -- chỉ để giao diện cảnh báo người dùng (họ quyết định xử lý)."""
+    numeric = series.astype(str).apply(_to_numeric_or_nan).dropna()
+    if len(numeric) < 4:
+        return None
+    q1 = numeric.quantile(0.25)
+    q3 = numeric.quantile(0.75)
+    if q3 != q1:
+        return None
+    return {"value": float(q1), "share": float((numeric == q1).mean()), "valid_count": int(len(numeric))}
+
+
 def detect_outlier(series: pd.Series, cfg: ColumnNoiseConfig) -> pd.Series:
     """Loại noise 4: OUTLIER (giá trị đúng định dạng, trong khoảng hợp lệ,
     nhưng lệch bất thường so với PHÂN BỐ chung của cả cột).

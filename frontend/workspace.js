@@ -654,7 +654,7 @@ const CF_INFO = {
     mock: mockPair([[[]], [[]], [["", "", "is-hit"]], [[]], [[]]], [[[]], [[]], [["", "", "is-fixed"]], [[]], [[]]], "1 ô"),
     steps: ["Chọn file; chọn cột số cần kiểm. Bấm Thêm cột kiểm tra để kiểm nhiều cột một lượt.", "Mỗi cột chọn IQR (hệ số 1.5) và/hoặc Z-score (3 độ lệch chuẩn); bấm Thêm phương pháp để dùng cả hai, rồi bấm Phát hiện.", "Xem bảng lỗi theo từng cột; chọn cách xử lý cho từng cột (kéo về biên, điền lại, xoá dòng hoặc giữ nguyên nếu đó là dữ liệu thật) rồi bấm Áp dụng."],
     explainer: [
-      { t: "IQR và Z-score", b: "IQR lấy khoảng giữa tứ phân vị 1 và 3, nhân hệ số 1.5 làm biên; bền với dữ liệu lệch. Z-score đo số độ lệch chuẩn so với trung bình; hợp với dữ liệu phân phối chuông." },
+      { t: "IQR và Z-score", b: "IQR lấy khoảng giữa tứ phân vị 1 và 3, nhân hệ số 1.5 làm biên; bền với dữ liệu lệch. Z-score đo số độ lệch chuẩn so với trung bình; hợp với dữ liệu phân phối chuông. Cột mà đa số ô cùng một giá trị (vd 80% là số 0) làm IQR bằng 0, khi đó IQR gắn cờ mọi giá trị khác: bảng lỗi sẽ cảnh báo, nên dùng Z-score hoặc giữ nguyên." },
       { t: "Dùng cả hai phương pháp", b: "Ô bị gắn cờ nếu bất thường theo IQR hoặc theo Z-score. Bảng lỗi ghi mỗi phương pháp bắt được bao nhiêu ô và bao nhiêu ô cả hai cùng bắt. Khi kéo về biên, ô được kéo về khoảng chung của cả hai phương pháp (biên chặt hơn)." },
       { t: "Cột nào được liệt kê", b: "Chỉ các cột số (số nguyên hoặc số thực) do Denoise đoán từ giá trị thật. Mỗi cột chỉ khai một lần, có phương pháp và ngưỡng riêng; kiểu số nguyên hay số thực đã đoán sẵn, bạn đổi lại được." },
       { t: "Chọn cách xử lý từng cột", b: "Mỗi cột có cách xử lý riêng, mặc định là chưa chọn để bấm Áp dụng không xoá nhầm. Cột nào chưa chọn thì không bị đụng tới. Nếu nhiều cột cùng chọn xoá dòng, dòng nào lỗi ở bất kỳ cột đó đều bị xoá." },
@@ -2337,8 +2337,18 @@ function renderCfMultiSummary(perColumn, tool) {
       if (p.both_count !== undefined) parts.push(`cả hai cùng bắt ${p.both_count} ô`);
       methods = `<span class="cf-sum-methods">${escapeHtml(parts.join(" · "))}</span>`;
     }
+    // IQR suy biến (backend báo `warnings` code iqr_zero): đa số ô cùng 1 giá trị nên IQR coi MỌI giá trị khác là bất thường. Hiện cảnh báo
+    // luôn; còn dòng đỏ "cách xử lý đang chọn sẽ sửa/xoá dữ liệu thật" chỉ hiện khi người dùng chọn 1 cách thực sự đổi dữ liệu.
+    let warn = "";
+    const iqrZero = has && (p.warnings || []).find((w) => w.code === "iqr_zero");
+    if (iqrZero) {
+      const v = Number.isInteger(iqrZero.value) ? String(iqrZero.value) : String(Math.round(iqrZero.value * 1000) / 1000);
+      warn = `<span class="cf-sum-warn">⚠ IQR của cột này bằng 0: ${Math.round(iqrZero.share * 100)}% ô đều bằng ${escapeHtml(v)}, nên IQR coi MỌI giá trị khác ${escapeHtml(v)} là bất thường, kể cả giá trị thật. ` +
+        `Cột kiểu này hợp với Z-score hơn; hãy xem kỹ các ô bị gắn cờ trước khi sửa.</span>` +
+        `<span class="cf-sum-risk" data-role="sum-risk" hidden>Cách xử lý đang chọn sẽ sửa hoặc xoá cả những giá trị có thể là dữ liệu thật (cột này chủ yếu là ${escapeHtml(v)}).</span>`;
+    }
     return `<div class="cf-sum-row${has ? " has-errors" : ""}"><span class="cf-sum-name" title="${escapeAttr(p.column)}">${escapeHtml(p.column)}</span>` +
-      `<span class="cf-sum-count">${p.findings_count} ô lỗi${has ? ` · ${p.flagged_rows_count} dòng` : ""}</span>${action}${fixed}${methods}</div>`;
+      `<span class="cf-sum-count">${p.findings_count} ô lỗi${has ? ` · ${p.flagged_rows_count} dòng` : ""}</span>${action}${fixed}${methods}${warn}</div>`;
   }).join("");
   $("cf-multi").innerHTML =
     `<div class="cf-sum"><div class="ft-coltypes-bar"><span class="ft-coltypes-title">Lỗi theo từng cột</span>` +
@@ -2347,7 +2357,11 @@ function renderCfMultiSummary(perColumn, tool) {
 // Chọn "điền giá trị cố định" ở 1 cột -> hiện ô nhập giá trị của đúng dòng đó (đổi cách khác thì ẩn).
 $("cf-multi").addEventListener("change", (e) => {
   if (e.target.dataset.role !== "sum-action") return;
-  const box = e.target.closest(".cf-sum-row").querySelector('[data-role="sum-fixed"]');
+  const row = e.target.closest(".cf-sum-row");
+  // Cột có cảnh báo IQR = 0: chọn cách nào thực sự đổi dữ liệu (không phải "chưa chọn"/"giữ nguyên") thì hiện dòng đỏ nhắc nguy cơ mất dữ liệu thật.
+  const risk = row.querySelector('[data-role="sum-risk"]');
+  if (risk) risk.hidden = e.target.value === "skip" || e.target.value === "keep";
+  const box = row.querySelector('[data-role="sum-fixed"]');
   if (!box) return;
   box.hidden = e.target.value !== "fixed_value";
   if (!box.hidden) box.focus();
