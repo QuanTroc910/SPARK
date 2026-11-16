@@ -27,7 +27,14 @@ from typing import Any, Optional
 import pandas as pd
 
 from .config import DEFAULT_MISSING_PLACEHOLDERS, CompareOperator, CrossFieldRuleConfig, RuleType, RuleValueType
-from .expression_rules import detect_expression_rule, expression_column_names, expression_columns
+from .expression_rules import (
+    detect_expression_rule,
+    detect_if_then_rule,
+    expression_column_names,
+    expression_columns,
+    if_then_column_names,
+    if_then_columns,
+)
 
 # Ánh xạ CompareOperator (enum) -> hàm so sánh thật của module operator chuẩn.
 _COMPARE_FUNCS = {
@@ -416,6 +423,10 @@ def describe_rule(cfg: CrossFieldRuleConfig, df: Optional[pd.DataFrame] = None) 
 
     df (tuỳ chọn): bảng dữ liệu, chỉ rule EXPRESSION cần -- tên cột người dùng gõ có thể khác hoa/thường hoặc Unicode với cột thật, phải đổi sang
     ĐÚNG tên cột thật thì giao diện mới tô được ô. Không truyền df thì dùng tên như người dùng gõ."""
+    if cfg.rule_type == RuleType.IF_THEN:
+        if df is not None:
+            return " & ".join(str(c) for c in if_then_columns(df, cfg.if_expression, cfg.then_expression))
+        return " & ".join(if_then_column_names(cfg.if_expression, cfg.then_expression))
     if cfg.rule_type == RuleType.EXPRESSION:
         if df is not None:
             return " & ".join(str(c) for c in expression_columns(df, cfg.expression))
@@ -438,4 +449,5 @@ CROSS_FIELD_RULE_DETECTORS = {
     RuleType.FORMULA: detect_formula_rule,
     RuleType.FUNCTIONAL_DEPENDENCY: detect_functional_dependency_rule,
     RuleType.EXPRESSION: detect_expression_rule,
+    RuleType.IF_THEN: detect_if_then_rule,
 }

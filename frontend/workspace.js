@@ -158,7 +158,7 @@ const state = {
   // cf thêm: columns/guessed đọc từ /api/noise-tools/inspect, detect = kết quả nhịp "Phát hiện".
   cf: { tool: "out-of-range", inputMode: "file", selectedFile: null, rawPreviewActive: false, filePreview: null, columns: [], guessed: {}, detect: null,
         // Rule liên cột: kiểu rule đang chọn + nội dung ô Biểu thức (giữ lại khi dựng lại form do đổi file / đọc lại cột, đỡ phải gõ lại)
-        ruleType: "expression", expr: { text: "", dateFormat: "", tolerance: "0.01" },
+        ruleType: "expression", expr: { text: "", ifText: "", thenText: "", dateFormat: "", tolerance: "0.01" }, exprTarget: "",
         // colSig = "chữ ký" đầu vào mà cột hiện có được đọc từ đó; pendingSig = đầu vào đang được đọc dở; colSeq = chống chạy chồng.
         colSig: "", pendingSig: "", colSeq: 0,
         // Tool kiểm NHIỀU cột (Không nhất quán, Ngoài khoảng -- xem CF_MULTI): forms[tên tool] = các form đang khai
@@ -684,8 +684,8 @@ const CF_INFO = {
     mock: mockPair([[[]], [["is-hit", "", "is-hit"]], [[]], [[]]], [[[]], [[]], [[]]], "-1 dòng"),
     steps: ["Chọn file; chọn kiểu rule: biểu thức, nếu-thì hoặc phụ thuộc hàm.", "Viết biểu thức (hoặc chèn mẫu so sánh hai cột), hay khai nếu-thì / phụ thuộc hàm, rồi bấm Phát hiện.", "Xem dòng vi phạm và số dòng bị bỏ qua; xoá dòng vi phạm hoặc giữ nguyên để rà tay."],
     explainer: [
-      { t: "Ba kiểu rule", b: "Biểu thức: một điều kiện mà mọi dòng phải thoả, vd ngay_nghi > ngay_vao, tong == so_luong * don_gia, tuoi >= 18 và tuoi <= 65. Nếu-thì: nếu cột X = giá trị thì cột Y phải thoả điều kiện. Phụ thuộc hàm: mỗi giá trị cột A chỉ được đi với đúng một giá trị của từng cột phụ thuộc." },
-      { t: "Cách viết biểu thức", b: "So sánh: < <= > >= = !=. Tính: + - * /. Nối điều kiện: và, hoặc, không (viết va, hoac, khong cũng được). Chữ để trong dấu nháy: \"Sales\". Tên cột có dấu cách để trong [ ], vd [Ngày vào]. Ngày: Denoise tự nhận khuôn (dd/mm/yyyy, yyyy-mm-dd...), hai ngày trừ nhau ra số ngày, ngày + 30 là một ngày. Khi Denoise đọc sai kiểu cột, ép bằng so(cột), ngay(cột, \"%d/%m/%Y\"), chu(cột). Viết liền 0 <= tuoi <= 120 cũng được." },
+      { t: "Ba kiểu rule", b: "Biểu thức: một điều kiện mà mọi dòng phải thoả, vd ngay_nghi > ngay_vao, tong == so_luong * don_gia, tuoi >= 18 và tuoi <= 65. Nếu-thì: ô NẾU và ô THÌ đều là biểu thức; với mọi dòng thoả NẾU thì THÌ phải đúng, vd NẾU phong_ban = \"Sales\" THÌ luong >= luong_toi_thieu. Phụ thuộc hàm: mỗi giá trị cột A chỉ được đi với đúng một giá trị của từng cột phụ thuộc." },
+      { t: "Cách viết biểu thức", b: "So sánh: < <= > >= = !=. Tính: + - * /. Nối điều kiện: và, hoặc, không (viết va, hoac, khong cũng được). Chữ để trong dấu nháy: \"Sales\". Tên cột có dấu cách để trong [ ], vd [Ngày vào]. Ngày: Denoise tự nhận khuôn (dd/mm/yyyy, yyyy-mm-dd...), hai ngày trừ nhau ra số ngày, ngày + 30 là một ngày. Khi Denoise đọc sai kiểu cột, ép bằng so(cột), ngay(cột, \"%d/%m/%Y\"), chu(cột). Viết liền 0 <= tuoi <= 120 cũng được. Kéo theo: a => b (nếu a thì b), tương đương: a <=> b. Kiểm tra ô có giá trị: có(cột), vd phong_ban = \"Sales\" => có(ma_khach)." },
       { t: "Dòng bị bỏ qua, và an toàn", b: "Ô trống, ô sai kiểu hoặc phép chia cho 0 làm kết quả chưa biết, nên dòng đó không bị gắn cờ mà bị bỏ qua. Denoise đếm và báo lại số dòng bị bỏ qua cùng cách đọc từng cột, để kết quả «0 lỗi» không đánh lừa bạn; «sai và chưa biết» vẫn là sai. Biểu thức được phân tích bằng bộ đọc tự viết: không có eval(), không gọi được hàm nào ngoài so, ngay, chu." },
       PRIVACY_COLUMN(),
     ],
@@ -2046,7 +2046,7 @@ function cfDefaultDtype(column, allowed) {
   return allowed.includes(guessed) ? guessed : allowed[0];
 }
 // 3 kiểu rule liên cột trong giao diện Denoise. "Biểu thức" gộp So sánh + Công thức cũ (backend cũ vẫn giữ compare/formula cho giao diện cũ).
-const RULE_TYPES = [["expression", "Biểu thức"], ["conditional", "Nếu – thì"], ["functional_dependency", "Phụ thuộc hàm"]];
+const RULE_TYPES = [["expression", "Biểu thức"], ["if_then", "Nếu – thì"], ["functional_dependency", "Phụ thuộc hàm"]];
 function renderCfOptions() {
   const tool = state.cf.tool;
   const wrap = $("cf-options");
@@ -2381,6 +2381,26 @@ function prepareCfHandling(multi, data, tool) {
   $("cf-apply-row").hidden = multi && data.findings_count === 0; // không có lỗi nào thì không có gì để áp dụng
   if (multi) renderCfMultiSummary(data.per_column, tool);
 }
+// Khối chèn nhanh DÙNG CHUNG tab Biểu thức và tab Nếu – thì: từ nối + chip tên cột. twoBoxes = tab có 2 ô (NẾU / THÌ) nên cần nhắc đang chèn vào ô nào.
+function exprHelperHTML(cols, twoBoxes) {
+  const chips = cols.map((col) => `<button type="button" class="cf-chip" data-role="expr-col" data-col="${escapeAttr(col)}" title="Chèn cột ${escapeAttr(col)}">${escapeHtml(col)}</button>`).join("");
+  const words = [["và", "và"], ["hoặc", "hoặc"], ["không", "không"], ["( )", "( )"], ["có( )", "có()"]]
+    .map(([label, word]) => `<button type="button" class="btn btn-ghost btn-small" data-role="expr-word" data-word="${word}">${label}</button>`).join("");
+  return `<div class="field">
+      <label>${twoBoxes ? "Bấm để chèn vào ô NẾU / THÌ đang chọn (tại chỗ con trỏ)" : "Bấm để chèn vào biểu thức (tại chỗ con trỏ)"}</label>
+      <div class="cf-expr-words">${words}</div>
+      <div class="cf-chips" id="cf-col-chips">${chips || '<span class="cf-add-hint">(chọn file hoặc dán text trước để có danh sách cột)</span>'}</div>
+      ${twoBoxes ? '<p class="cf-add-hint" id="cf-target-hint">Bấm vào ô NẾU hoặc ô THÌ để chọn nơi chèn.</p>' : ""}
+    </div>`;
+}
+// Khuôn ngày (trống = tự nhận) + sai số khi so bằng: dùng chung 2 tab.
+function exprOptionsHTML() {
+  const e = state.cf.expr;
+  return `<div class="cf-row">
+      <div class="field"><label for="cf-rule-date-format">Khuôn ngày (để trống = tự nhận)</label><input class="input mono" id="cf-rule-date-format" placeholder="%d/%m/%Y" value="${escapeAttr(e.dateFormat)}" /></div>
+      <div class="field"><label for="cf-tolerance">Sai số khi so bằng giữa hai số</label><input class="input" id="cf-tolerance" type="number" step="any" min="0" value="${escapeAttr(e.tolerance)}" /></div>
+    </div>`;
+}
 function renderCfRuleFields() {
   const type = $("cf-rule-type").value;
   const box = $("cf-rule-fields");
@@ -2388,37 +2408,43 @@ function renderCfRuleFields() {
   const c = (id, label, sel) => cfColumnSelect(id, label, sel || cols[0] || "");
   state.cf.ruleType = type;
   if (type === "expression") {
-    const e = state.cf.expr;
-    const chips = cols.map((col) => `<button type="button" class="cf-chip" data-role="expr-col" data-col="${escapeAttr(col)}" title="Chèn cột ${escapeAttr(col)}">${escapeHtml(col)}</button>`).join("");
-    box.innerHTML = `<div class="cf-expr-form"><div class="field">
-        <label for="cf-expression">Biểu thức: điều kiện mà MỌI dòng phải thoả</label>
-        <textarea class="input mono" id="cf-expression" rows="3" spellcheck="false" placeholder="vd: ngay_nghi > ngay_vao   ·   tong == so_luong * don_gia   ·   tuoi >= 18 và tuoi <= 65">${escapeHtml(e.text)}</textarea>
-      </div>
+    state.cf.exprTarget = ""; // dựng lại form: ô chèn mặc định là ô đầu tiên
+    box.innerHTML = `<div class="cf-expr-form">
       <div class="field">
-        <label>Bấm để chèn vào biểu thức (tại chỗ con trỏ)</label>
-        <div class="cf-expr-words">
-          <button type="button" class="btn btn-ghost btn-small" data-role="expr-word" data-word="và">và</button>
-          <button type="button" class="btn btn-ghost btn-small" data-role="expr-word" data-word="hoặc">hoặc</button>
-          <button type="button" class="btn btn-ghost btn-small" data-role="expr-word" data-word="không">không</button>
-          <button type="button" class="btn btn-ghost btn-small" data-role="expr-word" data-word="( )">( )</button>
-        </div>
-        <div class="cf-chips" id="cf-col-chips">${chips || '<span class="cf-add-hint">(chọn file hoặc dán text trước để có danh sách cột)</span>'}</div>
+        <label for="cf-expression">Biểu thức: điều kiện mà MỌI dòng phải thoả</label>
+        <textarea class="input mono" id="cf-expression" rows="3" spellcheck="false" placeholder="vd: ngay_nghi > ngay_vao   ·   tong == so_luong * don_gia   ·   tuoi >= 18 và tuoi <= 65">${escapeHtml(state.cf.expr.text)}</textarea>
       </div>
+      ${exprHelperHTML(cols, false)}
       <div class="field">
         <label>Mẫu: so sánh hai cột</label>
         <div class="cf-row-3">${c("cf-tpl-a", "Cột A")}<div class="field"><label>&nbsp;</label>${cfOperatorSelect("cf-tpl-op")}</div>${c("cf-tpl-b", "Cột B", cols[1])}</div>
         <div class="cf-add-row"><button type="button" class="btn btn-ghost btn-small" data-role="expr-template">Chèn mẫu vào biểu thức</button></div>
       </div>
-      <div class="cf-row">
-        <div class="field"><label for="cf-rule-date-format">Khuôn ngày (để trống = tự nhận)</label><input class="input mono" id="cf-rule-date-format" placeholder="%d/%m/%Y" value="${escapeAttr(e.dateFormat)}" /></div>
-        <div class="field"><label for="cf-tolerance">Sai số khi so bằng giữa hai số</label><input class="input" id="cf-tolerance" type="number" step="any" min="0" value="${escapeAttr(e.tolerance)}" /></div>
-      </div>
+      ${exprOptionsHTML()}
       <p class="hint-note">Dòng nào chắc chắn sai thì bị gắn cờ. Tên cột có dấu cách viết trong [ ]. Ô trống hoặc sai kiểu không kết luận được nên bị bỏ qua, và Denoise báo lại số dòng đó sau khi phát hiện. Cách viết đầy đủ ở phần giới thiệu phía trên.</p></div>`;
-  } else if (type === "conditional") {
-    box.innerHTML = `<p class="hint-note">NẾU</p><div class="cf-row-3">${c("cf-if-col", "Cột điều kiện")}<div class="field"><label>&nbsp;</label>${cfOperatorSelect("cf-if-op")}</div><div class="field"><label for="cf-if-value">Giá trị</label><input class="input" id="cf-if-value" placeholder="vd: Nam" /></div></div>
-      <div class="field"><label for="cf-if-type">Kiểu giá trị điều kiện</label>${cfValueTypeSelect("cf-if-type", "text")}</div>
-      <p class="hint-note">THÌ</p><div class="cf-row-3">${c("cf-then-col", "Cột kết quả", cols[1])}<div class="field"><label>&nbsp;</label>${cfOperatorSelect("cf-then-op")}</div><div class="field"><label for="cf-then-value">Giá trị</label><input class="input" id="cf-then-value" placeholder="vd: 0" /></div></div>
-      <div class="cf-row"><div class="field"><label for="cf-then-type">Kiểu giá trị kết quả</label>${cfValueTypeSelect("cf-then-type", "number")}</div><div class="field"><label for="cf-rule-date-format">Khuôn ngày (nếu kiểu Ngày)</label><input class="input mono" id="cf-rule-date-format" value="%Y-%m-%d" /></div></div>`;
+  } else if (type === "if_then") {
+    state.cf.exprTarget = "";
+    const e = state.cf.expr;
+    box.innerHTML = `<div class="cf-expr-form">
+      <div class="field">
+        <label for="cf-if-expr">NẾU (điều kiện)</label>
+        <textarea class="input mono" id="cf-if-expr" rows="2" spellcheck="false" placeholder='vd: phong_ban == "Sales"   ·   tuoi >= 18 và gioi_tinh == "Nữ"'>${escapeHtml(e.ifText)}</textarea>
+      </div>
+      <div class="field">
+        <label for="cf-then-expr">THÌ (điều kiện phải thoả)</label>
+        <textarea class="input mono" id="cf-then-expr" rows="2" spellcheck="false" placeholder="vd: luong >= luong_toi_thieu   ·   có(ma_khach)   ·   ngay_ra > ngay_vao">${escapeHtml(e.thenText)}</textarea>
+      </div>
+      ${exprHelperHTML(cols, true)}
+      <div class="field">
+        <label>Mẫu: cột – toán tử – giá trị</label>
+        <div class="cf-row-3">${c("cf-tpl-col", "Cột")}<div class="field"><label>&nbsp;</label>${cfOperatorSelect("cf-tpl-op")}</div><div class="field"><label for="cf-tpl-val">Giá trị</label><input class="input" id="cf-tpl-val" placeholder="vd: Sales · 18 · 2024-01-31" /></div></div>
+        <div class="cf-add-row">
+          <button type="button" class="btn btn-ghost btn-small" data-role="expr-template-if">Chèn vào NẾU</button>
+          <button type="button" class="btn btn-ghost btn-small" data-role="expr-template-then">Chèn vào THÌ</button>
+        </div>
+      </div>
+      ${exprOptionsHTML()}
+      <p class="hint-note">Với mọi dòng thoả NẾU thì THÌ phải đúng; dòng thoả NẾU mà THÌ sai bị gắn cờ, dòng không thoả NẾU luôn đạt. Hai ô đều là biểu thức đầy đủ (và / hoặc / không, so cột với cột, tính toán, ngày). Ô trống hoặc sai kiểu không kết luận được nên bị bỏ qua và được báo lại.</p></div>`;
   } else {
     box.innerHTML = `<div class="cf-row cf-fd-row">${c("cf-det-col", "Cột xác định (A)")}<div class="field" id="cf-fd-deps"></div></div>
       <p class="hint-note">Mỗi giá trị A chỉ được đi với đúng 1 giá trị của TỪNG cột phụ thuộc (vd ma_nv → ten, ngay_sinh, so_dien_thoai, cccd). Mỗi cột phụ thuộc được kiểm riêng. Không dùng cho cột là kết quả giao dịch lặp lại.</p>`;
@@ -2469,15 +2495,34 @@ $("cf-options").addEventListener("change", (e) => {
     renderCfFdDeps(); // các ô khác phải loại cột vừa chọn
   }
 });
-/* ----- Rule "Biểu thức": chèn cột / từ nối / mẫu so sánh vào ô biểu thức tại chỗ con trỏ ----- */
-const EXPR_RESERVED = new Set(["và", "va", "and", "hoặc", "hoac", "or", "không", "khong", "not", "so", "số", "ngay", "ngày", "chu", "chữ"]);
+/* ----- Rule "Biểu thức" / "Nếu – thì": chèn cột / từ nối / mẫu vào ô đang chọn, tại chỗ con trỏ ----- */
+const EXPR_RESERVED = new Set(["và", "va", "and", "hoặc", "hoac", "or", "không", "khong", "not", "so", "số", "ngay", "ngày", "chu", "chữ", "co", "có"]);
+const EXPR_BOXES = ["cf-expression", "cf-if-expr", "cf-then-expr"]; // các ô nhập biểu thức (tuỳ tab chỉ có 1 hoặc 2 ô trong trang)
 // Tên cột viết trần được nếu chỉ gồm chữ/số/_/. (không bắt đầu bằng số) và không trùng từ khoá; còn lại để trong [ ].
 function exprRef(name) {
   const plain = /^[\p{L}_][\p{L}\p{N}_.]*$/u.test(name) && !EXPR_RESERVED.has(name.toLowerCase());
   return plain ? name : `[${name}]`;
 }
-function insertIntoExpression(text) {
-  const box = $("cf-expression");
+// Giá trị người dùng gõ ở ô "Mẫu": cột số + giá trị là số thì viết trần (age >= 18), còn lại để trong nháy ("Sales", "2024-01-31"). Bộ máy tự đổi chữ
+// trong nháy sang kiểu của vế kia nên viết nháy luôn an toàn; viết trần chỉ cho đẹp ở cột số.
+function exprLiteral(col, raw) {
+  const v = raw.trim();
+  if (["integer", "float"].includes(state.cf.guessed[col]) && /^-?\d+(\.\d+)?$/.test(v)) return v;
+  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+function saveExprState() {
+  const e = state.cf.expr;
+  if ($("cf-expression")) e.text = $("cf-expression").value;
+  if ($("cf-if-expr")) e.ifText = $("cf-if-expr").value;
+  if ($("cf-then-expr")) e.thenText = $("cf-then-expr").value;
+}
+// Ô sẽ nhận chữ chèn vào: ô người dùng vừa bấm vào (state.cf.exprTarget), không thì ô đầu tiên đang có trong trang.
+function exprTargetBox(forcedId) {
+  const wanted = forcedId || state.cf.exprTarget;
+  return (wanted && $(wanted)) || EXPR_BOXES.map((id) => $(id)).find(Boolean) || null;
+}
+function insertIntoExpression(text, forcedId) {
+  const box = exprTargetBox(forcedId);
   if (!box) return;
   const start = box.selectionStart == null ? box.value.length : box.selectionStart;
   const end = box.selectionEnd == null ? start : box.selectionEnd;
@@ -2486,14 +2531,21 @@ function insertIntoExpression(text) {
   box.value = before + pad + text + box.value.slice(end);
   const caret = (before + pad + text).length;
   box.focus();
-  // Chèn "( )" thì đặt con trỏ vào giữa hai dấu ngoặc để gõ tiếp.
-  box.setSelectionRange(text === "( )" ? caret - 1 : caret, text === "( )" ? caret - 1 : caret);
-  state.cf.expr.text = box.value;
+  // Chèn "( )" hoặc "có()" thì đặt con trỏ vào giữa hai dấu ngoặc để gõ tiếp.
+  const inside = text === "( )" || text.endsWith("()");
+  box.setSelectionRange(inside ? caret - 1 : caret, inside ? caret - 1 : caret);
+  saveExprState();
 }
+$("cf-options").addEventListener("focusin", (e) => {
+  if (state.cf.tool !== "cross-rule" || !EXPR_BOXES.includes(e.target.id)) return;
+  state.cf.exprTarget = e.target.id;
+  const hint = $("cf-target-hint");
+  if (hint) hint.textContent = e.target.id === "cf-if-expr" ? "Đang chèn vào ô NẾU." : "Đang chèn vào ô THÌ.";
+});
 $("cf-options").addEventListener("input", (e) => {
   if (state.cf.tool !== "cross-rule") return;
-  if (e.target.id === "cf-expression") state.cf.expr.text = e.target.value;
-  else if (e.target.id === "cf-rule-date-format" && $("cf-rule-type").value === "expression") state.cf.expr.dateFormat = e.target.value;
+  if (EXPR_BOXES.includes(e.target.id)) saveExprState();
+  else if (e.target.id === "cf-rule-date-format" && ["expression", "if_then"].includes($("cf-rule-type").value)) state.cf.expr.dateFormat = e.target.value;
   else if (e.target.id === "cf-tolerance") state.cf.expr.tolerance = e.target.value;
 });
 $("cf-options").addEventListener("click", (e) => {
@@ -2506,6 +2558,15 @@ $("cf-options").addEventListener("click", (e) => {
     const a = $("cf-tpl-a").value;
     const b = $("cf-tpl-b").value;
     if (a && b) insertIntoExpression(`${exprRef(a)} ${$("cf-tpl-op").value} ${exprRef(b)}`);
+    return;
+  }
+  const tplBtn = e.target.closest('[data-role="expr-template-if"], [data-role="expr-template-then"]');
+  if (tplBtn) {
+    const col = $("cf-tpl-col").value;
+    const val = $("cf-tpl-val").value.trim();
+    if (!col) return;
+    if (!val) { $("cf-tpl-val").focus(); return; } // chưa gõ giá trị thì không chèn gì, đưa con trỏ vào ô giá trị
+    insertIntoExpression(`${exprRef(col)} ${$("cf-tpl-op").value} ${exprLiteral(col, val)}`, tplBtn.dataset.role === "expr-template-if" ? "cf-if-expr" : "cf-then-expr");
     return;
   }
   if (e.target.closest('[data-role="fd-add"]')) {
@@ -2534,9 +2595,13 @@ function buildCfConfig() {
       if (!rule.expression) return { error: "Chưa nhập biểu thức." };
       rule.date_format = $("cf-rule-date-format").value.trim() || null;
       rule.tolerance = num("cf-tolerance"); // để trống -> null, backend dùng mặc định 0.01
-    } else if (rule.rule_type === "conditional") {
-      Object.assign(rule, { if_column: $("cf-if-col").value, if_operator: $("cf-if-op").value, if_value: $("cf-if-value").value, if_value_type: $("cf-if-type").value, then_column: $("cf-then-col").value, then_operator: $("cf-then-op").value, then_value: $("cf-then-value").value, then_value_type: $("cf-then-type").value, date_format: $("cf-rule-date-format").value || null });
-      if (!rule.if_value || !rule.then_value) return { error: "Nhập đủ giá trị ở cả vế NẾU và THÌ." };
+    } else if (rule.rule_type === "if_then") {
+      rule.if_expression = $("cf-if-expr").value.trim();
+      rule.then_expression = $("cf-then-expr").value.trim();
+      if (!rule.if_expression) return { error: "Chưa nhập điều kiện ở ô NẾU." };
+      if (!rule.then_expression) return { error: "Chưa nhập điều kiện ở ô THÌ." };
+      rule.date_format = $("cf-rule-date-format").value.trim() || null;
+      rule.tolerance = num("cf-tolerance");
     } else {
       Object.assign(rule, { determinant_column: $("cf-det-col").value, dependent_columns: cfFdDeps.slice() });
       if (!rule.dependent_columns.length) return { error: "Chọn ít nhất 1 cột phụ thuộc." };
@@ -2705,10 +2770,11 @@ $("cf-detect-btn").addEventListener("click", async () => {
   // Nhịp 2: danh sách cách xử lý do backend quyết theo kiểu cột × loại lỗi.
   const sel = $("cf-action");
   // Phụ thuộc hàm (có fd_plan): mặc định "— Chọn cách xử lý —" (không chọn sẵn cách nào đổi dữ liệu, cùng bài học Bước 5 cũ) + hiện xem trước tác động.
-  state.cf.fdPlan = data.fd_plan || null;
+  // Rule thường (không phải Phụ thuộc hàm) tự dựng "kế hoạch" từ số dòng vi phạm để cũng có dòng xem trước "Sẽ xoá N dòng (a → b)".
+  state.cf.fdPlan = data.fd_plan || { generic: true, remove_row: { rows: data.flagged_rows_count }, unresolved_groups: 0 };
   state.cf.fdTotalRows = data.total_rows;
   state.cf.fdDeterminant = data.fd_analysis ? data.fd_analysis.determinant : "";
-  sel.innerHTML = (data.fd_plan ? '<option value="">— Chọn cách xử lý —</option>' : "") +
+  sel.innerHTML = '<option value="">— Chọn cách xử lý —</option>' +
     data.available_actions.map((a) => `<option value="${a}">${ACTION_LABELS[a] || a}</option>`).join("");
   renderCfActionPreview();
   $("cf-fixed-value-wrap").hidden = sel.value !== "fixed_value";
@@ -2736,8 +2802,12 @@ function renderCfActionPreview() {
     text = n ? `Sẽ xoá ${n} dòng nghi sai (${total} → ${total - n} dòng).${left}` : `Không có dòng nào xoá được tự động.${left}`;
   } else if (action === "remove_row") {
     const n = plan.remove_row.rows;
-    text = `Sẽ xoá ${n} dòng (${total} → ${total - n} dòng), gồm cả các dòng có thể là đúng.`;
-    box.classList.add("is-risk");
+    if (plan.generic) {
+      text = `Sẽ xoá ${n} dòng vi phạm (${total} → ${total - n} dòng).`;
+    } else {
+      text = `Sẽ xoá ${n} dòng (${total} → ${total - n} dòng), gồm cả các dòng có thể là đúng.`;
+      box.classList.add("is-risk");
+    }
   } else {
     text = "Không đổi gì, chỉ để xem hoặc tải file.";
   }

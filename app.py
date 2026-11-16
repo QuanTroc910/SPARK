@@ -47,7 +47,7 @@ from attribute_noise.config import (
     RuleValueType,
 )
 from attribute_noise.cross_field_rules import FormulaError, analyze_functional_dependency, describe_rule
-from attribute_noise.expression_rules import ExpressionError, evaluate_expression
+from attribute_noise.expression_rules import ExpressionError, evaluate_conditional, evaluate_expression
 from attribute_noise.detectors import INTEGER_RE, detect_outlier, iqr_degenerate_info
 from attribute_noise.pipeline import (
     NoiseFinding,
@@ -543,6 +543,8 @@ def _cross_field_rule_from_json(item: dict) -> CrossFieldRuleConfig:
         # FE gửi null/"" khi người dùng để trống ô sai số -> dùng mặc định 0.01 (trước đây null làm hỏng phép so sánh)
         tolerance=0.01 if item.get("tolerance") in (None, "") else float(item["tolerance"]),
         expression=item.get("expression"),
+        if_expression=item.get("if_expression"),
+        then_expression=item.get("then_expression"),
         determinant_column=item.get("determinant_column"),
         dependent_column=item.get("dependent_column"),
     )
@@ -1845,9 +1847,14 @@ def _expression_info(df: pd.DataFrame, rule: CrossFieldRuleConfig) -> dict:
     gì (Số/Ngày/Chữ, khuôn ngày), có bao nhiêu ô trống / không đọc được; số dòng bị BỎ QUA vì không tính được (ô trống, sai kiểu, chia cho 0);
     cột Chữ bị so thứ tự (nhiều khả năng là ngày/số bị nhận nhầm). Tính lại biểu thức 1 lần nữa (vectơ hoá nên rất nhanh) thay vì lấy từ
     detect_noise() vì pipeline chỉ giữ danh sách dòng vi phạm."""
-    result = evaluate_expression(df, rule.expression, rule.tolerance, rule.date_format)
+    if rule.rule_type == RuleType.IF_THEN:
+        result = evaluate_conditional(df, rule.if_expression, rule.then_expression, rule.tolerance, rule.date_format)
+        text = f"nếu {rule.if_expression} thì {rule.then_expression}"
+    else:
+        result = evaluate_expression(df, rule.expression, rule.tolerance, rule.date_format)
+        text = rule.expression
     return {
-        "expression": rule.expression,
+        "expression": text,
         "total_rows": int(len(df)),
         "violating_rows": int(result.violations.sum()),
         "skipped_rows": int(result.unknown.sum()),
@@ -2043,7 +2050,7 @@ def noise_tool_configured():
                     "available_actions": actions,
                     "per_column": per_column,
             }
-            if noise_key == f"rule:{RuleType.EXPRESSION.value}":
+            if noise_key in (f"rule:{RuleType.EXPRESSION.value}", f"rule:{RuleType.IF_THEN.value}"):
                 payload["expression_info"] = _expression_info(df, cross_rules[0])
             if fd_summary:
                 payload["fd_analysis"] = fd_summary

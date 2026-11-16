@@ -11,6 +11,8 @@ AN TOÀN: KHÔNG dùng eval()/exec(). Biểu thức được đọc bằng bộ 
 dưới đây; gặp gì lạ (gọi hàm không có trong danh sách, ký tự lạ, truy cập thuộc tính...) là báo lỗi, không bao giờ chạy mã.
 
 CÚ PHÁP (từ thấp tới cao theo độ ưu tiên):
+    <=>   (tương đương: hai vế cùng đúng hoặc cùng sai)
+    =>    (kéo theo "nếu … thì …", kết hợp từ phải sang trái; a => b chỉ SAI khi a đúng mà b sai)
     hoặc  (or, ||)
     và    (and, &&)
     không (not, !)
@@ -20,6 +22,9 @@ CÚ PHÁP (từ thấp tới cao theo độ ưu tiên):
     - (dấu âm)
     số: 12  3.5   chuỗi chữ: "Sales" hoặc 'Sales'   cột: ten_cot hoặc [Tên cột có dấu cách]   ngoặc ( )
     hàm ép kiểu: so(x) -> Số, ngay(x) / ngay(x, "%d/%m/%Y") -> Ngày, chu(x) -> Chữ
+    hàm kiểm tra ô: có(cột) -> Đúng nếu ô có giá trị, Sai nếu ô trống (luôn biết chắc, không "chưa biết"), dùng cho "bắt buộc có giá trị khi …":
+        phong_ban = "Sales" => có(ma_khach)
+Tab "Nếu – thì" của giao diện dùng evaluate_conditional(): hai ô NẾU và THÌ đều là biểu thức đầy đủ, kết quả = NẾU => THÌ.
 Chấp nhận cả "va/hoac/khong" viết không dấu; tên cột không phân biệt hoa/thường nếu không bị trùng.
 
 KIỂU GIÁ TRỊ: mỗi cột tự được nhận là Số / Ngày / Chữ theo dữ liệu thật (>= 90% ô khớp), người dùng ép lại bằng so()/ngay()/chu() nếu đoán sai.
@@ -95,7 +100,7 @@ _SINGLE_QUOTES = "'‘’"
 # Ký tự hay bị chép từ Word/Excel/trình soạn thảo vào: đổi về phép toán thường.
 _CHAR_ALIASES = {"−": "-", "–": "-", "—": "-", "×": "*", "÷": "/", "≤": "<=", "≥": ">=", "≠": "!="}
 _RELOPS = frozenset({"<", "<=", ">", ">=", "==", "!="})
-_FUNCTIONS = {"so": "so", "số": "so", "ngay": "ngay", "ngày": "ngay", "chu": "chu", "chữ": "chu"}
+_FUNCTIONS = {"so": "so", "số": "so", "ngay": "ngay", "ngày": "ngay", "chu": "chu", "chữ": "chu", "co": "co", "có": "co"}
 
 
 def _tokenize(text: str) -> list:
@@ -143,8 +148,14 @@ def _tokenize(text: str) -> list:
             i = j + 1
             continue
         two = text[i : i + 2]
-        if two == "=>":
-            raise _fail(text, i, "dấu => (nếu … thì …) dùng ở tab «Nếu – thì», không viết trong biểu thức này")
+        if text[i : i + 3] in ("<=>", "<->"):
+            tokens.append(_Tok("kw", "iff", i))
+            i += 3
+            continue
+        if two in ("=>", "->"):
+            tokens.append(_Tok("kw", "imp", i))
+            i += 2
+            continue
         if two in ("<=", ">=", "==", "!="):
             tokens.append(_Tok("op", two, i))
             i += 2
@@ -244,12 +255,35 @@ class _Parser:
         self.depth -= 1
 
     def parse(self):
-        node = self.or_expr()
+        node = self.expr()
         tok = self.peek()
         if tok.kind != "end":
             if tok.kind == "rp":
                 raise self.fail(tok, "dấu ) thừa (không có dấu ( mở tương ứng)")
             raise self.fail(tok, "thiếu phép nối (và / hoặc) hoặc phép so sánh/tính trước chỗ này")
+        return node
+
+    def expr(self):
+        """Mức thấp nhất: a <=> b (tương đương); trên nó là a => b (kéo theo, kết hợp phải); rồi hoặc / và / không / so sánh ..."""
+        self._enter(self.peek())
+        try:
+            node = self.implies_expr()
+            while self.peek().kind == "kw" and self.peek().value == "iff":
+                tok = self.take()
+                node = ("iff", node, self.implies_expr(), tok.pos)
+            return node
+        finally:
+            self._leave()
+
+    def implies_expr(self):
+        node = self.or_expr()
+        if self.peek().kind == "kw" and self.peek().value == "imp":
+            tok = self.take()
+            self._enter(tok)
+            try:
+                return ("imp", node, self.implies_expr(), tok.pos)  # a => b => c  ==  a => (b => c)
+            finally:
+                self._leave()
         return node
 
     def or_expr(self):
@@ -333,7 +367,7 @@ class _Parser:
                 return self.call(tok)
             return ("col", tok.value, tok.pos)
         if tok.kind == "lp":
-            node = self.or_expr()
+            node = self.expr()
             close = self.peek()
             if close.kind != "rp":
                 raise self.fail(tok, "dấu ( này chưa có dấu ) đóng")
@@ -346,13 +380,13 @@ class _Parser:
     def call(self, name_tok: _Tok):
         name = _FUNCTIONS.get(name_tok.value.casefold())
         if name is None:
-            raise self.fail(name_tok, f"«{name_tok.value}» không phải hàm (hàm có sẵn: so, ngay, chu). Nếu «{name_tok.value}» là tên cột thì thiếu phép toán "
+            raise self.fail(name_tok, f"«{name_tok.value}» không phải hàm (hàm có sẵn: so, ngay, chu, có). Nếu «{name_tok.value}» là tên cột thì thiếu phép toán "
                                       "hoặc và/hoặc sau nó; tên cột có ngoặc ( ) thì viết trong [ ]")
         self.take()  # dấu (
         args: list = []
         if self.peek().kind != "rp":
             while True:
-                args.append(self.or_expr())
+                args.append(self.expr())
                 if self.peek().kind == "comma":
                     self.take()
                     continue
@@ -395,7 +429,7 @@ def _columns_in(node, out: Optional[list] = None) -> list:
     elif kind == "bin":
         _columns_in(node[2], out)
         _columns_in(node[3], out)
-    elif kind in ("and", "or"):
+    elif kind in ("and", "or", "imp", "iff"):
         _columns_in(node[1], out)
         _columns_in(node[2], out)
     elif kind == "cmp":
@@ -644,6 +678,16 @@ class _Evaluator:
                     raise self.err(node[3], f"«{word}» phải nối hai điều kiện (vd a > 1 {word} b < 2), nhưng vế {side} đang là {KIND_LABELS[value.kind]}")
             a, b = left.data.array, right.data.array
             return _Val("bool", pd.Series(a & b if kind == "and" else a | b, index=self.index))
+        if kind in ("imp", "iff"):
+            left, right = self.ev(node[1]), self.ev(node[2])
+            word = "=>" if kind == "imp" else "<=>"
+            for side, value in (("trái", left), ("phải", right)):
+                if value.kind != "bool":
+                    hint = " Nếu bạn muốn so sánh «lớn hơn hoặc bằng» thì viết >= (không phải =>)." if kind == "imp" else ""
+                    raise self.err(node[3], f"«{word}» (nếu … thì …) phải nối hai điều kiện, nhưng vế {side} đang là {KIND_LABELS[value.kind]}.{hint}")
+            a, b = left.data.array, right.data.array
+            # Kleene: a => b  =  không a hoặc b  (sai duy nhất khi a đúng mà b sai; a sai thì luôn đúng; còn lại "chưa biết" nếu chưa chắc)
+            return _Val("bool", pd.Series((~a | b) if kind == "imp" else ((~a | b) & (~b | a)), index=self.index))
         if kind == "not":
             inner = self.ev(node[1])
             if inner.kind != "bool":
@@ -748,6 +792,14 @@ class _Evaluator:
     def call(self, node) -> _Val:
         _, name, args, pos = node
         first = args[0]
+        if name == "co":
+            # có(cột): ô có giá trị -> Đúng, ô trống / "N/A"... -> Sai. Luôn biết chắc nên không bao giờ "chưa biết" (khác mọi phép so sánh).
+            if first[0] != "col":
+                raise self.err(pos, "có() chỉ dùng với một cột, vd có(ma_khach)")
+            actual = self.resolver.resolve(first[1], self.text, first[2])
+            if actual not in self.used:
+                self.used.append(actual)
+            return _Val("bool", _nullable(self.raw(actual).notna().to_numpy(), np.ones(self.n, dtype=bool), self.index))
         if name == "so":
             if first[0] == "col":
                 return self.column(first[1], first[2], kind="number")
@@ -792,9 +844,7 @@ class _Evaluator:
         raise self.err(pos, "chu() không dùng cho điều kiện Đúng/Sai")
 
 
-def evaluate_expression(df: pd.DataFrame, expression: Optional[str], tolerance: Optional[float] = None, date_format: Optional[str] = None) -> ExpressionResult:
-    """Tính biểu thức trên cả bảng. Raise ExpressionError nếu biểu thức sai (cú pháp, kiểu, cột không có)."""
-    node, text = parse_expression(expression)
+def _prepare_options(tolerance: Optional[float], date_format: Optional[str]) -> tuple:
     tol = DEFAULT_TOLERANCE if tolerance in (None, "") else float(tolerance)
     if not np.isfinite(tol) or tol < 0:
         raise ExpressionError("Sai số cho phép phải là số không âm")
@@ -802,11 +852,10 @@ def evaluate_expression(df: pd.DataFrame, expression: Optional[str], tolerance: 
         date_format = None
     if date_format is not None and "%" not in date_format:
         raise ExpressionError(f"Khuôn ngày phải dạng %d/%m/%Y (có dấu %), nhận được: {date_format}")
-    evaluator = _Evaluator(df, _ColumnResolver(df.columns), text, tol, date_format)
-    root = evaluator.ev(node)
-    if root.kind != "bool":
-        raise ExpressionError(f"Biểu thức phải cho kết quả Đúng/Sai (một phép so sánh hoặc điều kiện, vd a > b), đang cho kết quả kiểu {KIND_LABELS[root.kind]}")
-    outcome = root.data
+    return tol, date_format
+
+
+def _build_result(evaluator: "_Evaluator", outcome: pd.Series) -> ExpressionResult:
     return ExpressionResult(
         violations=~outcome.fillna(True).astype(bool),
         unknown=outcome.isna(),
@@ -817,6 +866,83 @@ def evaluate_expression(df: pd.DataFrame, expression: Optional[str], tolerance: 
     )
 
 
+def evaluate_expression(df: pd.DataFrame, expression: Optional[str], tolerance: Optional[float] = None, date_format: Optional[str] = None) -> ExpressionResult:
+    """Tính biểu thức trên cả bảng. Raise ExpressionError nếu biểu thức sai (cú pháp, kiểu, cột không có)."""
+    node, text = parse_expression(expression)
+    tol, date_format = _prepare_options(tolerance, date_format)
+    evaluator = _Evaluator(df, _ColumnResolver(df.columns), text, tol, date_format)
+    root = evaluator.ev(node)
+    if root.kind != "bool":
+        raise ExpressionError(f"Biểu thức phải cho kết quả Đúng/Sai (một phép so sánh hoặc điều kiện, vd a > b), đang cho kết quả kiểu {KIND_LABELS[root.kind]}")
+    return _build_result(evaluator, root.data)
+
+
+# ---------------------------------------------------------------------------
+# 5. Nếu – thì: hai ô NẾU và THÌ, mỗi ô là 1 biểu thức đầy đủ; kết quả = NẾU => THÌ
+# ---------------------------------------------------------------------------
+def _parse_side(label: str, source: Optional[str]):
+    """Đọc 1 vế; lỗi được ghi rõ là lỗi ở vế nào (vị trí ký tự tính theo RIÊNG vế đó, không phải chuỗi ghép)."""
+    try:
+        return parse_expression(source)
+    except ExpressionError as exc:
+        raise ExpressionError(f"Vế {label}: {exc}") from None
+
+
+def if_then_column_names(if_expression: Optional[str], then_expression: Optional[str]) -> list:
+    """Tên cột như người dùng gõ ở cả 2 vế (NẾU trước, THÌ sau), không trùng. Dùng khi chưa có bảng dữ liệu."""
+    names: list = []
+    for label, source in (("NẾU", if_expression), ("THÌ", then_expression)):
+        node, _text = _parse_side(label, source)
+        for name, _pos in _columns_in(node):
+            if name not in names:
+                names.append(name)
+    return names
+
+
+def if_then_columns(df: pd.DataFrame, if_expression: Optional[str], then_expression: Optional[str]) -> list:
+    """Tên cột THẬT (đúng như trong bảng) của cả 2 vế, không trùng -- dùng để tô ô và đặt tên rule."""
+    resolver = _ColumnResolver(df.columns)
+    result: list = []
+    for label, source in (("NẾU", if_expression), ("THÌ", then_expression)):
+        node, text = _parse_side(label, source)
+        for name, pos in _columns_in(node):
+            try:
+                actual = resolver.resolve(name, text, pos)
+            except ExpressionError as exc:
+                raise ExpressionError(f"Vế {label}: {exc}") from None
+            if actual not in result:
+                result.append(actual)
+    return result
+
+
+def evaluate_conditional(df: pd.DataFrame, if_expression: Optional[str], then_expression: Optional[str],
+                         tolerance: Optional[float] = None, date_format: Optional[str] = None) -> ExpressionResult:
+    """Rule "NẾU <điều kiện> THÌ <điều kiện>": dòng vi phạm = NẾU đúng mà THÌ sai. Dòng NẾU sai thì luôn đạt; NẾU hoặc THÌ chưa biết (ô trống, sai
+    kiểu...) mà chưa chắc sai thì bị bỏ qua và được đếm (logic 3 giá trị như evaluate_expression). Mỗi vế là 1 biểu thức đầy đủ (và/hoặc/không,
+    so cột với cột, tính toán, ngày...). Hai vế dùng chung 1 bộ đọc cột nên 1 cột dùng ở cả 2 vế chỉ đọc 1 lần, và báo lỗi theo đúng vế."""
+    tol, date_format = _prepare_options(tolerance, date_format)
+    sides = [(label,) + _parse_side(label, source) for label, source in (("NẾU", if_expression), ("THÌ", then_expression))]
+    evaluator = _Evaluator(df, _ColumnResolver(df.columns), sides[0][2], tol, date_format)
+    values = []
+    for label, node, text in sides:
+        evaluator.text = text  # vị trí ký tự trong thông báo lỗi tính theo đúng vế đang tính
+        try:
+            value = evaluator.ev(node)
+        except ExpressionError as exc:
+            raise ExpressionError(f"Vế {label}: {exc}") from None
+        if value.kind != "bool":
+            raise ExpressionError(f"Vế {label} phải là một điều kiện Đúng/Sai (một phép so sánh như a > b, hoặc nhiều điều kiện nối bằng và / hoặc), "
+                                  f"đang cho kết quả kiểu {KIND_LABELS[value.kind]}")
+        values.append(value)
+    a, b = values[0].data.array, values[1].data.array
+    return _build_result(evaluator, pd.Series(~a | b, index=df.index))
+
+
 def detect_expression_rule(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -> pd.Series:
     """Cùng chữ ký với các hàm detect khác của cross_field_rules.py: Series bool cùng index với df, True = dòng CHẮC CHẮN vi phạm biểu thức."""
     return evaluate_expression(df, cfg.expression, cfg.tolerance, cfg.date_format).violations
+
+
+def detect_if_then_rule(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -> pd.Series:
+    """Như detect_expression_rule nhưng cho rule Nếu – thì (cfg.if_expression / cfg.then_expression)."""
+    return evaluate_conditional(df, cfg.if_expression, cfg.then_expression, cfg.tolerance, cfg.date_format).violations

@@ -40,8 +40,10 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     `evaluate_expression(df, expr, tolerance, date_format) -> ExpressionResult` (violations,
     unknown, columns_used, columns = cách đọc từng cột, zero_division_rows, text_order_columns),
     `detect_expression_rule()` (đăng ký vào `CROSS_FIELD_RULE_DETECTORS`), `ExpressionError`
-    (message tiếng Việt chỉ rõ vị trí). Chỉ import `config.py` để `cross_field_rules.py` import
-    được mà không vòng tròn.
+    (message tiếng Việt chỉ rõ vị trí). **Đợt 2 (mục 25)**: thêm toán tử `=>`/`->` (kéo theo) và `<=>`/`<->`
+    (tương đương), hàm `có(cột)`, `evaluate_conditional(df, if_expr, then_expr, ...)` + `detect_if_then_rule()`
+    (`RuleType.IF_THEN`, field `if_expression`/`then_expression`), `if_then_columns()`/`if_then_column_names()`.
+    Chỉ import `config.py` để `cross_field_rules.py` import được mà không vòng tròn.
   - `pipeline.py` — `load_data()`, `detect_noise()` (nhận thêm
     `cross_field_rules` tuỳ chọn), `get_flagged_rows()`, `guess_column_dtype()`
     — **MỚI (mục 12)**: đoán `ColumnDType` hợp lý nhất cho 1 cột dựa trên GIÁ
@@ -418,8 +420,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     `nan`/`inf`/`1_000`); `_checked_outlier_rules()` kiểm danh sách phương pháp (chỉ
     `iqr`/`zscore`, không trùng, ngưỡng số > 0). Rule liên cột (`cross-rule`) vẫn 1 rule
     mỗi lần, cách xử lý chỉ có xoá dòng vi phạm / giữ nguyên. Giao diện Denoise gửi
-    `rule_type` ∈ `expression` | `conditional` | `functional_dependency` (compare/formula cũ vẫn được
-    backend nhận cho giao diện cũ). Rule `expression` trả thêm `expression_info` (xem mục 24). NGOẠI LỆ Phụ thuộc hàm: `rule`
+    `rule_type` ∈ `expression` | `if_then` | `functional_dependency` (compare/formula/conditional cũ vẫn được
+    backend nhận cho giao diện cũ). Rule `expression` và `if_then` trả thêm `expression_info` (xem mục 24-25). NGOẠI LỆ Phụ thuộc hàm: `rule`
     nhận `dependent_columns` (danh sách) = 1 cột xác định → NHIỀU cột phụ thuộc;
     `_cross_rules_from_config()` tách thành từng rule A → Bi (dùng lại đúng hàm detect cũ, kiểm
     ĐỘC LẬP từng cột, báo lỗi 400 nếu cột không tồn tại / trùng cột xác định / chọn 2 lần), response
@@ -442,8 +444,9 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     `keep`. 2 cách đầu CHỈ đụng các nhóm "xác định được" (kết luận cột B sai + có giá trị đa số, không hoà — `_fd_plan()`);
     nhóm hoà / nghi sai cột A / chưa xác định giữ nguyên và báo `stats.unresolved_groups`. Xem trước tác động không cần
     gọi lại backend: detect trả `fd_plan` {fix_to_majority.cells, remove_suspect_rows.rows, remove_row.rows,
-    unresolved_groups}, FE hiện ở `#cf-action-preview` (cách xoá cả nhóm hiện đỏ). Rule liên cột khác (So sánh/Nếu–thì/
-    Công thức) KHÔNG đổi: vẫn chỉ Xoá cả dòng / Giữ nguyên, ô chọn mặc định "Xoá cả dòng" (chưa áp bài học mục 13).
+    unresolved_groups}, FE hiện ở `#cf-action-preview` (cách xoá cả nhóm hiện đỏ). Rule liên cột khác (Biểu thức/Nếu–thì)
+    vẫn chỉ Xoá cả dòng / Giữ nguyên NHƯNG từ mục 25 cũng mặc định "— Chọn cách xử lý —" và có xem trước
+    "Sẽ xoá N dòng vi phạm (a → b)" (`fdPlan.generic`, FE tự dựng từ `flagged_rows_count`).
     **Chưa làm:** vế xác định vẫn 1 cột; chưa có "giữ dòng đầu, xoá các dòng sau" cho nhóm nghi sai cột A (id trùng,
     không suy ra được dòng nào sai); hoàn tác cho tool này.
 - `frontend/` — **GIAO DIỆN HIỆN HÀNH "Denoise" (mục 18-22):** 4 file
@@ -1444,7 +1447,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       trị khi…" (ô trống luôn bị bỏ qua); (4) Nếu–thì chỉ 1 điều kiện mỗi vế, không VÀ/HOẶC;
       (5) ~~công thức chỉ số + − × ÷, không ngày/hàm/chữ, tên cột có dấu cách không gõ được~~ [ĐÃ LÀM: số/ngày/chữ, [tên có dấu cách], so/ngay/chu]; (6) ~~Phụ thuộc hàm chỉ 1 cột→1 cột~~ [ĐÃ LÀM: 1 cột xác định → nhiều cột phụ thuộc, nút "＋ Thêm cột phụ thuộc"; còn lại: vế xác định vẫn 1 cột, và vẫn gắn cờ CẢ nhóm mâu thuẫn]; (7) UI mỗi lần 1 rule [vẫn đúng]; ~~kiểu giá trị phải chọn tay~~ [ĐÃ LÀM: tự nhận Số/Ngày/Chữ theo dữ liệu].
       ~~Công thức chia cho 0 bị gắn cờ~~ [ĐÃ SỬA: chia cho 0 = chưa biết, được đếm riêng].
-    - **Hướng đã thảo luận cho Rule liên cột — ĐỢT 1 ĐÃ LÀM (mục 24); ĐỢT 2 CHƯA (Nếu–thì chạy chung bộ máy, `=>`, `<=>`, `có(cột)`):** gộp thành NGÔN NGỮ
+    - **Hướng đã thảo luận cho Rule liên cột — ĐỢT 1 ĐÃ LÀM (mục 24); ĐỢT 2 ĐÃ LÀM (mục 25: Nếu–thì chạy chung bộ máy, `=>`, `<=>`, `có(cột)`):** gộp thành NGÔN NGỮ
       BIỂU THỨC `Biểu thức` (số học + so sánh + `và/hoặc/không` + `=>` kéo theo + `<=>` tương
       đương + `có(cột)` + tên cột `[tên có dấu cách]`), tự viết bộ phân tích (Pratt parser, KHÔNG
       `eval`), đánh giá logic 3 giá trị (đúng/sai/chưa biết; chỉ gắn cờ khi chắc chắn sai),
@@ -1505,10 +1508,35 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       lặp từng dòng ~1,4s); route đối chiếu với pandas độc lập trên `noisy_employee_dataset_large.csv`
       (`age >= 18 và age <= 65` -> 10 dòng vi phạm, 7 dòng bỏ qua); Playwright tab Biểu thức; lại chạy toàn bộ
       test Phụ thuộc hàm (backend + giao diện) vì dùng chung file.
-    - **Giới hạn đã biết / chưa làm:** chưa có `có(cột)` ("bắt buộc có giá trị khi…"), `=>`, `<=>`; Nếu–thì
-      cũ vẫn 1 điều kiện mỗi vế; chữ so phân biệt hoa/thường (đã cắt khoảng trắng); `chu()`/`so()` không nhận
-      định dạng số kiểu "1.000,5"; không có kiểm tra cú pháp khi đang gõ (chỉ báo lỗi lúc bấm Phát hiện); cách
-      xử lý mặc định của rule Nếu–thì vẫn chọn sẵn "Xoá cả dòng" (chưa áp bài học mục 13).
+    - **Giới hạn đã biết / chưa làm:** (`có(cột)`, `=>`, `<=>`, Nếu–thì nhiều điều kiện và cách xử lý mặc định ĐÃ LÀM
+      ở mục 25); chữ so phân biệt hoa/thường (đã cắt khoảng trắng); `chu()`/`so()` không nhận định dạng số kiểu
+      "1.000,5"; không có kiểm tra cú pháp khi đang gõ (chỉ báo lỗi lúc bấm Phát hiện).
+
+25. **Rule liên cột ĐỢT 2: Nếu – thì chạy chung bộ máy biểu thức + mặc định "— Chọn cách xử lý —" — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user chốt đợt 2 sau đợt 1 ("OKe làm đi"). Gồm: `=>`, `<=>`, `có(cột)`, tab Nếu–thì làm lại, và đổi mặc định cách xử
+      lý của các rule còn lại (việc đã ghi sẵn trong kế hoạch). 2 việc nhỏ ở mục 23 ("Cấu hình đã đổi", "Sẽ xoá N dòng" cho 3 tool khác)
+      CHƯA làm vì user chưa yêu cầu.
+    - **Ngôn ngữ thêm:** `a => b` (hoặc `a -> b`) = `không a hoặc b` theo logic 3 giá trị: CHỈ sai khi a đúng mà b sai; a sai thì luôn
+      đạt; a hoặc b chưa biết mà chưa chắc sai thì "chưa biết" (bị bỏ qua + đếm). Kết hợp từ PHẢI sang trái, ưu tiên thấp hơn `hoặc`.
+      `a <=> b` = `(a => b) và (b => a)`, thấp nhất. Gõ nhầm `age => 18` (muốn `>=`) báo lỗi kèm gợi ý "viết >=". `có(cột)` (hay
+      `co(cột)`): Đúng nếu ô có giá trị, Sai nếu ô trống/"N/A"..., LUÔN biết chắc (không "chưa biết") nên bắt được "bắt buộc có giá trị khi…":
+      `phong_ban == "Sales" => có(ma_khach)`. Chỉ nhận đúng 1 cột.
+    - **Tab Nếu – thì (`RuleType.IF_THEN`):** 2 ô NẾU và THÌ, MỖI Ô LÀ 1 BIỂU THỨC ĐẦY ĐỦ (và/hoặc/không, so cột với cột — vế THÌ không còn
+      bị giới hạn so với giá trị gõ tay —, tính toán, ngày, `có()`). Backend `evaluate_conditional()` tính từng vế bằng CÙNG 1 bộ đọc cột
+      (cột dùng ở cả 2 vế chỉ đọc 1 lần), kết quả `~NẾU | THÌ`. Lỗi báo theo vế ("Vế NẾU: …" / "Vế THÌ: …") và vị trí ký tự tính theo RIÊNG
+      vế đó (không tính trên chuỗi ghép). Nhãn cột để tô = hợp cột 2 vế (`if_then_columns()`). `expression_info` dùng chung với Biểu thức.
+      Rule `conditional` cũ (if_column/then_column...) vẫn giữ cho giao diện cũ; đối chiếu với nó: 1.670 cấu hình ngẫu nhiên = 0 khác biệt.
+    - **Giao diện:** khối chèn nhanh DÙNG CHUNG 2 tab (`exprHelperHTML`): nút `và`/`hoặc`/`không`/`( )`/`có( )` + chip cột chèn vào Ô ĐANG CHỌN
+      (`state.cf.exprTarget`, theo `focusin`; dòng nhắc "Đang chèn vào ô NẾU/THÌ"). Mẫu "cột – toán tử – giá trị" có nút "Chèn vào NẾU/THÌ":
+      `exprLiteral()` viết trần số cho cột số (`salary >= 10000000`), còn lại để trong nháy (`department == "Sales"`) -- bộ máy tự đổi chữ
+      trong nháy sang kiểu vế kia nên nháy luôn an toàn. Nội dung 2 ô giữ khi đổi file/đổi tab (`state.cf.expr.ifText/thenText`).
+    - **Mặc định cách xử lý (bài học mục 13) cho MỌI rule liên cột:** ô chọn luôn bắt đầu bằng "— Chọn cách xử lý —", Áp dụng khi chưa chọn thì
+      báo lỗi, và có dòng xem trước dưới ô chọn ("Sẽ xoá N dòng vi phạm (a → b)"; Phụ thuộc hàm vẫn có kế hoạch riêng của nó).
+    - **Kiểm chứng:** bảng chân trị `=>`/`<=>` với (Đúng/Sai/Chưa biết), kết hợp phải, ưu tiên, `có()`, 17 ca lỗi theo vế (125 + 34 kiểm tra
+      lõi); route đối chiếu pandas độc lập trên `noisy_employee_dataset_large.csv` (NẾU department = Sales THÌ salary >= 10 triệu -> 6 dòng
+      vi phạm, 2 bỏ qua; `department = Sales => có(phone)` -> 1 dòng); Playwright tab Nếu–thì (chèn đúng ô, mẫu, lỗi từng vế, giữ nội dung);
+      chạy lại test Biểu thức đợt 1 + toàn bộ test Phụ thuộc hàm; đạt trên pandas 3.0 và 2.2.
+    - **Chưa làm:** 2 việc nhỏ ở mục 23; kiểm tra cú pháp khi đang gõ; Nếu–thì không có chế độ "nhiều rule một lượt".
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -1605,9 +1633,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 - [x] Phụ thuộc hàm: 1 cột xác định → nhiều cột phụ thuộc, đoán ô sai (so các cột còn lại), 2 cách xử lý
       "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" + xem trước (mục 23, commit `3ee977f`, `73978bc`).
 - [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).
-- [ ] **(NỢ)** Rule liên cột ĐỢT 2: Nếu–thì chạy chung bộ máy biểu thức (và/hoặc/không ở cả 2 vế, vế "thì" so với cột
-      khác), `=>`, `<=>`, `có(cột)` ("bắt buộc có giá trị khi…"). Đổi mặc định cách xử lý các rule còn lại sang
-      "— Chọn cách xử lý —".
+- [x] Rule liên cột ĐỢT 2: Nếu–thì chạy chung bộ máy biểu thức (2 ô NẾU/THÌ đầy đủ), `=>`, `<=>`, `có(cột)`, mặc định
+      "— Chọn cách xử lý —" + xem trước cho mọi rule liên cột (mục 25).
 - [ ] Cập nhật lại file này mỗi khi làm xong 1 cụm việc lớn (lần này ghi bù mục 18-23 sau khi
       thấy file thiếu Denoise).
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá

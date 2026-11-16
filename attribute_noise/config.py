@@ -114,7 +114,7 @@ class DuplicateRowConfig:
 
 
 class RuleType(str, Enum):
-    """5 loại "cross-field rule" -- kiểm tra mâu thuẫn LOGIC giữa các cột khác
+    """6 loại "cross-field rule" -- kiểm tra mâu thuẫn LOGIC giữa các cột khác
     nhau. Khác hẳn NoiseType ở trên: các NoiseType chỉ nhìn 1 cột riêng lẻ
     (hoặc so khớp y hệt cả dòng với duplicate_row), còn rule ở đây cần HIỂU
     QUAN HỆ giữa 2 cột cụ thể -- không có cách nào tự suy ra được từ dữ liệu,
@@ -130,6 +130,9 @@ class RuleType(str, Enum):
     # "Biểu thức" (expression_rules.py): gộp COMPARE + FORMULA (số, ngày, chữ, và/hoặc/không, logic 3 giá trị). Giao diện Denoise chỉ dùng kiểu này
     # thay cho COMPARE/FORMULA; COMPARE/FORMULA/CONDITIONAL vẫn giữ nguyên cho giao diện cũ (index.html).
     EXPRESSION = "expression"
+    # "Nếu – thì" chạy chung bộ máy biểu thức (expression_rules.evaluate_conditional): hai ô NẾU / THÌ, mỗi ô là 1 biểu thức đầy đủ. Giao diện Denoise dùng
+    # kiểu này thay cho CONDITIONAL (1 điều kiện đơn mỗi vế, vế THÌ chỉ so với giá trị gõ tay); CONDITIONAL vẫn giữ cho giao diện cũ.
+    IF_THEN = "if_then"
 
 
 class CompareOperator(str, Enum):
@@ -200,6 +203,10 @@ class CrossFieldRuleConfig:
     # --- Dùng cho EXPRESSION: 1 biểu thức đúng/sai, vd "ngay_nghi > ngay_vao và luong >= 0" (xem expression_rules.py).
     # Dùng thêm `tolerance` và `date_format` (khuôn ép cho mọi cột ngày; để None = tự nhận). ---
     expression: Optional[str] = None
+
+    # --- Dùng cho IF_THEN: "NẾU if_expression THÌ then_expression" (mỗi vế là 1 biểu thức, xem evaluate_conditional); dùng thêm `tolerance`, `date_format`. ---
+    if_expression: Optional[str] = None
+    then_expression: Optional[str] = None
 
     # --- Dùng cho FUNCTIONAL_DEPENDENCY: "determinant_column xác định
     # dependent_column" (1 CHIỀU -- không cần đúng ngược lại) ---
