@@ -237,6 +237,34 @@ def detect_formula_rule(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -> pd.Serie
 # ---------------------------------------------------------------------------
 # 4. FUNCTIONAL_DEPENDENCY: "determinant_column xác định dependent_column" (1 chiều)
 # ---------------------------------------------------------------------------
+def _normalize_text_series(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.strip().str.lower()
+
+
+_MISSING_SET = {p.lower() for p in DEFAULT_MISSING_PLACEHOLDERS}  # cùng định nghĩa "thiếu" với _is_missing_text, dùng cho cả bảng 1 lượt
+
+
+def _fd_working_frame(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -> tuple[pd.DataFrame, pd.Series]:
+    """Phần gom nhóm DÙNG CHUNG cho detect và analyze (để 2 hàm luôn khớp nhau về dòng nào bị gắn cờ).
+    Trả (working, violated): working = bảng 2 cột đã chuẩn hoá ("det", "dep") của các dòng KHÔNG thiếu ở cả 2 cột (giữ index gốc);
+    violated = Series bool cùng index với working, True nếu nhóm của dòng đó (cùng det) có > 1 giá trị dep khác nhau."""
+    det_normalized = _normalize_text_series(df[cfg.determinant_column])
+    dep_normalized = _normalize_text_series(df[cfg.dependent_column])
+
+    # Bỏ qua dòng có ô "thiếu" ở 1 trong 2 cột -- thuộc trách nhiệm của
+    # missing_value, không nên bị FD kết luận vi phạm thêm lần 2.
+    # .astype(bool): bảng rỗng (0 dòng) thì .apply() trả mảng không phải bool và phép | báo lỗi; ép kiểu để bảng rỗng chạy bình thường.
+    is_missing = det_normalized.apply(_is_missing_text).astype(bool) | dep_normalized.apply(_is_missing_text).astype(bool)
+
+    working = pd.DataFrame({"det": det_normalized, "dep": dep_normalized})
+    working = working[~is_missing]
+
+    # groupby determinant -> đếm số giá trị KHÁC NHAU của dependent trong nhóm. transform("nunique") chép con số của nhóm
+    # về TỪNG DÒNG gốc (giữ index) nên lọc được ra các dòng thuộc nhóm có > 1 giá trị.
+    nunique_per_group = working.groupby("det")["dep"].transform("nunique")
+    return working, nunique_per_group > 1
+
+
 def detect_functional_dependency_rule(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -> pd.Series:
     det_col, dep_col = cfg.determinant_column, cfg.dependent_column
     if det_col not in df.columns or dep_col not in df.columns:
@@ -245,25 +273,130 @@ def detect_functional_dependency_rule(df: pd.DataFrame, cfg: CrossFieldRuleConfi
     # Chuẩn hoá (strip + lowercase) trước khi so sánh -- tránh báo trùng với
     # whitespace_noise/inconsistent_category đã có (vd "Nguyen A" và
     # "nguyen a " không nên bị coi là 2 giá trị KHÁC NHAU ở check này).
-    det_normalized = df[det_col].astype(str).str.strip().str.lower()
-    dep_normalized = df[dep_col].astype(str).str.strip().str.lower()
+    working, violated = _fd_working_frame(df, cfg)
 
-    # Bỏ qua dòng có ô "thiếu" ở 1 trong 2 cột -- thuộc trách nhiệm của
-    # missing_value, không nên bị FD kết luận vi phạm thêm lần 2.
-    is_missing = det_normalized.apply(_is_missing_text) | dep_normalized.apply(_is_missing_text)
+    # nunique > 1 nghĩa là cùng 1 determinant nhưng ra >1 dependent khác nhau -> vi phạm (đánh dấu HẾT các dòng trong nhóm
+    # đó, giống cách duplicate_row đánh dấu cả 2 bản trùng để người dùng tự xem và quyết định bản nào đúng).
+    # Muốn biết Ô NÀO trong nhóm nhiều khả năng sai thì dùng analyze_functional_dependency() bên dưới.
+    return pd.Series(df.index.isin(working.index[violated]), index=df.index)
 
-    working = pd.DataFrame({"det": det_normalized, "dep": dep_normalized})
-    working = working[~is_missing]
 
-    # groupby determinant -> đếm số giá trị KHÁC NHAU của dependent trong
-    # nhóm. nunique > 1 nghĩa là cùng 1 determinant nhưng ra >1 dependent
-    # khác nhau -> vi phạm (đánh dấu HẾT các dòng trong nhóm đó, giống cách
-    # duplicate_row đánh dấu cả 2 bản trùng để người dùng tự xem và quyết định
-    # bản nào đúng).
-    nunique_per_group = working.groupby("det")["dep"].transform("nunique")
-    violated_index = working.index[nunique_per_group > 1]
+# Ngưỡng của analyze_functional_dependency(): tỉ lệ cột còn lại mà các dòng trong nhóm mâu thuẫn GIỐNG NHAU.
+FD_SAME_ENTITY_RATIO = 0.5    # >= : coi là cùng 1 đối tượng -> ô sai là cột PHỤ THUỘC (B);  < : khác đối tượng -> ô sai là cột XÁC ĐỊNH (A)
+FD_STABLE_COLUMN_RATIO = 0.5  # cột còn lại chỉ được dùng làm bằng chứng nếu ở các nhóm KHÔNG vi phạm nó thường giống nhau từ ít nhất ngần này
 
-    return pd.Series(df.index.isin(violated_index), index=df.index)
+
+def _short(value: Any, limit: int = 30) -> str:
+    text = str(value).strip()
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def analyze_functional_dependency(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -> dict:
+    """Với mỗi nhóm vi phạm (cùng A, nhiều giá trị B khác nhau), ĐOÁN ô nào nhiều khả năng sai. Chỉ là gợi ý, KHÔNG đổi kết quả detect
+    (cùng tập dòng với detect_functional_dependency_rule vì dùng chung _fd_working_frame).
+
+    Quy tắc phụ thuộc hàm tự nó không biết ô nào sai (cả nhóm mâu thuẫn, chưa rõ lỗi ở B hay ở chính A). Ta so thêm CÁC CỘT CÒN LẠI của
+    các dòng trong nhóm:
+      - Các cột còn lại phần lớn GIỐNG nhau (>= FD_SAME_ENTITY_RATIO) -> cùng 1 đối tượng, A đúng, ô sai là B. Trong B, giá trị xuất hiện
+        nhiều nhất là "mốc đúng", các giá trị lệch là nghi sai; hoà số lượng (vd 1 dòng "An", 1 dòng "Ân") thì chưa rõ giá trị nào đúng.
+      - Các cột còn lại phần lớn KHÁC nhau -> nhiều khả năng là các đối tượng khác nhau dùng chung A (vd 2 nhân viên cùng mã): ô sai là A,
+        nhưng KHÔNG suy ra được dòng nào (dữ liệu không nói).
+      - Không có cột nào so được -> chưa xác định.
+    Chỉ dùng làm bằng chứng những cột "ổn định": cột mà ở các nhóm không vi phạm vẫn thường giống nhau. Bảng chấm công/lương có cột
+    lương, tháng khác nhau giữa các dòng của cùng 1 nhân viên là bình thường -> không được tính "khác nhau" là bằng chứng khác đối tượng.
+
+    Trả {"rows": {row_index: {"flagged": set tên cột nghi sai, "ref": set cột mốc so sánh, "hint": [câu ngắn], "notes": [câu giải thích]}},
+         "groups": [{"key": giá trị A, "verdict": "dependent" | "determinant" | "unknown", "rows": [row_index...]}]}."""
+    det_col, dep_col = cfg.determinant_column, cfg.dependent_column
+    empty: dict = {"rows": {}, "groups": []}
+    if det_col not in df.columns or dep_col not in df.columns:
+        return empty
+    working, violated = _fd_working_frame(df, cfg)
+    if not violated.any():
+        return empty
+
+    # Nhóm chỉ 1 dòng không thể vi phạm cũng không cho bằng chứng gì -> chỉ giữ các dòng thuộc nhóm có >= 2 dòng (đỡ chuẩn hoá cả bảng).
+    group_size = working.groupby("det")["dep"].transform("size")
+    multi = working[group_size >= 2]
+    multi_violated = violated.loc[multi.index]
+    other_cols = [c for c in df.columns if c not in (det_col, dep_col)]
+    other = df.loc[multi.index, other_cols].astype(str).apply(_normalize_text_series)
+    other = other.mask(other.isin(_MISSING_SET))  # ô thiếu -> NaN: không so sánh được, không tính là giống hay khác
+
+    # Cột nào đủ "ổn định" để làm bằng chứng: xét ở các nhóm KHÔNG vi phạm (>= 2 dòng, cột có >= 2 ô đọc được).
+    stable = pd.Series(True, index=other_cols)
+    ok_rows = multi.index[~multi_violated]
+    if len(ok_rows) and other_cols:
+        sub, keys = other.loc[ok_rows], multi.loc[ok_rows, "det"]
+        comparable = sub.groupby(keys).count() >= 2
+        consistent = (sub.groupby(keys).nunique() <= 1) & comparable
+        denominator = comparable.sum()
+        ratio = consistent.sum() / denominator.where(denominator > 0)  # chưa có nhóm nào so được -> NaN -> coi là ổn định (không có bằng chứng ngược)
+        stable = ~(ratio < FD_STABLE_COLUMN_RATIO)
+    reference_cols = [c for c in other_cols if bool(stable[c])]
+
+    vio = multi[multi_violated]
+    compared = agree = pd.Series(dtype=int)
+    if reference_cols:
+        sv, kv = other.loc[vio.index, reference_cols], vio["det"]
+        comparable_v = sv.groupby(kv).count() >= 2
+        compared = comparable_v.sum(axis=1)
+        agree = ((sv.groupby(kv).nunique() <= 1) & comparable_v).sum(axis=1)
+
+    rows: dict = {}
+    groups: list = []
+
+    def put(row_index, flagged: set, ref: set, hint: str, note: str) -> None:
+        info = rows.setdefault(row_index, {"flagged": set(), "ref": set(), "hint": [], "notes": []})
+        info["flagged"] |= flagged
+        info["ref"] |= ref
+        info["hint"].append(hint)
+        info["notes"].append(note)
+
+    for key, group in vio.groupby("det"):
+        n_compared, n_agree = int(compared.get(key, 0)), int(agree.get(key, 0))
+        indices = list(group.index)
+        a_text = _short(df.at[indices[0], det_col])
+        counts = group["dep"].value_counts()
+        if n_compared == 0:
+            verdict = "unknown"
+        elif n_agree / n_compared >= FD_SAME_ENTITY_RATIO:
+            verdict = "dependent"
+        else:
+            verdict = "determinant"
+        groups.append({"key": a_text, "verdict": verdict, "rows": indices})
+
+        if verdict == "determinant":
+            # Các dòng khác nhau ở phần lớn cột khác -> nhiều khả năng là các đối tượng khác nhau dùng chung A. Không biết dòng nào sai:
+            # tô A ở mọi dòng của nhóm, B chỉ là mốc để thấy các dòng khác nhau.
+            note = (f"Nghi sai ô «{det_col}»: các dòng có «{det_col}» = «{a_text}» khác nhau ở {n_compared - n_agree}/{n_compared} cột còn lại "
+                    f"nên có vẻ là các đối tượng khác nhau dùng chung «{det_col}». Chưa xác định dòng nào sai.")
+            for row_index in indices:
+                put(row_index, {det_col}, {dep_col}, f"Nghi sai {det_col} (chưa rõ dòng nào)", note)
+        elif verdict == "unknown":
+            note = f"«{det_col}» = «{a_text}» đi với {len(counts)} giá trị «{dep_col}» khác nhau, nhưng không có cột nào khác để so sánh nên chưa xác định ô sai."
+            for row_index in indices:
+                put(row_index, {det_col, dep_col}, set(), f"Chưa rõ {det_col}/{dep_col}", note)
+        else:
+            same_text = f"{n_agree}/{n_compared} cột còn lại giống nhau nên có vẻ cùng một đối tượng."
+            has_majority = counts.iloc[0] > counts.iloc[1]  # counts đã xếp giảm dần và nhóm vi phạm luôn có >= 2 giá trị
+            if not has_majority:
+                note = f"«{dep_col}» có {len(counts)} giá trị khác nhau với số lượng ngang nhau nên chưa xác định giá trị nào đúng; {same_text}"
+                for row_index in indices:
+                    put(row_index, {dep_col}, {det_col}, f"Chưa rõ {dep_col}", note)
+            else:
+                majority = counts.index[0]
+                majority_text = _short(df.at[next(i for i in indices if group.at[i, "dep"] == majority), dep_col])
+                for row_index in indices:
+                    value = group.at[row_index, "dep"]
+                    if value == majority:
+                        put(row_index, set(), {dep_col, det_col}, f"Mốc đúng {dep_col}",
+                            f"Giá trị phổ biến của «{dep_col}» khi «{det_col}» = «{a_text}»: «{majority_text}» ({counts.iloc[0]}/{len(indices)} dòng).")
+                    else:
+                        put(row_index, {dep_col}, {det_col}, f"Nghi sai {dep_col}",
+                            f"Nghi sai ô «{dep_col}»: «{_short(df.at[row_index, dep_col])}» lệch giá trị phổ biến «{majority_text}» "
+                            f"({counts.iloc[0]}/{len(indices)} dòng có «{det_col}» = «{a_text}»); {same_text}")
+    return {"rows": rows, "groups": groups}
 
 
 def describe_rule(cfg: CrossFieldRuleConfig) -> str:

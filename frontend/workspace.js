@@ -2393,10 +2393,71 @@ function renderCfRuleFields() {
       <div class="field"><label for="cf-tolerance">Sai số cho phép khi so bằng</label><input class="input" id="cf-tolerance" type="number" step="any" value="0.01" /></div>
       <p class="hint-note">Cột có sẵn: ${cols.length ? cols.map(escapeHtml).join(", ") : "(chọn file trước)"}</p>`;
   } else {
-    box.innerHTML = `<div class="cf-row">${c("cf-det-col", "Cột xác định (A)")}${c("cf-dep-col", "Cột phụ thuộc (B)", cols[1])}</div>
-      <p class="hint-note">Mỗi giá trị A chỉ được đi với đúng 1 giá trị B (vd ma_nv → ten). Không dùng cho B là kết quả giao dịch lặp lại.</p>`;
+    box.innerHTML = `<div class="cf-row cf-fd-row">${c("cf-det-col", "Cột xác định (A)")}<div class="field" id="cf-fd-deps"></div></div>
+      <p class="hint-note">Mỗi giá trị A chỉ được đi với đúng 1 giá trị của TỪNG cột phụ thuộc (vd ma_nv → ten, ngay_sinh, so_dien_thoai, cccd). Mỗi cột phụ thuộc được kiểm riêng. Không dùng cho cột là kết quả giao dịch lặp lại.</p>`;
+    renderCfFdDeps();
   }
 }
+/* ----- Phụ thuộc hàm: 1 cột xác định (A) suy ra NHIỀU cột phụ thuộc (B1, B2...) -----
+   cfFdDeps = các cột phụ thuộc đang chọn (mỗi cột 1 ô chọn + nút xoá; nút "＋ Thêm cột phụ thuộc" ở dưới). Mỗi ô chỉ liệt kê cột chưa dùng và
+   khác cột xác định. Backend tách thành từng rule A → Bi và kiểm riêng từng cột (xem _cross_rules_from_config). */
+let cfFdDeps = [];
+function cfFdDetColumn() {
+  const el = $("cf-det-col");
+  return el ? el.value : "";
+}
+// Giữ các cột phụ thuộc còn hợp lệ (còn trong file, khác cột xác định, không trùng nhau); rỗng thì chọn sẵn cột đầu tiên khác cột xác định.
+function cfFdReconcile() {
+  const cols = state.cf.columns;
+  const det = cfFdDetColumn();
+  const kept = [];
+  for (const c of cfFdDeps) if (cols.includes(c) && c !== det && !kept.includes(c)) kept.push(c);
+  if (!kept.length) { const first = cols.find((c) => c !== det); if (first) kept.push(first); }
+  cfFdDeps = kept;
+}
+function renderCfFdDeps() {
+  const box = $("cf-fd-deps");
+  if (!box) return;
+  cfFdReconcile();
+  const cols = state.cf.columns;
+  const det = cfFdDetColumn();
+  const rows = cfFdDeps.map((dep, i) => {
+    const opts = cols.filter((c) => c === dep || (c !== det && !cfFdDeps.includes(c)))
+      .map((c) => `<option value="${escapeAttr(c)}"${c === dep ? " selected" : ""}>${escapeHtml(c)}</option>`).join("");
+    const remove = cfFdDeps.length > 1
+      ? `<button type="button" class="btn btn-ghost btn-small cf-fd-remove" data-role="fd-remove" data-index="${i}" aria-label="Xoá cột phụ thuộc ${i + 1}">✕</button>` : "";
+    return `<div class="cf-fd-dep"><select class="select" data-role="fd-dep" data-index="${i}" aria-label="Cột phụ thuộc ${i + 1}">${opts || '<option value="">(chọn file trước)</option>'}</select>${remove}</div>`;
+  }).join("");
+  const free = cols.filter((c) => c !== det && !cfFdDeps.includes(c)).length;
+  box.innerHTML = `<label>Cột phụ thuộc (B)</label>${rows}` +
+    `<div class="cf-add-row"><button type="button" class="btn btn-ghost btn-small" data-role="fd-add"${free && cols.length ? "" : " disabled"}>＋ Thêm cột phụ thuộc</button>` +
+    `<span class="cf-add-hint">${free ? `Còn ${free} cột chưa chọn` : "Đã chọn hết các cột"}</span></div>`;
+}
+// Sự kiện gắn 1 lần lên #cf-options (nội dung bên trong bị dựng lại liên tục); chỉ phản ứng khi tool đang mở là Rule liên cột.
+$("cf-options").addEventListener("change", (e) => {
+  if (state.cf.tool !== "cross-rule") return;
+  if (e.target.id === "cf-det-col") { renderCfFdDeps(); return; } // đổi cột xác định -> cột phụ thuộc không được trùng nó
+  if (e.target.dataset.role === "fd-dep") {
+    cfFdDeps[Number(e.target.dataset.index)] = e.target.value;
+    renderCfFdDeps(); // các ô khác phải loại cột vừa chọn
+  }
+});
+$("cf-options").addEventListener("click", (e) => {
+  if (state.cf.tool !== "cross-rule") return;
+  if (e.target.closest('[data-role="fd-add"]')) {
+    const det = cfFdDetColumn();
+    const next = state.cf.columns.find((c) => c !== det && !cfFdDeps.includes(c));
+    if (!next) return;
+    cfFdDeps.push(next);
+    renderCfFdDeps();
+    return;
+  }
+  const remove = e.target.closest('[data-role="fd-remove"]');
+  if (remove) {
+    cfFdDeps.splice(Number(remove.dataset.index), 1);
+    renderCfFdDeps();
+  }
+});
 // Gom tuỳ chọn trên màn hình thành JSON gửi backend. Trả { error } hoặc { config }.
 function buildCfConfig() {
   const tool = state.cf.tool;
@@ -2415,8 +2476,9 @@ function buildCfConfig() {
       rule.tolerance = num("cf-tolerance") === null ? 0.01 : num("cf-tolerance");
       if (!rule.formula) return { error: "Chưa nhập công thức." };
     } else {
-      Object.assign(rule, { determinant_column: $("cf-det-col").value, dependent_column: $("cf-dep-col").value });
-      if (rule.determinant_column === rule.dependent_column) return { error: "Hai cột phải khác nhau." };
+      Object.assign(rule, { determinant_column: $("cf-det-col").value, dependent_columns: cfFdDeps.slice() });
+      if (!rule.dependent_columns.length) return { error: "Chọn ít nhất 1 cột phụ thuộc." };
+      if (rule.dependent_columns.includes(rule.determinant_column)) return { error: "Cột phụ thuộc phải khác cột xác định." };
     }
     return { config: { tool, rule } };
   }
@@ -2436,13 +2498,33 @@ function buildCfConfig() {
 }
 // Bảng các dòng bị gắn cờ: cột đầu = số dòng thật trong file, ô lỗi tô màu.
 function renderFlaggedTable(table, columns, flaggedRows) {
-  const head = `<thead><tr><th>Dòng</th>${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>`;
+  // Phụ thuộc hàm (backend đoán ô sai): thêm cột "Gợi ý" ngay sau "Dòng" (đứng gần nên khỏi cuộn ngang; lý do đầy đủ ở tooltip) và ô "mốc
+  // so sánh" (r.ref) tô nhạt. Các tool khác không có r.hint / r.ref nên bảng vẫn như cũ.
+  const hasHint = flaggedRows.some((r) => r.hint);
+  const head = `<thead><tr><th>Dòng</th>${hasHint ? "<th>Gợi ý</th>" : ""}${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>`;
   const body = flaggedRows.map((r) => {
     const flagged = new Set(r.flagged);
-    const cells = r.cells.map((v, i) => `<td${flagged.has(columns[i]) ? ' class="cf-flag"' : ""}>${escapeHtml(v)}</td>`).join("");
-    return `<tr><td>${r.row_number}</td>${cells}</tr>`;
+    const ref = new Set(r.ref || []);
+    const cells = r.cells.map((v, i) => {
+      const cls = flagged.has(columns[i]) ? ' class="cf-flag"' : ref.has(columns[i]) ? ' class="cf-ref"' : "";
+      return `<td${cls}>${escapeHtml(v)}</td>`;
+    }).join("");
+    const hint = hasHint ? `<td class="cf-hint" title="${escapeAttr((r.notes || []).join("\n"))}">${escapeHtml(r.hint || "")}</td>` : "";
+    return `<tr><td>${r.row_number}</td>${hint}${cells}</tr>`;
   }).join("");
   table.innerHTML = head + `<tbody>${body}</tbody>`;
+}
+// Câu tóm tắt phân tích Phụ thuộc hàm: mỗi cột phụ thuộc có bao nhiêu nhóm mâu thuẫn, nghi sai ở cột xác định (A) hay cột phụ thuộc (B).
+function fdAnalysisText(fa) {
+  if (!fa || !fa.rules) return "";
+  const parts = fa.rules.filter((r) => r.groups > 0).map((r) => {
+    const bits = [];
+    if (r.determinant) bits.push(`${r.determinant} nhóm có vẻ là đối tượng khác nhau dùng chung «${fa.determinant}» (nghi sai «${fa.determinant}»)`);
+    if (r.dependent) bits.push(`${r.dependent} nhóm nghi sai «${r.column}»`);
+    if (r.unknown) bits.push(`${r.unknown} nhóm chưa xác định được`);
+    return `${fa.rules.length > 1 ? `«${r.column}»: ` : ""}${bits.join(", ")}`;
+  });
+  return parts.length ? `Phân tích: ${parts.join(" · ")}.` : "";
 }
 $("cf-detect-btn").addEventListener("click", async () => {
   const T = TOOLSEC.cf;
@@ -2486,13 +2568,24 @@ $("cf-detect-btn").addEventListener("click", async () => {
   $("cf-result-table-wrap").hidden = false;
   renderFlaggedTable($(T.resultTable), data.columns, data.flagged_rows);
   note.classList.remove("is-only");
-  note.hidden = !data.truncated;
-  note.textContent = data.truncated ? `Chỉ hiện ${data.flagged_rows.length} dòng lỗi đầu tiên.` : "";
+  const noteParts = [];
+  if (data.truncated) noteParts.push(`Chỉ hiện ${data.flagged_rows.length} dòng lỗi đầu tiên.`);
+  if (data.flagged_rows.some((r) => r.hint)) {
+    noteParts.push("Ô tô đậm = nghi sai · ô tô nhạt = mốc so sánh · rê chuột vào cột «Gợi ý» để xem lý do.");
+    const analysis = fdAnalysisText(data.fd_analysis);
+    if (analysis) noteParts.push(analysis);
+  }
+  note.hidden = !noteParts.length;
+  note.classList.toggle("is-long", data.flagged_rows.some((r) => r.hint));
+  note.textContent = noteParts.join(" ");
   if (multi) {
     const colsWithErrors = data.per_column.filter((p) => p.findings_count > 0).length;
     setStatus($(T.status), `⚑ ${data.findings_count} ô lỗi ở ${colsWithErrors} cột · ${data.flagged_rows_count} dòng (tổng ${data.total_rows}). Chọn cách xử lý từng cột bên dưới.`, "is-ok");
   } else {
-    setStatus($(T.status), `⚑ ${data.findings_count} ô lỗi ở ${data.flagged_rows_count} dòng (tổng ${data.total_rows}). Chọn cách xử lý bên dưới.`, "is-ok");
+    // Phụ thuộc hàm nhiều cột phụ thuộc: kèm số dòng vi phạm của từng cột (cột nào 0 dòng thì không nhắc).
+    const parts = (data.rule_breakdown || []).filter((b) => b.flagged_rows_count > 0).map((b) => `${b.column}: ${b.flagged_rows_count} dòng`);
+    const byDep = parts.length ? ` Theo cột phụ thuộc — ${parts.join(" · ")}.` : "";
+    setStatus($(T.status), `⚑ ${data.findings_count} ô lỗi ở ${data.flagged_rows_count} dòng (tổng ${data.total_rows}).${byDep} Chọn cách xử lý bên dưới.`, "is-ok");
   }
   // Nhịp 2: danh sách cách xử lý do backend quyết theo kiểu cột × loại lỗi.
   const sel = $("cf-action");

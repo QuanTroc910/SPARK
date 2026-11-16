@@ -415,6 +415,8 @@ input[type="checkbox"] { accent-color: #111; width: 16px; height: 16px; }
   font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.05em;
   text-transform: uppercase; color: var(--ink-faint);
 }
+/* Chú thích dài (Phụ thuộc hàm: chú giải + tóm tắt phân tích): chữ thường, to hơn một chút để đọc được câu dài. */
+.ft-table-note.is-long { text-transform: none; letter-spacing: 0; font-size: 12px; line-height: 1.55; color: var(--ink-dim); }
 .ft-table-note.is-only {
   flex: 1 1 auto; display: flex; align-items: center; justify-content: center; text-align: center;
   padding: 20px; border-top: 0; font-size: 10.5px;
@@ -1146,6 +1148,10 @@ a.hm-tool:hover { background: #ebebe7; }
 /* Ô lỗi trong bảng kết quả "Phát hiện": nền xanh nhạt + viền cobalt. */
 .cf-flag { background: var(--signal-soft); box-shadow: inset 0 0 0 1.5px var(--signal); color: var(--signal-dark); font-weight: 600; }
 #section-config .results-table td.cf-flag { background: var(--signal-soft); }
+/* Phụ thuộc hàm: ô "mốc so sánh" (giá trị phổ biến / ô A của nhóm) tô nhạt hơn ô nghi sai; cột "Gợi ý" chữ nhỏ, rê chuột xem lý do đầy đủ. */
+.cf-ref { box-shadow: inset 0 0 0 1px rgba(47, 75, 255, 0.35); }
+#section-config .results-table td.cf-ref { background: rgba(47, 75, 255, 0.05); }
+#section-config .results-table td.cf-hint { min-width: 150px; max-width: 210px; white-space: normal; font-size: 12px; line-height: 1.35; color: var(--ink-dim); cursor: help; }
 /* Khối tuỳ chọn do JS dựng: 2 cột cho các cặp ô ngắn (min/max, cột A/B...). */
 .cf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .cf-row-3 { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; }
@@ -1171,6 +1177,13 @@ a.hm-tool:hover { background: #ebebe7; }
 .cf-form-body { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
 .cf-form-body .hint-note { margin: 0; }
 .cf-add-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* Phụ thuộc hàm: cột xác định bên trái, danh sách cột phụ thuộc (mỗi cột 1 ô + nút xoá, nút thêm ở dưới) bên phải; cao thấp khác nhau nên canh đầu. */
+.cf-fd-row { align-items: start; }
+#cf-fd-deps { display: flex; flex-direction: column; gap: 8px; }
+#cf-fd-deps > label { margin: 0; }
+.cf-fd-dep { display: flex; gap: 8px; align-items: center; }
+.cf-fd-dep .select { flex: 1; min-width: 0; }
+.cf-fd-remove { height: 40px; padding: 0 14px; }
 .cf-add-hint { font-size: 12.5px; color: var(--ink-dim); }
 .cf-sum { border: 1px solid #111; background: var(--bg); container: cfsum / inline-size; }
 .cf-sum-list { max-height: 320px; overflow-y: auto; }

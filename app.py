@@ -46,7 +46,7 @@ from attribute_noise.config import (
     RuleType,
     RuleValueType,
 )
-from attribute_noise.cross_field_rules import FormulaError
+from attribute_noise.cross_field_rules import FormulaError, analyze_functional_dependency, describe_rule
 from attribute_noise.detectors import INTEGER_RE, detect_outlier, iqr_degenerate_info
 from attribute_noise.pipeline import (
     NoiseFinding,
@@ -1753,15 +1753,70 @@ def _config_tool_items(cfg: dict) -> list:
     return items
 
 
+def _cross_rules_from_config(item: dict, df: pd.DataFrame) -> list[CrossFieldRuleConfig]:
+    """Đổi phần `rule` của tool Rule liên cột thành DANH SÁCH rule để chạy. Hầu hết kiểu chỉ ra đúng 1 rule.
+    Riêng Phụ thuộc hàm: FE gửi `dependent_columns` (danh sách) = 1 cột xác định suy ra NHIỀU cột phụ thuộc (vd mã_nv → tên, ngày sinh,
+    SĐT, CCCD). Tách thành từng rule 1 cột → 1 cột và dùng lại đúng hàm detect cũ cho từng rule, nên mỗi cột phụ thuộc được kiểm
+    ĐỘC LẬP: dòng nào vi phạm ở cột nào thì chỉ cột đó (cộng cột xác định) bị tô. Không có `dependent_columns` thì chạy như cũ (1 rule).
+    Cột nào không tồn tại / trùng cột xác định / chọn trùng thì báo lỗi rõ thay vì âm thầm trả "không vi phạm" (detect cũ bỏ qua lặng
+    lẽ cột không tồn tại -> người dùng dễ tưởng dữ liệu sạch)."""
+    if item.get("rule_type") != RuleType.FUNCTIONAL_DEPENDENCY.value or "dependent_columns" not in item:
+        return [_cross_field_rule_from_json(item)]
+    determinant = item.get("determinant_column")
+    dependents = item.get("dependent_columns")
+    if not isinstance(dependents, list) or not dependents or not all(isinstance(c, str) for c in dependents):
+        raise QuickToolError("Chọn ít nhất 1 cột phụ thuộc")
+    if determinant not in df.columns:
+        raise QuickToolError(f"Cột xác định '{determinant}' không tồn tại trong file")
+    seen = set()
+    for dep in dependents:
+        if dep not in df.columns:
+            raise QuickToolError(f"Cột phụ thuộc '{dep}' không tồn tại trong file")
+        if dep == determinant:
+            raise QuickToolError(f"Cột phụ thuộc '{dep}' trùng với cột xác định")
+        if dep in seen:
+            raise QuickToolError(f"Cột phụ thuộc '{dep}' bị chọn nhiều lần")
+        seen.add(dep)
+    return [_cross_field_rule_from_json({**item, "dependent_column": dep}) for dep in dependents]
+
+
+def _fd_cell_info(df: pd.DataFrame, cross_rules: list) -> tuple[dict, dict]:
+    """Phụ thuộc hàm: gộp phân tích "ô nào nghi sai" (analyze_functional_dependency) của từng rule con A -> Bi. Trả:
+      - cells: {row_index: {flagged: ô nghi sai, ref: ô mốc so sánh, hint: [câu ngắn], notes: [câu giải thích]}} (1 dòng có thể dính nhiều rule);
+      - summary: {determinant: tên cột A, rules: [{column: Bi, groups: số nhóm mâu thuẫn, determinant/dependent/unknown: số nhóm theo kết luận}]}.
+    Ô nào đã bị rule nào đó coi là nghi sai thì không còn là "mốc" nữa (nghi sai thắng). Chỉ là gợi ý để hiển thị, không đổi dòng bị gắn cờ."""
+    cells: dict = {}
+    summary = {"determinant": cross_rules[0].determinant_column, "rules": []}
+    for rule in cross_rules:
+        result = analyze_functional_dependency(df, rule)
+        for row_index, info in result["rows"].items():
+            merged = cells.setdefault(row_index, {"flagged": set(), "ref": set(), "hint": [], "notes": []})
+            merged["flagged"] |= info["flagged"]
+            merged["ref"] |= info["ref"]
+            merged["hint"] += [h for h in info["hint"] if h not in merged["hint"]]
+            merged["notes"] += [n for n in info["notes"] if n not in merged["notes"]]
+        verdicts = [g["verdict"] for g in result["groups"]]
+        summary["rules"].append({
+            "column": rule.dependent_column,
+            "groups": len(verdicts),
+            "determinant": verdicts.count("determinant"),
+            "dependent": verdicts.count("dependent"),
+            "unknown": verdicts.count("unknown"),
+        })
+    for info in cells.values():
+        info["ref"] -= info["flagged"]
+    return cells, summary
+
+
 def _run_config_tool_detect(df: pd.DataFrame, cfg: dict):
     """Chạy detect cho 1 cấu hình (1 hoặc NHIỀU cột). Trả về (column_configs, cross_field_rules, findings, noise_key,
     column) -- column = tên cột nếu đúng 1 cột, None nếu là rule liên cột (noise cấp dòng) hoặc nhiều cột; route dùng
     `column_configs` rỗng để biết đó là rule."""
     tool = cfg["tool"]
     if tool == "cross-rule":
-        rule = _cross_field_rule_from_json(cfg.get("rule") or {})
-        findings = detect_noise(df, [], cross_field_rules=[rule])
-        return [], [rule], findings, f"rule:{rule.rule_type.value}", None
+        rules = _cross_rules_from_config(cfg.get("rule") or {}, df)
+        findings = detect_noise(df, [], cross_field_rules=rules)
+        return [], rules, findings, f"rule:{rules[0].rule_type.value}", None
 
     noise_type = CONFIG_TOOL_NOISE_TYPE[tool]
     column_configs = []
@@ -1867,7 +1922,7 @@ def noise_tool_configured():
     try:
         cfg = _parse_config_tool_payload(request.form)
         df = _read_df_for_noise_tool(request)
-        column_configs, _rules, findings, noise_key, _column = _run_config_tool_detect(df, cfg)
+        column_configs, cross_rules, findings, noise_key, _column = _run_config_tool_detect(df, cfg)
         actions = _config_tool_actions(column_configs, noise_key)
 
         if mode == "detect":
@@ -1880,10 +1935,17 @@ def noise_tool_configured():
                     if part in df.columns:
                         cols.add(part)
             indices = sorted(flagged)
+            # Phụ thuộc hàm: thay vì tô mọi ô A và B của cả nhóm mâu thuẫn, đoán ô nào nhiều khả năng sai (xem
+            # analyze_functional_dependency): flagged = ô nghi sai (tô đậm), ref = ô mốc so sánh (tô nhạt), hint/notes = lý do.
+            fd_cells, fd_summary = _fd_cell_info(df, cross_rules) if noise_key == f"rule:{RuleType.FUNCTIONAL_DEPENDENCY.value}" else ({}, None)
             rows = []
             for i in indices[:CONFIG_TOOL_FLAGGED_LIMIT]:
                 values = ["" if v is None else str(v) for v in df.loc[i].tolist()]
-                rows.append({"row_number": int(i) + 1, "cells": values, "flagged": sorted(flagged[i])})
+                entry = {"row_number": int(i) + 1, "cells": values, "flagged": sorted(flagged[i])}
+                if i in fd_cells:
+                    info = fd_cells[i]
+                    entry.update(flagged=sorted(info["flagged"]), ref=sorted(info["ref"]), hint="; ".join(info["hint"]), notes=info["notes"])
+                rows.append(entry)
             # Tổng hợp THEO TỪNG CỘT đã khai (theo đúng thứ tự khai): bao nhiêu ô lỗi, ở bao nhiêu dòng, cách xử lý hợp lệ.
             # Rule liên cột (không gắn với cột nào) thì danh sách này rỗng.
             findings_by_column: dict[str, list] = {}
@@ -1928,6 +1990,18 @@ def noise_tool_configured():
                     "available_actions": actions,
                     "per_column": per_column,
             }
+            if fd_summary:
+                payload["fd_analysis"] = fd_summary
+            if len(cross_rules) > 1:
+                # Rule liên cột tách thành nhiều rule con (Phụ thuộc hàm 1 -> nhiều cột): cho biết mỗi cột phụ thuộc có bao nhiêu dòng
+                # vi phạm (số dòng, không phải ô: 1 rule con = 1 cột phụ thuộc), để người dùng thấy cột nào đang mâu thuẫn.
+                rows_by_label: dict[str, set] = {}
+                for f in findings:
+                    rows_by_label.setdefault(str(f.column), set()).add(int(f.row_index))
+                payload["rule_breakdown"] = [
+                    {"column": r.dependent_column, "flagged_rows_count": len(rows_by_label.get(describe_rule(r), set()))}
+                    for r in cross_rules
+                ]
             if not findings:
                 # Không có gì để sửa -> trả luôn CSV (không đổi) để FE vẫn nối
                 # tiếp sang tool khác được mà không phải gọi "apply" rỗng.

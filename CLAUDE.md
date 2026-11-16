@@ -407,7 +407,25 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     theo kiểu cột (số nguyên phải là số nguyên; số thực phải là số hữu hạn, loại
     `nan`/`inf`/`1_000`); `_checked_outlier_rules()` kiểm danh sách phương pháp (chỉ
     `iqr`/`zscore`, không trùng, ngưỡng số > 0). Rule liên cột (`cross-rule`) vẫn 1 rule
-    mỗi lần, cách xử lý chỉ có xoá dòng vi phạm / giữ nguyên.
+    mỗi lần, cách xử lý chỉ có xoá dòng vi phạm / giữ nguyên. NGOẠI LỆ Phụ thuộc hàm: `rule`
+    nhận `dependent_columns` (danh sách) = 1 cột xác định → NHIỀU cột phụ thuộc;
+    `_cross_rules_from_config()` tách thành từng rule A → Bi (dùng lại đúng hàm detect cũ, kiểm
+    ĐỘC LẬP từng cột, báo lỗi 400 nếu cột không tồn tại / trùng cột xác định / chọn 2 lần), response
+    thêm `rule_breakdown` = [{column, flagged_rows_count}]. Không có `dependent_columns` thì chạy như
+    cũ (`dependent_column`, kể cả `/api/detect-noise` của giao diện cũ). Xoá dòng vi phạm = HỢP các cột.
+    **Đoán ô sai (Phụ thuộc hàm):** `cross_field_rules.py::analyze_functional_dependency()` (dùng chung
+    `_fd_working_frame()` với detect nên luôn cùng tập dòng; chỉ là GỢI Ý, không đổi dòng bị gắn cờ).
+    Mỗi nhóm mâu thuẫn (cùng A, nhiều B) so thêm CÁC CỘT CÒN LẠI: >= 50% giống nhau (`FD_SAME_ENTITY_RATIO`)
+    → cùng 1 đối tượng, ô sai là B (giá trị đa số = "mốc đúng", giá trị lệch = nghi sai, hoà số lượng = "chưa rõ");
+    < 50% → nhiều khả năng 2 đối tượng khác nhau dùng chung A → nghi sai ô A, KHÔNG biết dòng nào; không cột nào so
+    được → "chưa xác định". Chỉ dùng cột "ổn định" làm bằng chứng (ở các nhóm KHÔNG vi phạm vẫn thường giống nhau,
+    `FD_STABLE_COLUMN_RATIO`) để bảng chấm công/lương (lương, tháng khác nhau là bình thường) không bị coi là "khác
+    đối tượng". Route trả thêm: `flagged_rows[].ref` (ô mốc, tô nhạt), `hint` (câu ngắn), `notes` (lý do, tooltip) và
+    `fd_analysis` {determinant, rules:[{column, groups, determinant, dependent, unknown}]}; FE thêm cột "Gợi ý" +
+    chú thích `.ft-table-note.is-long`. Kiểm chứng trên `noisy_employee_dataset_large.csv`: `id → full_name` ra đúng 5
+    nhóm = 5 id `duplicate_id_conflicting_data` trong file đáp án, cả 5 đều kết luận nghi sai `id`.
+    **Chưa làm:** cách xử lý vẫn "xoá cả dòng" = xoá HẾT dòng trong nhóm (kể cả dòng đúng), chưa có "chỉ xoá dòng nghi
+    sai" hay "sửa về giá trị phổ biến nhất"; vế xác định vẫn 1 cột.
 - `frontend/` — **GIAO DIỆN HIỆN HÀNH "Denoise" (mục 18-22):** 4 file
   `workspace.html` + `workspace.css` + `workspace.js` + `workspace-flow.js`, HTML/CSS/JS
   thuần, MỘT trang duy nhất `GET /` gồm 9 khối đổi bằng `switchSection()` (KHÔNG điều
@@ -1398,7 +1416,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       nhầm dòng đúng, nên thêm "sửa về giá trị phổ biến nhất"; (3) không có "bắt buộc có giá
       trị khi…" (ô trống luôn bị bỏ qua); (4) Nếu–thì chỉ 1 điều kiện mỗi vế, không VÀ/HOẶC;
       (5) công thức chỉ số + − × ÷, không ngày/hàm/chữ, tên cột có dấu cách không gõ được
-      (dùng `ast`); (6) Phụ thuộc hàm chỉ 1 cột→1 cột; (7) UI mỗi lần 1 rule, kiểu giá trị
+      (dùng `ast`); (6) ~~Phụ thuộc hàm chỉ 1 cột→1 cột~~ [ĐÃ LÀM: 1 cột xác định → nhiều cột phụ thuộc, nút "＋ Thêm cột phụ thuộc"; còn lại: vế xác định vẫn 1 cột, và vẫn gắn cờ CẢ nhóm mâu thuẫn]; (7) UI mỗi lần 1 rule, kiểu giá trị
       (Số/Ngày/Chữ) phải chọn tay nên dễ chọn vô nghĩa (age=Ngày) → mọi dòng bị bỏ qua.
       Công thức chia cho 0 bị gắn cờ như vi phạm. Tốc độ công thức OK (100k dòng ~1.4s).
     - **Hướng đã thảo luận cho Rule liên cột (user chưa chốt, đang gác):** gộp thành NGÔN NGỮ
