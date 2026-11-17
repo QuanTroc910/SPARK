@@ -1221,6 +1221,11 @@ a.hm-tool:hover { background: #ebebe7; }
 .cf-action-preview { margin: 0; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; color: var(--signal-dark); background: var(--signal-soft); border-left: 3px solid var(--signal); }
 .cf-action-preview.is-risk { color: #ae3a3a; background: #fbeaea; border-left-color: #ae3a3a; font-weight: 600; }
 .cf-stale-note { margin: 0; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; font-weight: 600; color: #7a4f00; background: #fff4d6; border-left: 3px solid #e0a100; }
+/* Dòng báo kết quả kiểm tra biểu thức khi đang gõ (xanh = hợp lệ, đỏ = lỗi, xám = đang kiểm tra / không tự kiểm tra); mờ đi khi bạn đang gõ tiếp. */
+.cf-live { margin: 6px 0 0; padding: 7px 10px; font-size: 12.5px; line-height: 1.5; border-left: 3px solid var(--line); background: var(--bg); color: var(--ink-dim); word-break: break-word; }
+.cf-live.is-ok { color: #1d6b3a; background: #e6f4ea; border-left-color: #2e9d57; }
+.cf-live.is-bad { color: #ae3a3a; background: #fbeaea; border-left-color: #ae3a3a; }
+.cf-live.is-stale { opacity: 0.45; }
 .cf-confirm { padding: 10px 12px; background: #fbeaea; border-left: 3px solid #ae3a3a; }
 .cf-confirm-text { margin: 0 0 8px; font-size: 13px; line-height: 1.5; font-weight: 600; color: #ae3a3a; }
 .cf-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }

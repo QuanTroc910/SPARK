@@ -131,6 +131,8 @@ function wireInputToggle(toggleEl, dropzoneEl, pasteEl, onModeChange) {
 const SECTIONS = ["home", "guide", "security", "privacy", "config", "class-noise", "profile", "free-tools", "convert"];
 const PUBLIC_SECTIONS = new Set(["home", "guide", "security", "privacy"]);
 const PIPE_UNDO_MAX = 5; // số bước gần nhất có thể Hoàn tác trong chuỗi nối tiếp (khớp Bước 5 cũ)
+const LIVE_CHECK_DELAY_MS = 900; // ngừng gõ ngần này mili-giây thì tự kiểm tra biểu thức (báo lỗi sớm, khỏi đợi bấm Phát hiện)
+const LIVE_CHECK_MAX_BYTES = 5 * 1024 * 1024; // đầu vào lớn hơn thì không tự kiểm tra khi gõ (mỗi lần kiểm tra phải gửi lại cả dữ liệu lên máy chủ)
 
 const state = {
   section: "home", // 1 trong SECTIONS -- khối đang hiện (mặc định: trang chủ)
@@ -166,6 +168,8 @@ const state = {
         // "Chip giá trị" của ô Biểu thức: columnValues = {tên cột: {values:[{value,count}], more}} backend trả cho cột Nhóm (chữ ít giá trị khác nhau);
         // valueCol = cột vừa bấm chip, đang hiện giá trị của nó ("" = ẩn).
         columnValues: {}, valueCol: "",
+        // Kiểm tra biểu thức khi đang gõ: liveTimer = hẹn giờ ngừng-gõ, liveSeq = số thứ tự lần kiểm tra mới nhất (kết quả về muộn của lần cũ bị bỏ).
+        liveTimer: null, liveSeq: 0,
         // colSig = "chữ ký" đầu vào mà cột hiện có được đọc từ đó; pendingSig = đầu vào đang được đọc dở; colSeq = chống chạy chồng.
         colSig: "", pendingSig: "", colSeq: 0,
         // Tool kiểm NHIỀU cột (Không nhất quán, Ngoài khoảng -- xem CF_MULTI): forms[tên tool] = các form đang khai
@@ -2539,11 +2543,13 @@ function renderCfRuleFields() {
       <div class="field">
         <label for="cf-expression">Biểu thức: điều kiện mà MỌI dòng phải thoả</label>
         <textarea class="input mono" id="cf-expression" rows="3" spellcheck="false" placeholder='vd: ngay_nghi > ngay_vao   ·   tong == so_luong * don_gia   ·   tuoi >= 18 và tuoi <= 65   ·   phong_ban = "Sales" => luong >= 10000000'>${escapeHtml(state.cf.expr.text)}</textarea>
+        <p class="cf-live" id="cf-live-check" role="status" aria-live="polite" hidden></p>
       </div>
       ${exprHelperHTML(cols)}
       ${exprOptionsHTML()}
       <p class="hint-note">Dòng nào chắc chắn sai thì bị gắn cờ. Muốn nói «nếu A thì B»: bấm THÌ => giữa A và B, dòng thoả A mà không thoả B bị gắn cờ, dòng không thoả A luôn đạt. Chữ là giá trị có sẵn trong cột (vd Sales) viết trần cũng được, Denoise tự tra; giá trị có dấu cách hoặc không có sẵn thì viết trong dấu nháy. Chữ phân biệt hoa/thường. Tên cột có dấu cách viết trong [ ], phần trăm viết /100. Ô trống hoặc sai kiểu không kết luận được nên bị bỏ qua, và Denoise báo lại số dòng đó sau khi phát hiện. Cách viết đầy đủ ở phần giới thiệu phía trên.</p></div>`;
     renderCfValueChips(state.cf.valueCol); // dựng lại form (đổi tab / đọc lại cột): hiện lại giá trị của cột đang chọn nếu còn
+    scheduleLiveCheck(); // ... và kiểm tra lại biểu thức đang có (đầu vào có thể vừa đổi)
   } else {
     box.innerHTML = `<div class="cf-row cf-fd-row">${c("cf-det-col", "Cột xác định (A)")}<div class="field" id="cf-fd-deps"></div></div>
       <p class="hint-note">Mỗi giá trị A chỉ được đi với đúng 1 giá trị của TỪNG cột phụ thuộc (vd ma_nv → ten, ngay_sinh, so_dien_thoai, cccd). Mỗi cột phụ thuộc được kiểm riêng. Không dùng cho cột là kết quả giao dịch lặp lại.</p>`;
@@ -2624,13 +2630,67 @@ function insertIntoExpression(text) {
   const inside = text === "( )" || text === '""' || text.endsWith("()");
   box.setSelectionRange(inside ? caret - 1 : caret, inside ? caret - 1 : caret);
   saveExprState();
+  scheduleLiveCheck(); // chèn bằng nút / chip không bắn sự kiện input nên phải tự hẹn kiểm tra
 }
 $("cf-options").addEventListener("input", (e) => {
   if (state.cf.tool !== "cross-rule") return;
-  if (e.target.id === EXPR_BOX) saveExprState();
-  else if (e.target.id === "cf-rule-date-format" && $("cf-rule-type").value === "expression") state.cf.expr.dateFormat = e.target.value;
-  else if (e.target.id === "cf-tolerance") state.cf.expr.tolerance = e.target.value;
+  if (e.target.id === EXPR_BOX) { saveExprState(); scheduleLiveCheck(); }
+  else if (e.target.id === "cf-rule-date-format" && $("cf-rule-type").value === "expression") { state.cf.expr.dateFormat = e.target.value; scheduleLiveCheck(); }
+  else if (e.target.id === "cf-tolerance") { state.cf.expr.tolerance = e.target.value; scheduleLiveCheck(); }
 });
+/* ----- Kiểm tra biểu thức khi đang gõ ------------------------------------------------------------------------------------------------------
+   Ngừng gõ LIVE_CHECK_DELAY_MS thì gửi biểu thức + đầu vào lên /api/noise-tools/check-expression (cùng bộ tính với Phát hiện, không gắn cờ dòng nào) và hiện
+   dòng "✓ hợp lệ" hoặc lỗi dưới ô nhập. Mỗi lần gõ/chèn tăng liveSeq nên kết quả của lần kiểm tra cũ về muộn bị bỏ. Không chặn nút Phát hiện. */
+function setLiveCheck(kind, html) {
+  const el = $("cf-live-check");
+  if (!el) return;
+  el.hidden = !kind;
+  el.className = "cf-live" + (kind ? ` is-${kind}` : "");
+  el.innerHTML = html || "";
+}
+function scheduleLiveCheck() {
+  clearTimeout(state.cf.liveTimer);
+  state.cf.liveSeq++; // mọi kết quả đang chờ về trở thành cũ
+  const box = $(EXPR_BOX);
+  if (!box || state.cf.tool !== "cross-rule") return;
+  const line = $("cf-live-check");
+  if (!box.value.trim()) { setLiveCheck(null); return; }
+  if (line && !line.hidden) line.classList.add("is-stale"); // đang gõ: mờ kết quả cũ cho khỏi tưởng còn đúng
+  state.cf.liveTimer = setTimeout(runLiveCheck, LIVE_CHECK_DELAY_MS);
+}
+async function runLiveCheck() {
+  const box = $(EXPR_BOX);
+  if (!box || state.cf.tool !== "cross-rule" || $("cf-rule-type").value !== "expression") return;
+  const expression = box.value.trim();
+  const src = cfInputSource();
+  if (!expression || !src) { setLiveCheck(null); return; }
+  const size = src.file ? src.file.size : (src.text || "").length;
+  if (size > LIVE_CHECK_MAX_BYTES) { setLiveCheck("idle", "Dữ liệu lớn nên không tự kiểm tra khi gõ: bấm «Phát hiện» để kiểm tra."); return; }
+  const fd = new FormData();
+  const inp = collectInput("cf", fd);
+  if (inp.error) { setLiveCheck(null); return; }
+  fd.append("expression", expression);
+  fd.append("date_format", $("cf-rule-date-format") ? $("cf-rule-date-format").value.trim() : "");
+  fd.append("tolerance", $("cf-tolerance") ? $("cf-tolerance").value.trim() : "");
+  const seq = ++state.cf.liveSeq;
+  setLiveCheck("wait", "Đang kiểm tra…");
+  let response, data;
+  try {
+    response = await fetch("/api/noise-tools/check-expression", { method: "POST", body: fd });
+    data = await response.json();
+  } catch (err) {
+    if (seq === state.cf.liveSeq) setLiveCheck(null); // mất kết nối: im lặng, nút Phát hiện sẽ báo
+    return;
+  }
+  if (seq !== state.cf.liveSeq) return; // trong lúc chờ đã gõ tiếp / đổi đầu vào: kết quả này đã cũ
+  if (!response.ok) { setLiveCheck(null); return; } // lỗi đọc dữ liệu: để Phát hiện báo
+  if (data.ok) {
+    const reads = (data.columns || []).map((c) => `<b>${escapeHtml(c.name)}</b> ${EXPR_KIND_VI[c.type] || ""}${c.date_format ? " " + escapeHtml(humanDateFormat(c.date_format)) : ""}`).join(" · ");
+    setLiveCheck("ok", `✓ Biểu thức hợp lệ${reads ? ` · cách đọc cột: ${reads}` : ""}`);
+  } else {
+    setLiveCheck("bad", `✗ ${escapeHtml(data.error || "Biểu thức chưa hợp lệ")}`);
+  }
+}
 $("cf-options").addEventListener("click", (e) => {
   if (state.cf.tool !== "cross-rule") return;
   const colBtn = e.target.closest('[data-role="expr-col"]');

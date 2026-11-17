@@ -411,7 +411,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     ĐÃ GỠ), `/blank-rows` (bảng các dòng có ô trống cho "Điền tay từng ô").
     Dùng chung: `/inspect` (đọc tên cột + `guessed_dtypes` + 20 dòng xem trước của
     file/text vừa chọn; gửi `include_values=true` thì trả thêm `column_values` = {cột Nhóm: {values:[{value,count}] tối đa 30, more}} cho chip
-    giá trị của rule Biểu thức, mục 28), `/normalize` (đọc lại đầu vào GỐC thành CSV chuẩn, dùng cho nút
+    giá trị của rule Biểu thức, mục 28), `/check-expression` (kiểm tra nhanh 1 biểu thức khi đang gõ, mục 30), `/normalize` (đọc lại đầu vào GỐC thành CSV chuẩn, dùng cho nút
     "Bắt đầu lại từ gốc"). Nhóm "Cần cấu hình": MỘT route `POST /api/noise-tools/configured`
     với field `mode` = `detect` | `apply` và `config` (JSON) — `config.tool` ∈
     `out-of-range` | `outlier` | `inconsistent-category` | `cross-rule`. Tool theo cột
@@ -1515,7 +1515,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       test Phụ thuộc hàm (backend + giao diện) vì dùng chung file.
     - **Giới hạn đã biết / chưa làm:** (`có(cột)`, `=>`, `<=>`, Nếu–thì nhiều điều kiện và cách xử lý mặc định ĐÃ LÀM
       ở mục 25); chữ so phân biệt hoa/thường (đã cắt khoảng trắng); `chu()`/`so()` không nhận định dạng số kiểu
-      "1.000,5"; không có kiểm tra cú pháp khi đang gõ (chỉ báo lỗi lúc bấm Phát hiện).
+      "1.000,5"; kiểm tra cú pháp khi đang gõ [ĐÃ LÀM ở mục 30].
 
 25. **Rule liên cột ĐỢT 2: Nếu – thì chạy chung bộ máy biểu thức + mặc định "— Chọn cách xử lý —" — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
     - **Nguồn gốc:** user chốt đợt 2 sau đợt 1 ("OKe làm đi"). Gồm: `=>`, `<=>`, `có(cột)`, tab Nếu–thì làm lại, và đổi mặc định cách xử
@@ -1541,7 +1541,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       lõi); route đối chiếu pandas độc lập trên `noisy_employee_dataset_large.csv` (NẾU department = Sales THÌ salary >= 10 triệu -> 6 dòng
       vi phạm, 2 bỏ qua; `department = Sales => có(phone)` -> 1 dòng); Playwright tab Nếu–thì (chèn đúng ô, mẫu, lỗi từng vế, giữ nội dung);
       chạy lại test Biểu thức đợt 1 + toàn bộ test Phụ thuộc hàm; đạt trên pandas 3.0 và 2.2.
-    - **Chưa làm:** kiểm tra cú pháp khi đang gõ; Nếu–thì không có chế độ "nhiều rule một lượt".
+    - **Chưa làm:** Nếu–thì không có chế độ "nhiều rule một lượt". (Kiểm tra cú pháp khi đang gõ: đã làm ở mục 30.)
 
 26. **Cần cấu hình: báo "cấu hình đã đổi" + báo trước "Sẽ xoá N dòng" — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
     - **Nguồn gốc:** 2 việc nhỏ nợ từ mục 23, user bảo "làm hai việc nhỏ đó đi".
@@ -1619,11 +1619,11 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       2.580 đối chiếu = 0 khác biệt), Phụ thuộc hàm (lõi, hành động, nhiều cột, UI x3), IQR, báo cấu hình đã đổi, hộp xác nhận + hoàn tác, dải nối tiếp: không hồi quy.
       `test_ifthen_ui.js` (tab Nếu – thì) đã bỏ vì tab không còn; hai test UI cũ `test_expr_ui.js` / `test_stale_ui.js` phải sửa cho khớp (tab, mẫu).
     - **Giới hạn / chưa làm:** chip giá trị chỉ cho cột Nhóm (cột số nhiều giá trị ít như điểm 1–5 vẫn gõ số tay); không có "gợi ý điều kiện" dựng sẵn
-      (đã đề xuất, user chưa yêu cầu); mũ `^` chưa có trong bộ máy; không kiểm tra cú pháp khi đang gõ.
+      (đã đề xuất, user chưa yêu cầu); mũ `^` chưa có trong bộ máy. (Kiểm tra cú pháp khi đang gõ: mục 30.)
 
 29. **Tự nhận chữ trần (không dấu nháy) là giá trị của cột đang so — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
     - **Nguồn gốc:** user mong "máy tự nhận số hay chữ", người dùng đỡ phải gõ nháy; sau khi mình giải thích hiện trạng (chữ trần bị hiểu là tên cột) và đề xuất
-      "chỗ 1" thì user chốt "làm chỗ 1 đi". Chỗ 2 (kiểm tra cú pháp khi đang gõ, tự kiểm tra sau ~1s ngừng gõ) mình đã nêu nhưng user CHƯA yêu cầu.
+      "chỗ 1" thì user chốt "làm chỗ 1 đi". Chỗ 2 (kiểm tra cú pháp khi đang gõ, tự kiểm tra sau ~1s ngừng gõ) user yêu cầu sau ("làm chỗ hai đi") và đã làm ở mục 30.
     - **Luật** (`expression_rules.py::bind_bare_values`, chạy sau `parse_expression`, trước khi tính / liệt kê cột; trả CÂY MỚI, đổi nút `("col", từ, pos)` thành
       `("str", từ, pos)`): một từ được coi là chữ khi đồng thời (1) không phải tên cột nào (`_ColumnResolver.known()`, tên cột luôn thắng), (2) không viết trong
       `[ ]`, (3) đứng LIỀN KỀ một CỘT trong phép so sánh (`cmp`, kể cả chuỗi `a < b < c`, hai chiều `Sales = department`), (4) đúng là một giá trị thật của cột
@@ -1640,6 +1640,27 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       if_then_columns, describe_rule; typo Salse / sales / agee / [Sales] / hai vế lạ / lỗi theo vế; tên cột thắng giá trị; giá trị có dấu cách vẫn cần nháy; đối chiếu ngẫu nhiên
       560 cấu hình `c = word` vs `c = "word"` = 0 khác biệt; đạt pandas 3.0.5 và 2.2.3); Playwright `test_expr_toolbar_ui.js` (gõ `department = Sales` = 253 dòng, nếu–thì gõ trần = 6 dòng,
       Salse / sales báo lỗi gợi ý); chạy lại toàn bộ test Biểu thức (lõi, route, 2.580 đối chiếu = 0 khác biệt), Phụ thuộc hàm, IQR, báo cấu hình đổi, xác nhận + hoàn tác: không hồi quy.
+
+30. **Kiểm tra biểu thức khi đang gõ ("chỗ 2" của mục 29) — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** mình từng đề xuất "báo lỗi ngay khi gõ, tự kiểm tra sau ~1 giây ngừng gõ" (user CHƯA yêu cầu lúc đó); sau đó user nhắn "làm chỗ hai đi, đang là làm gì đó t quên
+      mất rồi" -> nhắc lại rồi làm.
+    - **Backend** (`app.py::noise_tool_check_expression`, `POST /api/noise-tools/check-expression`, `@login_required`): form = `file`|`text` (như các route noise-tools khác) + `expression` +
+      `date_format` + `tolerance` (trống = tự nhận / mặc định). Tính bằng ĐÚNG `evaluate_expression` của Phát hiện (nên lỗi nào Phát hiện báo thì ở đây cũng báo), NHƯNG không gắn cờ dòng nào,
+      không đóng gói file, không giữ gì lại trên server (vẫn stateless). Biểu thức sai là trạng thái BÌNH THƯỜNG khi đang gõ dở nên trả HTTP 200 `{ok:false, error}`; thành công trả
+      `{ok:true, columns:[{name,type,date_format}]}` (cách đọc từng cột); chỉ lỗi đọc file mới là 400. Sai số không phải số -> `ok:false`.
+    - **Giao diện** (`workspace.js`: `scheduleLiveCheck()`, `runLiveCheck()`, `setLiveCheck()`; khối `#cf-live-check` dưới ô biểu thức; hằng `LIVE_CHECK_DELAY_MS` = 900,
+      `LIVE_CHECK_MAX_BYTES` = 5MB): hẹn giờ ngừng-gõ rồi hiện 1 trong: xanh "✓ Biểu thức hợp lệ · cách đọc cột: age Số · join_date Ngày dd/mm/yyyy", đỏ "✗ <lỗi>", xám "Đang kiểm tra…"
+      hoặc "Dữ liệu lớn nên không tự kiểm tra khi gõ: bấm «Phát hiện»". Kích hoạt khi: gõ, chèn bằng nút/chip/chip giá trị (`insertIntoExpression` không bắn sự kiện input nên tự gọi), đổi khuôn
+      ngày / sai số, dựng lại form (đổi tab, đọc lại cột, đổi file). Mỗi lần gõ/chèn tăng `state.cf.liveSeq` nên kết quả về muộn của lần cũ bị bỏ; kết quả cũ bị làm mờ (`is-stale`) khi đang gõ tiếp;
+      ô trống thì ẩn dòng; chưa có file thì không gọi. KHÔNG chặn nút Phát hiện. Đầu vào > 5MB không tự kiểm tra (mỗi lần kiểm tra phải gửi lại cả dữ liệu vì route stateless).
+    - **Nhân tiện:** gõ ngày trần (`join_date > 2020-01-01`) bị hiểu là phép trừ nên báo "không so sánh được Ngày với Số" mà không nói cách sửa; đã thêm gợi ý "ngày viết trong dấu nháy, vd
+      "2024-01-31"" (chỉ khi vế Số không phải 1 cột nguyên, nên `salary > join_date` không bị nhắc nhầm).
+    - **Kiểm chứng:** `test_check_route.py` (Flask test client: 401 chưa đăng nhập, ok + cách đọc cột, chữ trần, số + chữ, gõ nhầm giá trị, dở dang, sai tên cột, sai số, khuôn ngày thiếu %, ô trống,
+      400 thiếu dữ liệu, dán text, nhất quán với Phát hiện); Playwright `test_live_check_ui.js` (không file/ô trống không báo, xanh kèm cách đọc, gõ 23 ký tự liên tục chỉ 1 lần gọi máy chủ,
+      mờ khi gõ tiếp, 4 loại lỗi đỏ, chèn bằng chip/nút/chip giá trị, đổi khuôn ngày gọi lại 1 lần, xoá ô ẩn dòng, đổi tab rồi quay lại kiểm tra lại, kết quả cũ về muộn không đè kết quả mới
+      (giả lập chậm 2,6s), Phát hiện vẫn ra 10 dòng, file 6,5MB chỉ hiện lời nhắc và không gọi máy chủ); chạy lại toàn bộ test Biểu thức (lõi, route, 2.580 đối chiếu), Phụ thuộc hàm, IQR,
+      báo cấu hình đã đổi, hộp xác nhận + hoàn tác, dải nối tiếp: không hồi quy.
+    - **Giới hạn:** mỗi lần kiểm tra đọc lại toàn bộ dữ liệu (≤ 5MB); chỉ cho tab Biểu thức (Phụ thuộc hàm không có ô gõ); lỗi hiện dưới ô, chưa tô vị trí ký tự sai trong ô.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -1736,6 +1757,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 - [x] Hộp xác nhận xoá dòng (chạy thử `dry_run`) + nút Hoàn tác 5 bước ở dải nối tiếp (3 nhóm tool) — xem mục 27.
 - [x] Biểu thức dễ dùng hơn: bỏ 2 mẫu, gộp Nếu – thì vào Biểu thức (nút THÌ =>), 3 hàng nút dấu, chip giá trị cột Nhóm — xem mục 28.
 - [x] Tự nhận chữ trần (không nháy) là giá trị thật của cột đang so; gõ nhầm thì báo lỗi kèm giá trị gần giống — xem mục 29.
+- [x] Kiểm tra biểu thức khi đang gõ (dòng xanh/đỏ dưới ô, ngừng gõ ~1s) — xem mục 30.
 - [x] Phụ thuộc hàm: 1 cột xác định → nhiều cột phụ thuộc, đoán ô sai (so các cột còn lại), 2 cách xử lý
       "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" + xem trước (mục 23, commit `3ee977f`, `73978bc`).
 - [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).

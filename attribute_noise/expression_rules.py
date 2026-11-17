@@ -850,7 +850,13 @@ class _Evaluator:
             elif left.kind == "text" and left.literal:
                 left = self.coerce_literal(left, right, pos)
             else:
-                raise self.err(pos, f"không so sánh được {KIND_LABELS[left.kind]} với {KIND_LABELS[right.kind]}" + self.mismatch_hint(left, right))
+                hint = self.mismatch_hint(left, right)
+                num_side = left if left.kind == "num" else right
+                if {left.kind, right.kind} == {"date", "num"} and num_side.column is None:
+                    # Vế Số không phải 1 cột nguyên mà là kết quả phép tính/hằng: rất có thể là ngày gõ trần (2020-01-01) bị hiểu là phép trừ
+                    # 2020 - 01 - 01 = 2018 nên thành Số: nhắc viết trong dấu nháy. (Số cột so với Ngày cột như salary > join_date thì không nhắc.)
+                    hint += (". " if not hint else ". ") + "Nếu muốn so với một ngày cụ thể thì viết trong dấu nháy, vd \"2024-01-31\" (ngày gõ trần như 2024-01-31 bị hiểu là phép trừ)"
+                raise self.err(pos, f"không so sánh được {KIND_LABELS[left.kind]} với {KIND_LABELS[right.kind]}" + hint)
         func = _COMPARE_OPS[op]
         if left.kind == "text" and op not in ("==", "!="):
             for value in (left, right):

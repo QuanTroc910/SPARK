@@ -1746,6 +1746,38 @@ def noise_tool_inspect():
     )
 
 
+@app.route("/api/noise-tools/check-expression", methods=["POST"])
+@login_required
+def noise_tool_check_expression():
+    """Kiểm tra NHANH một biểu thức (rule liên cột) trên dữ liệu hiện có để giao diện báo lỗi ngay khi người dùng đang gõ (ngừng gõ ~1s thì gọi),
+    thay vì phải đợi bấm Phát hiện. Tính đúng như Phát hiện (cùng evaluate_expression) nên lỗi nào Phát hiện báo thì ở đây cũng báo: sai cú pháp, tên
+    cột không có, sai kiểu (số + chữ), chữ trần gõ nhầm... NHƯNG không gắn cờ dòng nào, không đóng gói file, không giữ gì lại trên server.
+    Biểu thức sai là trạng thái BÌNH THƯỜNG khi đang gõ dở nên trả HTTP 200 + ok=false; chỉ lỗi đọc file mới là 400.
+    Form: file | text (như các route noise-tools khác) + expression + date_format + tolerance (bỏ trống = tự nhận / mặc định)."""
+    try:
+        df = _read_df_for_noise_tool(request)
+    except QuickToolError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Không đọc được file: {exc}"}), 400
+    expression = request.form.get("expression", "")
+    date_format = request.form.get("date_format", "").strip() or None
+    tolerance_text = request.form.get("tolerance", "").strip()
+    try:
+        tolerance = float(tolerance_text) if tolerance_text else None
+    except ValueError:
+        return jsonify({"ok": False, "error": "Sai số khi so bằng phải là một số"})
+    try:
+        result = evaluate_expression(df, expression, tolerance, date_format)
+    except ExpressionError as exc:
+        return jsonify({"ok": False, "error": str(exc)})
+    # Cách đọc từng cột dùng trong biểu thức (Số / Ngày / Chữ) để FE hiện kèm dòng "hợp lệ" -- giúp người dùng thấy máy hiểu cột nào là kiểu gì.
+    return jsonify({
+        "ok": True,
+        "columns": [{"name": c["name"], "type": c["type"], "date_format": c["date_format"]} for c in result.columns],
+    })
+
+
 def _parse_config_tool_payload(form) -> dict:
     """Field `config` là 1 chuỗi JSON (gửi kèm multipart cùng file/text):
     {tool, column, dtype, params{...}, rule{...}, action, fixed_value}."""
