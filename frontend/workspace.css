@@ -281,12 +281,12 @@ input[type="checkbox"] { accent-color: #111; width: 16px; height: 16px; }
 .ft-topbar {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
   padding: 22px 0 40px;
-  font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.06em;
+  font-family: "IBM Plex Mono", monospace; font-size: 14px; letter-spacing: 0.05em;
   text-transform: uppercase; color: var(--ink-faint);
 }
 .ft-crumb b { color: #111; font-weight: 600; }
-.ft-crumb i { font-style: normal; margin: 0 6px; }
-.ft-meta { display: flex; flex-direction: column; gap: 8px; text-align: right; }
+.ft-crumb i { font-style: normal; margin: 0 8px; }
+.ft-meta { display: flex; flex-direction: column; gap: 12px; text-align: right; }
 .ft-meta span { display: block; line-height: 1.25; }
 .ft-meta strong { display: block; color: #111; font-weight: 600; }
 

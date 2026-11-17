@@ -233,7 +233,6 @@ function onLoggedOut() {
 function setAuthMode(mode) {
   authState.mode = mode;
   const isLogin = mode === "login";
-  $("ws-auth-eyebrow").textContent = isLogin ? "[ Chào mừng trở lại ]" : "[ Bắt đầu ]";
   $("ws-auth-title").textContent = isLogin ? "Đăng nhập" : "Tạo tài khoản";
   $("ws-auth-desc").textContent = isLogin
     ? "Tiếp tục việc đang dở."
