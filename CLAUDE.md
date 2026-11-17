@@ -43,6 +43,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     (message tiếng Việt chỉ rõ vị trí). **Đợt 2 (mục 25)**: thêm toán tử `=>`/`->` (kéo theo) và `<=>`/`<->`
     (tương đương), hàm `có(cột)`, `evaluate_conditional(df, if_expr, then_expr, ...)` + `detect_if_then_rule()`
     (`RuleType.IF_THEN`, field `if_expression`/`then_expression`), `if_then_columns()`/`if_then_column_names()`.
+    **Mục 28**: `column_value_counts(series, limit)` (giá trị chữ + số dòng theo ĐÚNG cách bộ máy đọc chữ: cắt khoảng trắng, bỏ ô thiếu,
+    phân biệt hoa/thường) cho "chip giá trị"; câu báo lỗi "không có cột «X»" nối thêm gợi ý viết trong dấu nháy khi gõ chữ trần.
     Chỉ import `config.py` để `cross_field_rules.py` import được mà không vòng tròn.
   - `pipeline.py` — `load_data()`, `detect_noise()` (nhận thêm
     `cross_field_rules` tuỳ chọn), `get_flagged_rows()`, `guess_column_dtype()`
@@ -406,7 +408,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     trống + Thiếu giá trị nâng cao — 2 route cũ `/fill-blanks` và `/remove-empty-rows`
     ĐÃ GỠ), `/blank-rows` (bảng các dòng có ô trống cho "Điền tay từng ô").
     Dùng chung: `/inspect` (đọc tên cột + `guessed_dtypes` + 20 dòng xem trước của
-    file/text vừa chọn), `/normalize` (đọc lại đầu vào GỐC thành CSV chuẩn, dùng cho nút
+    file/text vừa chọn; gửi `include_values=true` thì trả thêm `column_values` = {cột Nhóm: {values:[{value,count}] tối đa 30, more}} cho chip
+    giá trị của rule Biểu thức, mục 28), `/normalize` (đọc lại đầu vào GỐC thành CSV chuẩn, dùng cho nút
     "Bắt đầu lại từ gốc"). Nhóm "Cần cấu hình": MỘT route `POST /api/noise-tools/configured`
     với field `mode` = `detect` | `apply` và `config` (JSON) — `config.tool` ∈
     `out-of-range` | `outlier` | `inconsistent-category` | `cross-rule`. Tool theo cột
@@ -420,8 +423,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     `nan`/`inf`/`1_000`); `_checked_outlier_rules()` kiểm danh sách phương pháp (chỉ
     `iqr`/`zscore`, không trùng, ngưỡng số > 0). Rule liên cột (`cross-rule`) vẫn 1 rule
     mỗi lần, cách xử lý chỉ có xoá dòng vi phạm / giữ nguyên. Giao diện Denoise gửi
-    `rule_type` ∈ `expression` | `if_then` | `functional_dependency` (compare/formula/conditional cũ vẫn được
-    backend nhận cho giao diện cũ). Rule `expression` và `if_then` trả thêm `expression_info` (xem mục 24-25). NGOẠI LỆ Phụ thuộc hàm: `rule`
+    `rule_type` ∈ `expression` | `functional_dependency` (từ mục 28 giao diện Denoise không còn gửi `if_then`; compare/formula/conditional/if_then
+    vẫn được backend nhận cho giao diện cũ). Rule `expression` và `if_then` trả thêm `expression_info` (xem mục 24-25). NGOẠI LỆ Phụ thuộc hàm: `rule`
     nhận `dependent_columns` (danh sách) = 1 cột xác định → NHIỀU cột phụ thuộc;
     `_cross_rules_from_config()` tách thành từng rule A → Bi (dùng lại đúng hàm detect cũ, kiểm
     ĐỘC LẬP từng cột, báo lỗi 400 nếu cột không tồn tại / trùng cột xác định / chọn 2 lần), response
@@ -464,7 +467,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     "01 · ĐẦU VÀO / 02 · KẾT QUẢ", mỗi tool một tab (`data-tool`). Nhóm Free Tools: tab
     `remove-duplicates`, `trim-whitespace`, `format-noise` (Sai định dạng), `blanks` (Ô
     trống). Nhóm Cần cấu hình: `out-of-range`, `outlier`, `inconsistent-category`,
-    `cross-rule` (3 kiểu: Biểu thức / Nếu – thì / Phụ thuộc hàm). Nhóm Convert: `delimiter`,
+    `cross-rule` (2 kiểu từ mục 28: Biểu thức, gồm cả nếu–thì viết bằng `=>` / Phụ thuộc hàm). Nhóm Convert: `delimiter`,
     `csv-to-json`, `json-to-csv`.
   - **Bộ nhớ NỐI TIẾP (`state.pipe`, `recordPipeStep()`, `renderPipeStrips()`)**: kết
     quả 1 tool thành đầu vào của tool kế tiếp, xuyên cả 3 nhóm (bảng "Xử lý tiếp bằng"
@@ -1494,7 +1497,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       khi một cột không đọc được ô nào (vd ép sai khuôn ngày) hoặc mọi dòng bị bỏ qua, cảnh báo khi cột Chữ
       bị so thứ tự (`< >`, nhiều khả năng là ngày/số bị nhận nhầm). 0 lỗi mà còn dòng bị bỏ qua thì trạng
       thái là "⚠ Không thấy dòng sai, nhưng K/N dòng chưa kiểm được" (KHÔNG báo ✅).
-    - **Giao diện:** `RULE_TYPES` = Biểu thức / Nếu – thì / Phụ thuộc hàm (đã bỏ nút So sánh, Công thức). Tab
+    - **Giao diện [ĐÃ ĐỔI Ở MỤC 28: bỏ mẫu so sánh hai cột, tab Nếu – thì gộp vào Biểu thức]:** `RULE_TYPES` = Biểu thức / Nếu – thì / Phụ thuộc hàm (đã bỏ nút So sánh, Công thức). Tab
       Biểu thức: ô nhập (textarea), nút chèn nhanh `và`/`hoặc`/`không`/`( )` và chip tên cột (bấm chèn tại
       con trỏ, `exprRef()` tự bọc `[ ]` khi tên có dấu cách/ký tự lạ/trùng từ khoá), mẫu "so sánh hai cột"
       (cột A, toán tử, cột B) chèn thành `A op B`, ô "Khuôn ngày" (trống = tự nhận) + "Sai số khi so bằng
@@ -1521,12 +1524,12 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       `a <=> b` = `(a => b) và (b => a)`, thấp nhất. Gõ nhầm `age => 18` (muốn `>=`) báo lỗi kèm gợi ý "viết >=". `có(cột)` (hay
       `co(cột)`): Đúng nếu ô có giá trị, Sai nếu ô trống/"N/A"..., LUÔN biết chắc (không "chưa biết") nên bắt được "bắt buộc có giá trị khi…":
       `phong_ban == "Sales" => có(ma_khach)`. Chỉ nhận đúng 1 cột.
-    - **Tab Nếu – thì (`RuleType.IF_THEN`):** 2 ô NẾU và THÌ, MỖI Ô LÀ 1 BIỂU THỨC ĐẦY ĐỦ (và/hoặc/không, so cột với cột — vế THÌ không còn
+    - **Tab Nếu – thì (`RuleType.IF_THEN`) [ĐÃ BỎ KHỎI GIAO DIỆN Ở MỤC 28, backend giữ nguyên]:** 2 ô NẾU và THÌ, MỖI Ô LÀ 1 BIỂU THỨC ĐẦY ĐỦ (và/hoặc/không, so cột với cột — vế THÌ không còn
       bị giới hạn so với giá trị gõ tay —, tính toán, ngày, `có()`). Backend `evaluate_conditional()` tính từng vế bằng CÙNG 1 bộ đọc cột
       (cột dùng ở cả 2 vế chỉ đọc 1 lần), kết quả `~NẾU | THÌ`. Lỗi báo theo vế ("Vế NẾU: …" / "Vế THÌ: …") và vị trí ký tự tính theo RIÊNG
       vế đó (không tính trên chuỗi ghép). Nhãn cột để tô = hợp cột 2 vế (`if_then_columns()`). `expression_info` dùng chung với Biểu thức.
       Rule `conditional` cũ (if_column/then_column...) vẫn giữ cho giao diện cũ; đối chiếu với nó: 1.670 cấu hình ngẫu nhiên = 0 khác biệt.
-    - **Giao diện:** khối chèn nhanh DÙNG CHUNG 2 tab (`exprHelperHTML`): nút `và`/`hoặc`/`không`/`( )`/`có( )` + chip cột chèn vào Ô ĐANG CHỌN
+    - **Giao diện [ĐÃ THAY Ở MỤC 28]:** khối chèn nhanh DÙNG CHUNG 2 tab (`exprHelperHTML`): nút `và`/`hoặc`/`không`/`( )`/`có( )` + chip cột chèn vào Ô ĐANG CHỌN
       (`state.cf.exprTarget`, theo `focusin`; dòng nhắc "Đang chèn vào ô NẾU/THÌ"). Mẫu "cột – toán tử – giá trị" có nút "Chèn vào NẾU/THÌ":
       `exprLiteral()` viết trần số cho cột số (`salary >= 10000000`), còn lại để trong nháy (`department == "Sales"`) -- bộ máy tự đổi chữ
       trong nháy sang kiểu vế kia nên nháy luôn an toàn. Nội dung 2 ô giữ khi đổi file/đổi tab (`state.cf.expr.ifText/thenText`).
@@ -1583,6 +1586,38 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       cắt khoảng trắng rồi hoàn tác từng bước, "Bắt đầu lại từ gốc" vẫn chạy, dải Convert có nút); các test cũ (`test_stale_ui`,
       `test_expr_ui`, `test_ifthen_ui`) phải bấm thêm "Xác nhận" khi Áp dụng có xoá dòng (hành vi mới, đã cập nhật test); IQR/Phụ thuộc hàm
       UI + backend không hồi quy.
+
+28. **Rule Biểu thức dễ dùng hơn: bỏ 2 mẫu, gộp Nếu – thì vào Biểu thức, 3 hàng nút, chip giá trị — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user thấy tab Biểu thức "khó dùng quá" (ô trống to, không biết bắt đầu từ đâu, sợ gõ tay sai). Qua mấy lượt trao đổi chốt:
+      (1) bỏ cả 2 "mẫu" vì chỉ là chèn chữ vào ô, gõ tay ra y hệt; (2) gộp tab Nếu – thì vào Biểu thức vì bản chất là toán tử `=>`
+      (đối chiếu 480 cấu hình ngẫu nhiên, gõ có/không ngoặc: 0 khác biệt giữa `evaluate_conditional(A, B)` và `A => B`; `=>` có ưu tiên thấp
+      nhất nên `A và B => C hoặc D` tự hiểu `(A và B) => (C hoặc D)`); (3) thêm nút cho dấu để khỏi gõ; (4) chip giá trị để khỏi gõ chữ.
+    - **Giao diện** (`workspace.js`): `RULE_TYPES` chỉ còn Biểu thức / Phụ thuộc hàm; ô NẾU/THÌ, `state.cf.exprTarget`, `ifText/thenText`,
+      `exprLiteral()`, `cfOperatorSelect()` và nhánh `if_then` của `buildCfConfig()` đã xoá. `EXPR_BUTTON_GROUPS` = 3 hàng nút (mỗi nút có `title`
+      giải thích): (1) và · hoặc · không · ( ) · có( ) · **thì =>** (chèn `=>`), (2) < <= = != >= >, (3) + − × ÷ (chèn `-` `*` `/`) và `" "` (chèn
+      cặp nháy, con trỏ nằm giữa; `insertIntoExpression` đặt con trỏ giữa cho `( )`, `có()`, `""`). KHÔNG có nút mũ `^` và phần trăm `%`:
+      bộ máy không hỗ trợ (gõ vào báo lỗi), mũ hiếm dùng, `%` mơ hồ (10% hay chia dư) nên phần trăm viết `/ 100` (đã ghi trong dòng hướng dẫn).
+      KHÔNG có nút `=>`/`<=>` riêng ngoài "thì =>" vì dễ nhầm với `>=`.
+    - **Chip giá trị** (`renderCfValueChips()`, `state.cf.columnValues/valueCol`, khối `#cf-value-box`): bấm chip tên cột thì chèn tên cột và, nếu đó là
+      cột Nhóm, hiện hàng "Giá trị trong cột «X»" gồm các giá trị kèm số dòng; bấm chip giá trị chèn `"giá trị"` có nháy (`exprString()` thêm `\` trước
+      `\`, `"`, `“`, `”` vì bộ đọc coi cả 3 ký tự nháy là đóng chuỗi — kiểm bằng file có `5" pipe`, `C:\temp`, `He said “hi”`). Số đếm của chip =
+      số dòng thật sự khớp khi viết `cột = "giá trị"` (đã đối chiếu, 0 lệch): `' HR'` gộp vào `HR`, ô thiếu (null/NA/?/None) không hiện, `hr`/`SALES`
+      vẫn là giá trị riêng (so chữ PHÂN BIỆT hoa/thường: trên file nhân viên `department = "sales"` khớp 0 dòng, `"Sales"` khớp 59 dòng) nên chip
+      còn giúp thấy các cách viết lệch. Chỉ cột được đoán là `category` (≤ 50 giá trị khác nhau và ≤ 50% số dòng) có chip; cột số/ngày/tên người thì ẩn.
+      Backend: `/api/noise-tools/inspect` nhận `include_values` (FE `cfInspect` luôn gửi) → `column_values`, tối đa `INSPECT_VALUE_CHIP_LIMIT` = 30 giá trị
+      phổ biến nhất mỗi cột + `more` = số giá trị còn lại; đoán kiểu cột 1 lần dùng cho cả 3 phần của response (trước đó đoán lặp 2 lần).
+    - **Gợi ý thiếu nháy:** gõ `department = Sales` báo "không có cột «Sales»... Nếu «Sales» là giá trị chữ chứ không phải tên cột, hãy viết trong dấu nháy:
+      "Sales"" (không nhắc khi tên viết trong `[ ]`); luôn nhắc kể cả khi đã có "Có phải: …?" vì giá trị có thể giống tên cột.
+    - **Chữ hướng dẫn đã sửa** (trang chủ, menu, mục hướng dẫn "Cần cấu hình"): "Hai kiểu rule", nút THÌ =>, phần trăm viết /100, chữ phân biệt hoa/thường,
+      hàm `có` trong danh sách hàm cho phép.
+    - **Kiểm chứng:** Playwright `test_expr_toolbar_ui.js` (2 tab, không còn mẫu/ô NẾU/THÌ, 3 hàng nút đúng nhãn + title, ghép bằng bấm ra `age >= 18 và
+      age <= 65` = 10 dòng vi phạm, ký tự nút tính toán/so sánh, con trỏ giữa nháy và giữa `có()`, chip giá trị department 9 giá trị / gender 5 giá trị, ẩn ở
+      cột số và cột tên, ghép `department = "Sales" => salary >= 10000000` bằng bấm = 6 dòng vi phạm khớp pandas độc lập, gợi ý nháy, 4 giá trị có ký tự đặc
+      biệt khớp đúng số dòng); `test_expr_values.py` (hàm đếm + gợi ý nháy, đạt pandas 3.0.5 và 2.2.3); chạy lại toàn bộ test Biểu thức (lõi 125+34, route,
+      2.580 đối chiếu = 0 khác biệt), Phụ thuộc hàm (lõi, hành động, nhiều cột, UI x3), IQR, báo cấu hình đã đổi, hộp xác nhận + hoàn tác, dải nối tiếp: không hồi quy.
+      `test_ifthen_ui.js` (tab Nếu – thì) đã bỏ vì tab không còn; hai test UI cũ `test_expr_ui.js` / `test_stale_ui.js` phải sửa cho khớp (tab, mẫu).
+    - **Giới hạn / chưa làm:** chip giá trị chỉ cho cột Nhóm (cột số nhiều giá trị ít như điểm 1–5 vẫn gõ số tay); không có "gợi ý điều kiện" dựng sẵn
+      (đã đề xuất, user chưa yêu cầu); mũ `^` chưa có trong bộ máy; không kiểm tra cú pháp khi đang gõ.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -1677,6 +1712,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 - [x] 2 việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại" (khoá Áp dụng) + báo "Sẽ xoá N dòng
       (a → b)" trước khi Áp dụng ở tool nhiều cột — xem mục 26.
 - [x] Hộp xác nhận xoá dòng (chạy thử `dry_run`) + nút Hoàn tác 5 bước ở dải nối tiếp (3 nhóm tool) — xem mục 27.
+- [x] Biểu thức dễ dùng hơn: bỏ 2 mẫu, gộp Nếu – thì vào Biểu thức (nút THÌ =>), 3 hàng nút dấu, chip giá trị cột Nhóm — xem mục 28.
 - [x] Phụ thuộc hàm: 1 cột xác định → nhiều cột phụ thuộc, đoán ô sai (so các cột còn lại), 2 cách xử lý
       "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" + xem trước (mục 23, commit `3ee977f`, `73978bc`).
 - [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).

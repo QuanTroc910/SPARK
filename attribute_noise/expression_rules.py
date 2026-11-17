@@ -476,9 +476,12 @@ class _ColumnResolver:
             raise _fail(text, pos, f"có nhiều cột chỉ khác nhau hoa/thường ({', '.join('«' + str(m) + '»' for m in matches)}), hãy gõ đúng một tên")
         close = difflib.get_close_matches(wanted.strip(), [_nfc(c).strip() for c in self.columns], n=3, cutoff=0.5)
         hint = f" Có phải: {', '.join('«' + c + '»' for c in close)}?" if close else ""
+        # Lỗi hay gặp nhất khi gõ tay: viết GIÁ TRỊ CHỮ mà quên dấu nháy (department == Sales) nên bị hiểu là tên một cột. Tên viết trong [ ] thì
+        # chắc chắn là người dùng muốn nói tới cột, không nhắc nháy. Luôn nhắc cả khi đã có "Có phải ...?" vì tên giá trị (sales) có thể giống tên cột (salary).
+        quote_hint = "" if text[pos:pos + 1] == "[" else f" Nếu «{name}» là giá trị chữ chứ không phải tên cột, hãy viết trong dấu nháy: \"{name}\"."
         sample = ", ".join(f"«{c}»" for c in list(map(str, self.columns))[:15])
         more = " …" if len(self.columns) > 15 else ""
-        raise _fail(text, pos, f"không có cột «{name}» trong dữ liệu.{hint} Các cột có sẵn: {sample}{more}")
+        raise _fail(text, pos, f"không có cột «{name}» trong dữ liệu.{hint}{quote_hint} Các cột có sẵn: {sample}{more}")
 
 
 def expression_column_names(expression: Optional[str]) -> list:
@@ -489,6 +492,19 @@ def expression_column_names(expression: Optional[str]) -> list:
         if name not in names:
             names.append(name)
     return names
+
+
+def column_value_counts(series: pd.Series, limit: int = 30) -> tuple:
+    """Các giá trị chữ khác nhau của 1 cột kèm số dòng, để giao diện hiện "chip giá trị" (bấm là chèn `"Sales"` vào biểu thức).
+
+    Đếm theo ĐÚNG cách bộ máy đọc chữ (xem _Evaluator.raw): cắt khoảng trắng hai đầu (" HR" và "HR" là một), ô thiếu (trống, N/A, null, ?...)
+    bỏ qua, PHÂN BIỆT hoa/thường ("Sales" và "SALES" là hai giá trị). Nhờ vậy số đếm của chip = số dòng thật sự khớp khi viết `cột = "giá trị"`.
+    Trả về (danh sách [{"value", "count"}] đã sắp theo số dòng giảm dần rồi theo chữ, tối đa `limit` phần tử, số giá trị khác còn lại không hiện)."""
+    text = series.astype(str).str.strip()
+    text = text[~text.str.lower().isin(_MISSING_LOWER)]
+    ordered = sorted(text.value_counts().items(), key=lambda kv: (-int(kv[1]), str(kv[0])))
+    shown = [{"value": str(v), "count": int(n)} for v, n in ordered[:limit]]
+    return shown, max(0, len(ordered) - limit)
 
 
 def expression_columns(df: pd.DataFrame, expression: Optional[str]) -> list:

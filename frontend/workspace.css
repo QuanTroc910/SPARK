@@ -1188,9 +1188,18 @@ a.hm-tool:hover { background: #ebebe7; }
 .cf-expr-form { display: flex; flex-direction: column; gap: 16px; }
 .cf-expr-form .hint-note { margin: 0; }
 .cf-expr-words { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+/* 3 hàng nút (nối điều kiện / so sánh / tính toán và chữ): xếp dọc, mỗi hàng tự xuống dòng khi hẹp. */
+.cf-expr-toolbar { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.cf-expr-toolbar .cf-expr-words { margin-bottom: 0; }
 .cf-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 112px; overflow-y: auto; padding: 2px; }
 .cf-chip { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; padding: 4px 11px; border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 999px; cursor: pointer; }
 .cf-chip:hover { border-color: var(--signal); color: var(--signal); }
+/* "Chip giá trị": các giá trị chữ trong cột Nhóm vừa bấm (kèm số dòng), bấm để chèn "giá trị" có dấu nháy. */
+.cf-values { margin-top: 10px; padding: 10px 12px; background: var(--signal-soft); border-left: 3px solid var(--signal); }
+.cf-values-title { margin: 0 0 8px; font-size: 12.5px; line-height: 1.5; color: var(--signal-dark); }
+.cf-values .cf-add-hint { margin: 6px 0 0; }
+.cf-chip-value { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--bg); }
+.cf-chip-count { margin-left: 7px; font-size: 10.5px; color: var(--ink-faint); }
 .cf-expr-info { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .cf-expr-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-dim); }
 .cf-expr-summary b { font-size: 15px; color: inherit; }

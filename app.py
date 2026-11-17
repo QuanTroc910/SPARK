@@ -47,7 +47,7 @@ from attribute_noise.config import (
     RuleValueType,
 )
 from attribute_noise.cross_field_rules import FormulaError, analyze_functional_dependency, describe_rule
-from attribute_noise.expression_rules import ExpressionError, evaluate_conditional, evaluate_expression
+from attribute_noise.expression_rules import ExpressionError, column_value_counts, evaluate_conditional, evaluate_expression
 from attribute_noise.detectors import INTEGER_RE, detect_outlier, iqr_degenerate_info
 from attribute_noise.pipeline import (
     NoiseFinding,
@@ -1692,6 +1692,7 @@ CONFIG_TOOL_NOISE_TYPE = {
 }
 CONFIG_TOOL_FLAGGED_LIMIT = 200  # số dòng bị gắn cờ tối đa trả về cho FE hiện bảng
 CONFIG_TOOL_ROW_LIST_LIMIT = 300_000  # quá số dòng lỗi này thì không trả danh sách số dòng theo cột (tránh response quá nặng)
+INSPECT_VALUE_CHIP_LIMIT = 30  # số giá trị chữ phổ biến nhất của mỗi cột category được trả cho "chip giá trị" (phần còn lại chỉ báo số lượng)
 
 
 def _df_preview_rows(df: pd.DataFrame, limit: int = PREVIEW_DATA_ROWS) -> list:
@@ -1718,16 +1719,27 @@ def noise_tool_inspect():
         return jsonify({"error": f"Không đọc được file: {exc}"}), 400
     # Chỉ khi giao diện hỏi (tool Ô trống) mới đếm ô trống từng cột -- phải quét hết file nên không làm cho mọi lần đọc cột.
     blanks_info = blank_column_summary(df) if _as_bool(request.form.get("include_blanks", "false")) else {}
+    guessed = {str(c): guess_column_dtype(df[c]) for c in df.columns}  # đoán 1 lần dùng cho cả 3 phần bên dưới
+    # "Chip giá trị" của rule Biểu thức: chỉ cột được đoán là Nhóm (chữ có ít giá trị khác nhau), và chỉ khi giao diện hỏi (include_values).
+    # Mỗi cột: {values: [{value, count}] (tối đa INSPECT_VALUE_CHIP_LIMIT giá trị phổ biến nhất), more: số giá trị khác không hiện}.
+    column_values = {}
+    if _as_bool(request.form.get("include_values", "false")):
+        for c in df.columns:
+            if guessed[str(c)] == "category":
+                values, more = column_value_counts(df[c], INSPECT_VALUE_CHIP_LIMIT)
+                if values:
+                    column_values[str(c)] = {"values": values, "more": more}
     return jsonify(
         {
             **blanks_info,
             "columns": [str(c) for c in df.columns],
-            "guessed_dtypes": {str(c): guess_column_dtype(df[c]) for c in df.columns},
+            "guessed_dtypes": guessed,
             # Khuôn ngày đoán sẵn cho các cột được đoán là "date" (tool Sai định dạng dùng để điền sẵn ô khuôn ngày).
             "guessed_date_formats": {
                 str(c): guess_date_format(df[c]) or "%Y-%m-%d"
-                for c in df.columns if guess_column_dtype(df[c]) == "date"
+                for c in df.columns if guessed[str(c)] == "date"
             },
+            "column_values": column_values,
             "row_count": int(len(df)),
             "preview_rows": _df_preview_rows(df),
         }
