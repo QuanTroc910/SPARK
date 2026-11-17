@@ -1,0 +1,348 @@
+row,column,noise_type,original_value,injected_value,expected_tool,note
+0,cot_trong,empty_column,,,Free Tools · Ô trống (xoá luôn cột trống hoàn toàn),cả cột không có giá trị nào
+3,xep_loai,class_noise,Giỏi,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Giỏi
+4,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 135)
+5,ghi_chu,missing_value,Hoàn thành tốt,,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+5,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+6,ho_ten,functional_dependency,Vũ Gia Thảo,Nguyễn Ngọc Sơn,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ho_ten: nhóm 3 dòng, 1 dòng sai (xác định được, sửa về giá trị phổ biến)"
+8,phong_ban,inconsistent_category,HR,hr,Cần cấu hình · Không nhất quán,
+8,so_dien_thoai,missing_value,0970305165,null,Free Tools · Ô trống,
+9,email,missing_value,ha.vo1012@congty.vn,null,Free Tools · Ô trống,
+9,ngay_sinh,format_noise,1979-01-22,22/01/1979,Free Tools · Sai định dạng,ngày đúng nhưng khác khuôn dd/mm/yyyy (so với khuôn chuẩn yyyy-mm-dd)
+14,Hệ số lương,missing_value,2.5,N/A,Free Tools · Ô trống,
+14,ho_ten,whitespace_noise,Bùi Thị Hải,Bùi Thị Hải   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+15,luong,format_noise,21400000,12.5tr,Free Tools · Sai định dạng,
+15,so_dien_thoai,format_noise,0971886244,0912-345-678,Free Tools · Sai định dạng,
+16,ngay_vao,format_noise,2017-03-05,31/12/2020,Free Tools · Sai định dạng,
+23,ngay_vao,format_noise,2017-08-07,2022-02-30,Free Tools · Sai định dạng,
+29,ghi_chu,whitespace_noise,Nghỉ phép dài ngày,  Nghỉ phép dài ngày,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+29,ma_nv,functional_dependency,NV1093,NV1336,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,ma_nv trùng với một NGƯỜI KHÁC (nhân viên ở dòng gốc khác): Denoise nên kết luận nghi sai cột ma_nv
+29,xep_loai,class_noise,Trung bình,Khá,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Trung bình
+31,luong,cross_rule_if_then,9600000,14600000,Cần cấu hình · Rule liên cột · Biểu thức,"loai_hd = ""Thử việc"" => luong <= 12000000"
+32,ho_ten,functional_dependency,Phạm Đức Hoa,Huỳnh Gia Khánh,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ho_ten: nhóm 2 dòng, hai tên khác nhau (hoà, chưa xác định được dòng nào sai)"
+32,phong_ban,inconsistent_category,Marketing,MARKETING,Cần cấu hình · Không nhất quán,
+33,ghi_chu,whitespace_noise,Cần bổ sung hồ sơ,Cần bổ sung hồ sơ   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+33,luong,format_noise,5600000,mười triệu,Free Tools · Sai định dạng,
+33,phong_ban,inconsistent_category,Sales,SALES,Cần cấu hình · Không nhất quán,
+34,ghi_chu,whitespace_noise,Chuyển phòng ban,Chuyển phòng ban   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+34,so_dien_thoai,missing_value,0980238005,?,Free Tools · Ô trống,
+35,luong,outlier,14500000,58000000,Cần cấu hình · Giá trị bất thường,trong khoảng 3tr-100tr nhưng lệch hẳn phần còn lại
+37,phong_ban,inconsistent_category,Finance,finance,Cần cấu hình · Không nhất quán,
+37,tuoi,out_of_range,39,150,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 18-65
+38,ngay_sinh,format_noise,1985-10-15,không rõ,Free Tools · Sai định dạng,ngày không tồn tại / không phải ngày
+47,xep_loai,class_noise,Giỏi,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Giỏi
+50,email,format_noise,hai.do1220@congty.vn,an@,Free Tools · Sai định dạng,
+53,ho_ten,whitespace_noise,Huỳnh Gia Phúc,  Huỳnh Gia Phúc,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+54,phong_ban,inconsistent_category,HR,hr,Cần cấu hình · Không nhất quán,
+55,email,format_noise,mai.huynh1322@congty.vn,lan.le@congty,Free Tools · Sai định dạng,
+55,xep_loai,class_noise,Khá,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+58,ngay_vao,missing_value,2018-02-28,N/A,Free Tools · Ô trống,
+61,ghi_chu,whitespace_noise,Chuyển phòng ban,Chuyển phòng ban,Free Tools · Cắt khoảng trắng,non-breaking space
+62,gioi_tinh,inconsistent_category,Nam,NAM,Cần cấu hình · Không nhất quán,
+63,luong,outlier,26100000,70000000,Cần cấu hình · Giá trị bất thường,trong khoảng 3tr-100tr nhưng lệch hẳn phần còn lại
+65,ghi_chu,whitespace_noise,Chuyển phòng ban,  Chuyển phòng ban,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+68,ho_ten,whitespace_noise,Vũ Ngọc Nam,Vũ    Ngọc Nam,Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+71,(cả dòng),near_duplicate_row,,,Free Tools · Xoá dòng trùng,gần trùng: email viết HOA + ghi_chu thừa 1 dấu cách (chỉ bắt khi bật 'bỏ qua hoa/thường' và 'bỏ qua khoảng trắng') (bản gốc là dòng 245)
+76,(cả dòng),empty_row,,,Free Tools · Ô trống (xoá dòng trống hoàn toàn),dòng trống hoàn toàn (mọi cột đều trống)
+78,luong,outlier,15300000,48000000,Cần cấu hình · Giá trị bất thường,trong khoảng 3tr-100tr nhưng lệch hẳn phần còn lại
+78,phong_ban,inconsistent_category,Finance,finance,Cần cấu hình · Không nhất quán,
+82,phong_ban,inconsistent_category,Marketing,MARKETING,Cần cấu hình · Không nhất quán,
+83,luong,outlier,12100000,45000000,Cần cấu hình · Giá trị bất thường,trong khoảng 3tr-100tr nhưng lệch hẳn phần còn lại
+84,ghi_chu,whitespace_noise,Cần bổ sung hồ sơ,  Cần bổ sung hồ sơ,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+87,tuoi,format_noise,31,hai mươi,Free Tools · Sai định dạng,3O = chữ O thay số 0
+89,Hệ số lương,out_of_range,1.4,-1,Cần cấu hình · Ngoài khoảng / Biểu thức [Hệ số lương] > 0,
+89,ghi_chu,missing_value,Đã duyệt,-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+94,diem_dg,missing_value,7.2,NA,Free Tools · Ô trống,
+94,xep_loai,class_noise,Trung bình,Khá,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Trung bình
+95,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 343)
+96,xep_loai,class_noise,Trung bình,Khá,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Trung bình
+97,xep_loai,class_noise,Trung bình,Khá,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Trung bình
+98,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 276)
+102,ho_ten,whitespace_noise,Trần Hồng Hoa,  Trần Hồng Hoa,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+105,gioi_tinh,missing_value,Nữ,null,Free Tools · Ô trống,
+106,ghi_chu,missing_value,Chuyển phòng ban,-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+107,tuoi,out_of_range,51,91,Cần cấu hình · Ngoài khoảng (18-65) / Giá trị bất thường,cao bất thường nhưng có thể là thật
+109,phong_ban,missing_value,Finance,null,Free Tools · Ô trống,
+109,tuoi,out_of_range,52,82,Cần cấu hình · Ngoài khoảng (18-65) / Giá trị bất thường,cao bất thường nhưng có thể là thật
+110,diem_dg,missing_value,5.3,null,Free Tools · Ô trống,
+110,xep_loai,class_noise,Giỏi,Khá,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Giỏi
+111,email,format_noise,khanh.le1223@congty.vn,an@@congty.vn,Free Tools · Sai định dạng,
+111,luong,cross_rule_if_then,11300000,19900000,Cần cấu hình · Rule liên cột · Biểu thức,"loai_hd = ""Thử việc"" => luong <= 12000000"
+111,so_dien_thoai,format_noise,0944490534,0912 345 678,Free Tools · Sai định dạng,
+112,ghi_chu,whitespace_noise,Hoàn thành tốt,Hoàn thành tốt,Free Tools · Cắt khoảng trắng,non-breaking space
+114,ho_ten,missing_value,Vũ Thanh Thảo,null,Free Tools · Ô trống,
+115,ho_ten,whitespace_noise,Phan Hồng Lan,Phan    Hồng Lan,Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+115,xep_loai,class_noise,Giỏi,Khá,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Giỏi
+117,ngay_sinh,functional_dependency,1972-09-21,1975-09-21,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ngay_sinh: nhóm 3 dòng, 1 dòng sai (xác định được)"
+117,thanh_tien,cross_rule_expression,1250000,2249999,Cần cấu hình · Rule liên cột · Biểu thức,thanh_tien != so_luong_ban * don_gia
+117,xep_loai,class_noise,Khá,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+124,phong_ban,inconsistent_category,Marketing,Marketting,Cần cấu hình · Không nhất quán,gõ sai nhẹ: chỉ bắt khi hạ ngưỡng giống nhau xuống ~0.85
+125,ho_ten,whitespace_noise,Hoàng Minh An,Hoàng    Minh An,Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+127,hoa_hong,cross_rule_if_then,8.0,,Cần cấu hình · Rule liên cột · Biểu thức (cũng là ô trống),"phong_ban = ""Sales"" => có(hoa_hong)"
+127,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+128,(cả dòng),near_duplicate_row,,,Free Tools · Xoá dòng trùng,gần trùng: email viết HOA + ghi_chu thừa 1 dấu cách (chỉ bắt khi bật 'bỏ qua hoa/thường' và 'bỏ qua khoảng trắng') (bản gốc là dòng 101)
+129,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+131,Hệ số lương,missing_value,3.1,,Free Tools · Ô trống,
+131,ghi_chu,missing_value,Cần bổ sung hồ sơ,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+131,tuoi,out_of_range,25,-5,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 18-65
+134,ghi_chu,whitespace_noise,Cần bổ sung hồ sơ,Cần    bổ sung hồ sơ,Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+136,diem_dg,missing_value,8.1,,Free Tools · Ô trống,
+136,ghi_chu,missing_value,Chuyển phòng ban,,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+136,ngay_vao,missing_value,2018-05-02,,Free Tools · Ô trống,
+137,ghi_chu,missing_value,Đã duyệt,-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+140,xep_loai,class_noise,Khá,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+143,ghi_chu,missing_value,Đã duyệt,-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+145,xep_loai,class_noise,Trung bình,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Trung bình
+146,ho_ten,whitespace_noise,Phan Quốc Nam,Phan Quốc Nam   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+154,ghi_chu,missing_value,Chờ ký hợp đồng,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+155,email,missing_value,vy.bui1076@congty.vn,NA,Free Tools · Ô trống,
+155,thanh_tien,cross_rule_expression,1920000,1870000,Cần cấu hình · Rule liên cột · Biểu thức,thanh_tien != so_luong_ban * don_gia
+156,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 77)
+157,gioi_tinh,inconsistent_category,Nam,nam,Cần cấu hình · Không nhất quán,
+158,hoa_hong,cross_rule_if_then,6.0,,Cần cấu hình · Rule liên cột · Biểu thức (cũng là ô trống),"phong_ban = ""Sales"" => có(hoa_hong)"
+158,luong,missing_value,10000000,-,Free Tools · Ô trống,
+159,diem_dg,out_of_range,7.8,99,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 1-10
+160,ghi_chu,missing_value,Đã duyệt,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+160,ho_ten,missing_value,Vũ Thị Lan,NA,Free Tools · Ô trống,
+160,phong_ban,missing_value,HR,-,Free Tools · Ô trống,
+161,loai_hd,inconsistent_category,Chính thức,chính thức,Cần cấu hình · Không nhất quán,
+161,ngay_ra,cross_rule_expression,2020-12-01,2020-01-20,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+163,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 240)
+164,gioi_tinh,missing_value,Nữ,?,Free Tools · Ô trống,
+164,luong,format_noise,10800000,abc,Free Tools · Sai định dạng,
+167,gioi_tinh,inconsistent_category,Nữ,nữ,Cần cấu hình · Không nhất quán,
+168,ngay_sinh,missing_value,2000-12-06,,Free Tools · Ô trống,
+169,ngay_sinh,format_noise,1980-08-08,1985-13-10,Free Tools · Sai định dạng,ngày không tồn tại / không phải ngày
+170,ho_ten,whitespace_noise,Phan Anh Linh,Phan Anh Linh   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+171,ghi_chu,whitespace_noise,Nghỉ phép dài ngày,Nghỉ    phép dài ngày,Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+172,ghi_chu,whitespace_noise,Chờ ký hợp đồng,Chờ ký hợp đồng   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+172,ngay_sinh,missing_value,1999-09-22,NA,Free Tools · Ô trống,
+176,ho_ten,whitespace_noise,Trần Đức Giang,Trần Đức Giang   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+180,diem_dg,out_of_range,5.5,-1,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 1-10
+180,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+182,xep_loai,class_noise,Giỏi,Khá,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Giỏi
+183,ho_ten,functional_dependency,Hoàng Hồng Mai,Bùi Hồng Phúc,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ho_ten: nhóm 2 dòng, hai tên khác nhau (hoà, chưa xác định được dòng nào sai)"
+184,ghi_chu,missing_value,Cần bổ sung hồ sơ,,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+187,Hệ số lương,out_of_range,4.2,0,Cần cấu hình · Ngoài khoảng / Biểu thức [Hệ số lương] > 0,
+187,loai_hd,inconsistent_category,Chính thức,chính thức,Cần cấu hình · Không nhất quán,
+189,luong,missing_value,7100000,,Free Tools · Ô trống,
+192,tuoi,out_of_range,37,7,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 18-65
+192,xep_loai,class_noise,Khá,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+193,gioi_tinh,inconsistent_category,Nữ,nữ,Cần cấu hình · Không nhất quán,
+194,tuoi,format_noise,41,3O,Free Tools · Sai định dạng,3O = chữ O thay số 0
+195,luong,outlier,22300000,61000000,Cần cấu hình · Giá trị bất thường,trong khoảng 3tr-100tr nhưng lệch hẳn phần còn lại
+196,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 270)
+197,ghi_chu,whitespace_noise,Hoàn thành tốt,Hoà​n thành tốt,Free Tools · Cắt khoảng trắng,ký tự zero-width (nhìn không thấy)
+198,so_dien_thoai,format_noise,0900650301,912345678,Free Tools · Sai định dạng,
+198,xep_loai,class_noise,Khá,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+199,ngay_sinh,format_noise,1988-12-18,18/12/1988,Free Tools · Sai định dạng,ngày đúng nhưng khác khuôn dd/mm/yyyy (so với khuôn chuẩn yyyy-mm-dd)
+200,ngay_sinh,functional_dependency,1988-05-09,1985-05-09,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ngay_sinh: nhóm 3 dòng, 1 dòng sai (xác định được)"
+205,so_dien_thoai,missing_value,0931615189,NA,Free Tools · Ô trống,
+207,luong,outlier,12700000,55000000,Cần cấu hình · Giá trị bất thường,trong khoảng 3tr-100tr nhưng lệch hẳn phần còn lại
+208,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+209,xep_loai,class_noise,Trung bình,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Trung bình
+210,hoa_hong,cross_rule_if_then,2.6,null,Cần cấu hình · Rule liên cột · Biểu thức (cũng là ô trống),"phong_ban = ""Sales"" => có(hoa_hong)"
+212,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+215,so_dien_thoai,format_noise,0971989640,+84912345678,Free Tools · Sai định dạng,
+220,thanh_tien,cross_rule_expression,3525000,3475000,Cần cấu hình · Rule liên cột · Biểu thức,thanh_tien != so_luong_ban * don_gia
+223,luong,out_of_range,21800000,-1500000,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 3.000.000-100.000.000
+223,phong_ban,inconsistent_category,Sales,sales,Cần cấu hình · Không nhất quán,
+224,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 441)
+228,ngay_ra,cross_rule_expression,2020-11-03,2017-05-09,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+229,ho_ten,whitespace_noise,Vũ Văn Lan,Vũ    Văn Lan,Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+232,luong,outlier,7800000,52000000,Cần cấu hình · Giá trị bất thường,trong khoảng 3tr-100tr nhưng lệch hẳn phần còn lại
+232,ngay_sinh,format_noise,1974-02-18,1990-02-30,Free Tools · Sai định dạng,ngày không tồn tại / không phải ngày
+232,phong_ban,inconsistent_category,Sales,SALES,Cần cấu hình · Không nhất quán,
+232,xep_loai,class_noise,Giỏi,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Giỏi
+234,ghi_chu,missing_value,Đã duyệt,,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+235,ho_ten,missing_value,Phạm Thị Hoa,,Free Tools · Ô trống,
+236,email,missing_value,huy.nguyen1169@congty.vn,?,Free Tools · Ô trống,
+236,ghi_chu,missing_value,Chờ ký hợp đồng,-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+237,luong,cross_rule_if_then,9000000,15100000,Cần cấu hình · Rule liên cột · Biểu thức,"loai_hd = ""Thử việc"" => luong <= 12000000"
+242,(cả dòng),near_duplicate_row,,,Free Tools · Xoá dòng trùng,gần trùng: email viết HOA + ghi_chu thừa 1 dấu cách (chỉ bắt khi bật 'bỏ qua hoa/thường' và 'bỏ qua khoảng trắng') (bản gốc là dòng 397)
+243,thanh_tien,cross_rule_expression,2025000,2145000,Cần cấu hình · Rule liên cột · Biểu thức,thanh_tien != so_luong_ban * don_gia
+244,gioi_tinh,inconsistent_category,Nữ,NỮ,Cần cấu hình · Không nhất quán,
+244,ngay_ra,cross_rule_expression,2026-02-23,2023-01-13,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+246,phong_ban,missing_value,Marketing,N/A,Free Tools · Ô trống,
+247,tuoi,format_noise,33,25 tuổi,Free Tools · Sai định dạng,3O = chữ O thay số 0
+248,ghi_chu,whitespace_noise,Chờ ký hợp đồng,Chờ​ ký hợp đồng,Free Tools · Cắt khoảng trắng,ký tự zero-width (nhìn không thấy)
+248,ho_ten,missing_value,Nguyễn Anh Giang,-,Free Tools · Ô trống,
+250,phong_ban,inconsistent_category,Sales,sales,Cần cấu hình · Không nhất quán,
+254,tuoi,out_of_range,38,999,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 18-65
+255,ngay_sinh,functional_dependency,1991-07-26,1993-07-26,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ngay_sinh: nhóm 2 dòng, hoà (chưa xác định được)"
+256,hoa_hong,cross_rule_if_then,5.0,?,Cần cấu hình · Rule liên cột · Biểu thức (cũng là ô trống),"phong_ban = ""Sales"" => có(hoa_hong)"
+257,ho_ten,whitespace_noise,Huỳnh Thị Dũng,  Huỳnh Thị Dũng,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+258,thanh_tien,cross_rule_expression,2250000,2200000,Cần cấu hình · Rule liên cột · Biểu thức,thanh_tien != so_luong_ban * don_gia
+259,so_dien_thoai,missing_value,0962024032,,Free Tools · Ô trống,
+260,ghi_chu,missing_value,Nghỉ phép dài ngày,,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+262,diem_dg,format_noise,8.6,"8,5",Free Tools · Sai định dạng,
+266,gioi_tinh,inconsistent_category,Nam,nam,Cần cấu hình · Không nhất quán,
+267,ngay_ra,cross_rule_expression,2022-07-31,2020-12-27,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+269,diem_dg,out_of_range,7.1,12.5,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 1-10
+271,ghi_chu,missing_value,Nghỉ phép dài ngày,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+271,ngay_sinh,format_noise,1979-04-16,16/04/1979,Free Tools · Sai định dạng,ngày đúng nhưng khác khuôn dd/mm/yyyy (so với khuôn chuẩn yyyy-mm-dd)
+275,diem_dg,out_of_range,9.4,15,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 1-10
+278,ghi_chu,missing_value,Nghỉ phép dài ngày,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+279,luong,out_of_range,23900000,-3000000,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 3.000.000-100.000.000
+281,ho_ten,missing_value,Đỗ Quốc Tuấn,N/A,Free Tools · Ô trống,
+281,tuoi,missing_value,43,null,Free Tools · Ô trống,
+282,email,missing_value,mai.pham1393@congty.vn,none,Free Tools · Ô trống,
+282,ghi_chu,missing_value,Chờ ký hợp đồng,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+284,tuoi,missing_value,45,N/A,Free Tools · Ô trống,
+287,ho_ten,whitespace_noise,Hoàng Thanh Long,  Hoàng Thanh Long,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+288,ghi_chu,whitespace_noise,Chuyển phòng ban,Chuyển phòng ban   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+288,gioi_tinh,inconsistent_category,Nữ,NỮ,Cần cấu hình · Không nhất quán,
+288,ngay_ra,missing_value,2020-06-06,N/A,Free Tools · Ô trống,
+289,hoa_hong,cross_rule_if_then,7.1,,Cần cấu hình · Rule liên cột · Biểu thức (cũng là ô trống),"phong_ban = ""Sales"" => có(hoa_hong)"
+289,xep_loai,class_noise,Khá,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+291,Hệ số lương,format_noise,1.5,"3,5",Free Tools · Sai định dạng,
+296,phong_ban,missing_value,HR,NA,Free Tools · Ô trống,
+298,hoa_hong,cross_rule_if_then,4.8,NA,Cần cấu hình · Rule liên cột · Biểu thức (cũng là ô trống),"phong_ban = ""Sales"" => có(hoa_hong)"
+299,ghi_chu,whitespace_noise,Cần bổ sung hồ sơ,Cần bổ sung hồ sơ,Free Tools · Cắt khoảng trắng,non-breaking space
+300,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+302,ghi_chu,missing_value,Chờ ký hợp đồng,-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+302,ngay_sinh,format_noise,1986-03-06,06/03/1986,Free Tools · Sai định dạng,ngày đúng nhưng khác khuôn dd/mm/yyyy (so với khuôn chuẩn yyyy-mm-dd)
+303,ngay_ra,cross_rule_expression,2018-01-25,2017-01-11,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+303,ngay_sinh,format_noise,1974-07-14,abc,Free Tools · Sai định dạng,ngày không tồn tại / không phải ngày
+305,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 251)
+307,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+308,gioi_tinh,inconsistent_category,Nam,nam,Cần cấu hình · Không nhất quán,
+308,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+309,phong_ban,inconsistent_category,IT,it,Cần cấu hình · Không nhất quán,
+312,luong,missing_value,26200000,?,Free Tools · Ô trống,
+313,phong_ban,inconsistent_category,Marketing,Marketting,Cần cấu hình · Không nhất quán,gõ sai nhẹ: chỉ bắt khi hạ ngưỡng giống nhau xuống ~0.85
+313,xep_loai,class_noise,Giỏi,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Giỏi
+314,thanh_tien,cross_rule_expression,500000,450000,Cần cấu hình · Rule liên cột · Biểu thức,thanh_tien != so_luong_ban * don_gia
+316,luong,out_of_range,15900000,1000,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 3.000.000-100.000.000
+317,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 325)
+318,ghi_chu,whitespace_noise,"Đã duyệt, chờ ký","  Đã duyệt, chờ ký",Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+322,gioi_tinh,inconsistent_category,Nam,nam,Cần cấu hình · Không nhất quán,
+324,ghi_chu,missing_value,"Đã duyệt, chờ ký",-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+327,email,missing_value,quan.pham1179@congty.vn,N/A,Free Tools · Ô trống,
+328,luong,format_noise,25800000,"12,500,000đ",Free Tools · Sai định dạng,
+328,thanh_tien,cross_rule_expression,600000,599000,Cần cấu hình · Rule liên cột · Biểu thức,thanh_tien != so_luong_ban * don_gia
+331,ngay_ra,cross_rule_expression,2025-10-30,2023-07-01,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+335,ghi_chu,missing_value,Đã duyệt,-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+341,ngay_ra,missing_value,2022-07-04,NA,Free Tools · Ô trống,
+345,xep_loai,class_noise,Giỏi,Khá,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Giỏi
+346,tuoi,missing_value,36,NA,Free Tools · Ô trống,
+347,ngay_vao,missing_value,2017-02-28,NA,Free Tools · Ô trống,
+348,luong,format_noise,10700000,15 triệu,Free Tools · Sai định dạng,
+353,ho_ten,functional_dependency,Phan Minh Nam,Trần Hồng Tuấn,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ho_ten: nhóm 3 dòng, 1 dòng sai (xác định được, sửa về giá trị phổ biến)"
+353,ngay_ra,cross_rule_expression,2026-08-01,2024-04-18,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+355,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 40)
+356,ho_ten,functional_dependency,Võ Thị Bình,Võ Ngọc Mai,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ho_ten: nhóm 3 dòng, 1 dòng sai (xác định được, sửa về giá trị phổ biến)"
+357,ghi_chu,whitespace_noise,Đã duyệt,Đã ​duyệt,Free Tools · Cắt khoảng trắng,ký tự zero-width (nhìn không thấy)
+357,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+359,ngay_ra,missing_value,2021-09-19,,Free Tools · Ô trống,
+361,email,format_noise,son.nguyen1060@congty.vn,tran thi@congty.vn,Free Tools · Sai định dạng,
+361,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+364,(cả dòng),empty_row,,,Free Tools · Ô trống (xoá dòng trống hoàn toàn),dòng trống hoàn toàn (mọi cột đều trống)
+365,so_dien_thoai,missing_value,0962453271,-,Free Tools · Ô trống,
+366,gioi_tinh,missing_value,Nam,N/A,Free Tools · Ô trống,
+370,ghi_chu,missing_value,Chuyển phòng ban,,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+372,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 116)
+373,ghi_chu,missing_value,Nghỉ phép dài ngày,-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+373,loai_hd,inconsistent_category,Chính thức,CHÍNH THỨC,Cần cấu hình · Không nhất quán,
+373,ngay_sinh,missing_value,1991-07-09,null,Free Tools · Ô trống,
+376,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+378,loai_hd,inconsistent_category,Chính thức,chính thức,Cần cấu hình · Không nhất quán,
+380,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+381,xep_loai,class_noise,Khá,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+382,email,missing_value,quan.huynh1160@congty.vn,,Free Tools · Ô trống,
+386,phong_ban,missing_value,Marketing,,Free Tools · Ô trống,
+387,(cả dòng),near_duplicate_row,,,Free Tools · Xoá dòng trùng,gần trùng: email viết HOA + ghi_chu thừa 1 dấu cách (chỉ bắt khi bật 'bỏ qua hoa/thường' và 'bỏ qua khoảng trắng') (bản gốc là dòng 202)
+395,so_dien_thoai,format_noise,0915747435,09123,Free Tools · Sai định dạng,
+398,phong_ban,inconsistent_category,Sales,sales,Cần cấu hình · Không nhất quán,
+400,luong,missing_value,13600000,NA,Free Tools · Ô trống,
+400,ngay_sinh,format_noise,1978-08-10,10/08/1978,Free Tools · Sai định dạng,ngày đúng nhưng khác khuôn dd/mm/yyyy (so với khuôn chuẩn yyyy-mm-dd)
+402,(cả dòng),near_duplicate_row,,,Free Tools · Xoá dòng trùng,gần trùng: email viết HOA + ghi_chu thừa 1 dấu cách (chỉ bắt khi bật 'bỏ qua hoa/thường' và 'bỏ qua khoảng trắng') (bản gốc là dòng 103)
+403,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 217)
+408,ghi_chu,whitespace_noise,Cần bổ sung hồ sơ,Cần    bổ sung hồ sơ,Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+412,so_dien_thoai,format_noise,0991717078,091234567A,Free Tools · Sai định dạng,
+413,ghi_chu,missing_value,Đã duyệt,,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+416,gioi_tinh,inconsistent_category,Nữ,nữ,Cần cấu hình · Không nhất quán,
+420,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 118)
+427,tuoi,out_of_range,48,0,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 18-65
+428,ghi_chu,missing_value,Đã duyệt,,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+428,ma_nv,functional_dependency,NV1178,NV1015,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,ma_nv trùng với một NGƯỜI KHÁC (nhân viên ở dòng gốc khác): Denoise nên kết luận nghi sai cột ma_nv
+430,diem_dg,format_noise,9.2,tám,Free Tools · Sai định dạng,
+430,ho_ten,whitespace_noise,Lê Thị Hoa,  Lê Thị Hoa,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+433,ho_ten,functional_dependency,Vũ Hồng Long,Huỳnh Thị Dũng,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ho_ten: nhóm 2 dòng, hai tên khác nhau (hoà, chưa xác định được dòng nào sai)"
+435,ghi_chu,missing_value,Đã duyệt,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+435,gioi_tinh,missing_value,Nam,-,Free Tools · Ô trống,
+436,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 166)
+437,ghi_chu,missing_value,Chờ ký hợp đồng,-,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+437,thanh_tien,cross_rule_expression,3675000,4674999,Cần cấu hình · Rule liên cột · Biểu thức,thanh_tien != so_luong_ban * don_gia
+439,ghi_chu,whitespace_noise,Đã duyệt,  Đã duyệt,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+440,diem_dg,format_noise,5.5,7/10,Free Tools · Sai định dạng,
+442,so_dien_thoai,missing_value,0943373378,N/A,Free Tools · Ô trống,
+444,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 219)
+451,ngay_sinh,functional_dependency,1978-11-26,1981-11-26,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ngay_sinh: nhóm 2 dòng, hoà (chưa xác định được)"
+452,gioi_tinh,inconsistent_category,Nam,NAM,Cần cấu hình · Không nhất quán,
+455,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 238)
+458,phong_ban,inconsistent_category,Sales,Sale,Cần cấu hình · Không nhất quán,gõ sai nhẹ: chỉ bắt khi hạ ngưỡng giống nhau xuống ~0.85
+461,email,missing_value,hai.huynh1380@congty.vn,-,Free Tools · Ô trống,
+463,ngay_sinh,format_noise,1996-09-10,10/09/1996,Free Tools · Sai định dạng,ngày đúng nhưng khác khuôn dd/mm/yyyy (so với khuôn chuẩn yyyy-mm-dd)
+463,tuoi,out_of_range,29,78,Cần cấu hình · Ngoài khoảng (18-65) / Giá trị bất thường,cao bất thường nhưng có thể là thật
+464,gioi_tinh,missing_value,Nữ,NA,Free Tools · Ô trống,
+464,loai_hd,inconsistent_category,Chính thức,CHÍNH THỨC,Cần cấu hình · Không nhất quán,
+465,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+466,hoa_hong,cross_rule_if_then,3.2,-,Cần cấu hình · Rule liên cột · Biểu thức (cũng là ô trống),"phong_ban = ""Sales"" => có(hoa_hong)"
+466,tuoi,missing_value,27,,Free Tools · Ô trống,
+467,xep_loai,class_noise,Giỏi,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Giỏi
+471,ghi_chu,whitespace_noise,"Đã duyệt, chờ ký","Đã duyệt, chờ ký   ",Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+472,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+473,luong,missing_value,16700000,N/A,Free Tools · Ô trống,
+474,gioi_tinh,inconsistent_category,Nam,nam,Cần cấu hình · Không nhất quán,
+475,ngay_ra,cross_rule_expression,2024-04-12,2020-12-26,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+476,ghi_chu,missing_value,"Đã duyệt, chờ ký",,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+476,phong_ban,inconsistent_category,IT,it,Cần cấu hình · Không nhất quán,
+477,phong_ban,inconsistent_category,Sales,Sale,Cần cấu hình · Không nhất quán,gõ sai nhẹ: chỉ bắt khi hạ ngưỡng giống nhau xuống ~0.85
+480,phong_ban,inconsistent_category,HR,hr,Cần cấu hình · Không nhất quán,
+481,(cả dòng),near_duplicate_row,,,Free Tools · Xoá dòng trùng,gần trùng: email viết HOA + ghi_chu thừa 1 dấu cách (chỉ bắt khi bật 'bỏ qua hoa/thường' và 'bỏ qua khoảng trắng') (bản gốc là dòng 537)
+482,gioi_tinh,missing_value,Nữ,,Free Tools · Ô trống,
+482,ho_ten,functional_dependency,Phan Văn An,Võ Anh Dũng,Cần cấu hình · Rule liên cột · Phụ thuộc hàm,"ma_nv -> ho_ten: nhóm 3 dòng, 1 dòng sai (xác định được, sửa về giá trị phổ biến)"
+484,ghi_chu,whitespace_noise,Chờ ký hợp đồng,Chờ ký hợp đồng   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+486,phong_ban,inconsistent_category,Sales,sales,Cần cấu hình · Không nhất quán,
+490,diem_dg,out_of_range,8.5,11,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 1-10
+492,luong,cross_rule_if_then,10000000,15400000,Cần cấu hình · Rule liên cột · Biểu thức,"loai_hd = ""Thử việc"" => luong <= 12000000"
+493,xep_loai,class_noise,Trung bình,Khá,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Trung bình
+494,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 405)
+496,ngay_ra,cross_rule_expression,2021-09-06,2019-02-05,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+497,(cả dòng),empty_row,,,Free Tools · Ô trống (xoá dòng trống hoàn toàn),dòng trống hoàn toàn (mọi cột đều trống)
+500,luong,out_of_range,6200000,900000000,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 3.000.000-100.000.000
+501,ghi_chu,missing_value,Hoàn thành tốt,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+502,diem_dg,out_of_range,5.7,0,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 1-10
+502,ngay_vao,format_noise,2020-01-31,chưa có,Free Tools · Sai định dạng,
+508,email,format_noise,thao.le1171@congty.vn,@congty.vn,Free Tools · Sai định dạng,
+509,Hệ số lương,missing_value,2.3,NA,Free Tools · Ô trống,
+509,luong,cross_rule_if_then,10000000,17600000,Cần cấu hình · Rule liên cột · Biểu thức,"loai_hd = ""Thử việc"" => luong <= 12000000"
+509,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+510,email,format_noise,giang.vo1399@congty.vn,nguyenvana.congty.vn,Free Tools · Sai định dạng,
+512,Hệ số lương,format_noise,1.4,hai,Free Tools · Sai định dạng,
+513,ngay_sinh,missing_value,1991-10-16,N/A,Free Tools · Ô trống,
+516,(cả dòng),duplicate_row,,,Free Tools · Xoá dòng trùng,trùng hệt dòng gốc (bản gốc là dòng 503)
+518,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+523,ghi_chu,whitespace_noise,Hoàn thành tốt,  Hoàn thành tốt,Free Tools · Cắt khoảng trắng,khoảng trắng đầu
+524,gioi_tinh,inconsistent_category,Nữ,nữ,Cần cấu hình · Không nhất quán,
+524,ngay_ra,cross_rule_expression,2026-04-12,2023-10-08,Cần cấu hình · Rule liên cột · Biểu thức,ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao
+524,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+525,xep_loai,class_noise,Khá,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+526,diem_dg,missing_value,9.4,N/A,Free Tools · Ô trống,
+526,gioi_tinh,inconsistent_category,Nam,NAM,Cần cấu hình · Không nhất quán,
+527,ho_ten,whitespace_noise,Bùi Thanh Thảo,Bùi    Thanh Thảo,Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+530,xep_loai,class_noise,Khá,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+532,ghi_chu,whitespace_noise,"Đã duyệt, chờ ký","Đã    duyệt, chờ ký",Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+532,tuoi,out_of_range,33,210,Cần cấu hình · Ngoài khoảng,khoảng gợi ý 18-65
+533,ghi_chu,missing_value,Chuyển phòng ban,,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+538,ghi_chu,whitespace_noise,Hoàn thành tốt,Hoàn    thành tốt,Free Tools · Cắt khoảng trắng,khoảng trắng lặp ở giữa
+538,luong,missing_value,18100000,null,Free Tools · Ô trống,
+541,(cả dòng),empty_row,,,Free Tools · Ô trống (xoá dòng trống hoàn toàn),dòng trống hoàn toàn (mọi cột đều trống)
+543,ho_ten,whitespace_noise,Hoàng Thanh Hà,Hoàng Thanh Hà   ,Free Tools · Cắt khoảng trắng,khoảng trắng cuối
+543,luong,outlier,10200000,66000000,Cần cấu hình · Giá trị bất thường,trong khoảng 3tr-100tr nhưng lệch hẳn phần còn lại
+545,ghi_chu,missing_value,Đã duyệt,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+546,ghi_chu,whitespace_noise,"Đã duyệt, chờ ký","Đã ​duyệt, chờ ký",Free Tools · Cắt khoảng trắng,ký tự zero-width (nhìn không thấy)
+548,ghi_chu,missing_value,Chờ ký hợp đồng,NA,Free Tools · Ô trống,dùng để thử 'giá trị cố định' cho cột chữ
+548,xep_loai,class_noise,Khá,Trung bình,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Khá
+552,xep_loai,class_noise,Trung bình,Giỏi,Class Noise,nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: Trung bình

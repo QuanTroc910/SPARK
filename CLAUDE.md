@@ -1688,6 +1688,26 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Guide viết lại thành hướng dẫn thao tác** (8 mục, mục lục đổi tên mục 01 "Bắt đầu nhanh", mục 07 "Nối tiếp và hoàn tác"): 4 bước làm sạch 1 file, bảng "gặp gì → dùng tool nào", cách dùng từng tool
       theo đúng tên nút / ô trên giao diện, 2 nhịp Phát hiện → Áp dụng, cách viết biểu thức, 4 bước Class Noise, dải nối tiếp + Hoàn tác, FAQ. Đọc ≈ 5 phút.
 
+33. **Bộ dữ liệu test toàn diện + kịch bản thao tác người dùng — ĐÃ XONG (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user nhờ tạo 1 file chứa MỌI loại lỗi của sản phẩm (nhiều dòng) và liệt kê mọi trường hợp thao tác để tự test như người dùng thật, xem có lỗi ở đâu không.
+    - **File** (trong `data/`): `generate_test_all_noise.py` (hạt giống cố định, chạy lại ra đúng cùng file) sinh `test_all_noise.csv` + `.xlsx` (552 dòng × 26 cột: 400 nhân viên, 100 người có 2 hợp đồng,
+      12 người có 3 hợp đồng; 18 dòng trùng hệt, 6 gần trùng, 4 dòng trống hoàn toàn, cột `cot_trong` trống 100%, cột `Hệ số lương` có dấu cách + tiếng Việt, cột `thuong` zero-inflated, `xep_loai` đổi nhãn
+      sai 45 dòng), `test_all_noise_ground_truth.csv` (đáp án từng ô cấy lỗi: dòng, cột, loại lỗi, giá trị gốc / đã cấy, tool nên bắt), và file nhỏ `test_semicolon.csv`, `test_tab.txt`,
+      `test_convert_nested.json`, `test_convert_lines.jsonl`, `test_empty.csv`, `test_header_only.csv`, `test_bad.json`. Nhóm Phụ thuộc hàm cố ý có đủ 3 loại: nhóm 3 dòng 1 dòng sai (sửa về giá trị phổ biến
+      được), nhóm 2 dòng hoà (chưa xác định được), 2 mã dùng chung cho 2 người (nghi sai `ma_nv`); dòng của các nhóm này KHÔNG bị nhân bản thành dòng trùng (sẽ làm lệch phép đếm đa số).
+    - **`data/KICH_BAN_TEST.md`:** checklist ~150 ô theo nhóm (tài khoản, điều hướng, 4 Free Tools, Convert, 4 tool Cần cấu hình, nối tiếp + hoàn tác, Class Noise, trường hợp biên), mỗi mục kèm số kỳ vọng.
+    - **Đối chiếu độc lập (script trong scratchpad, không nằm trong repo):** mọi tool chạy qua Flask test client trên file test, so với số tính bằng pandas độc lập: 0 lệch (trùng 21/27, cắt trắng 35/45,
+      sai định dạng 38 ô ở 8 cột, ngoài khoảng 9/4/6/2, IQR 9 + Z-score 1, thuong IQR=0 80 ô, không nhất quán 14/5/15→19, 5 biểu thức 10/8/5/7/2, FD 32 dòng, Excel = CSV, Convert). Class Noise trên dữ liệu
+      có nhãn cấy sai: Distance recall ~0,87, Ensemble ~0,89, Single ~0,60 (nhiều dòng nghi ngờ hơn thì recall cao hơn, precision thấp hơn).
+    - **Mô phỏng người dùng bằng Playwright** (~170 kiểm tra: đăng ký/đăng nhập/đổi mật khẩu, mọi mục menu, 4 Free Tools + xem danh sách + nối tiếp + hoàn tác + tải file, Ô trống nhiều cột + điền tay, 4 tool Cần
+      cấu hình + hộp xác nhận, Convert, Class Noise 4 bước 3 thuật toán, tải lại trang): sau khi sửa lỗi script test, không còn lỗi của app ngoài các điểm dưới đây.
+    - **Lỗi thật tìm được + đã sửa:** (1) file rỗng báo tiếng Anh "No columns to parse from file" → `File rỗng: không có tên cột hay dòng dữ liệu nào.` (`_read_df_for_noise_tool`); (2) Class Noise chỉ chọn cột chữ
+      nhiều giá trị (vd `ho_ten`) báo lỗi thư viện tiếng Anh "Found array with 0 feature(s)" → câu tiếng Việt rõ ràng (kiểm `detect_feature_columns` rỗng trong `class_noise_detect_api`);
+      (3) trang tràn ngang ~260px ở màn 390px: header không xuống dòng và hình minh hoạ "trước → sau" của trang tool đặt ngang (thêm 2 `@media (max-width: 640px)` ở `workspace.css`);
+      (4) Guide + mô tả Class Noise ghi "chỉ cột số" trong khi cột chữ đã chọn được (tự one-hot) → sửa chữ.
+    - **Ghi nhận, chưa sửa (nhỏ):** Class Noise báo thiếu cột đặc trưng bằng `alert()` của trình duyệt (các nơi khác dùng dòng báo trong trang); đổi mật khẩu sang CHÍNH mật khẩu cũ vẫn được chấp nhận;
+      dán / chọn file chỉ có dòng tiêu đề cho kết quả "giữ nguyên 0 dòng" không kèm giải thích; "Sửa về giá trị phổ biến nhất" luôn bỏ qua nhóm 2 dòng (hoà) — đúng thiết kế nhưng người dùng dễ tưởng lỗi.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -1785,6 +1805,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 - [x] Tự nhận chữ trần (không nháy) là giá trị thật của cột đang so; gõ nhầm thì báo lỗi kèm giá trị gần giống — xem mục 29.
 - [x] Kiểm tra biểu thức khi đang gõ (dòng xanh/đỏ dưới ô, ngừng gõ ~1s) — xem mục 30.
 - [x] Rút gọn chữ chú thích trên mọi trang Denoise (ít hơn, ngắn hơn, bỏ khối "Riêng tư" lặp ở mỗi tool) — xem mục 31.
+- [x] Bộ dữ liệu test toàn diện `data/test_all_noise.*` + kịch bản thao tác `data/KICH_BAN_TEST.md` + sửa 4 lỗi nhỏ tìm được — xem mục 33.
 - [x] Phụ thuộc hàm: 1 cột xác định → nhiều cột phụ thuộc, đoán ô sai (so các cột còn lại), 2 cách xử lý
       "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" + xem trước (mục 23, commit `3ee977f`, `73978bc`).
 - [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).
@@ -1811,10 +1832,11 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       Polishing có căn cứ thực nghiệm tốt nhất (kết hợp Filtering+Polishing
       cho accuracy cao nhất, ít mất dữ liệu nhất) và khớp tự nhiên với
       `confident_label` đã có sẵn trong `ClassNoiseFinding`.
-- [ ] One-Hot Encoding cho cột CHỮ (category) làm đặc trưng Class Noise —
-      vẫn để dành chờ ý kiến thầy; hiện tại cả danh sách checkbox đặc trưng
-      LẪN endpoint `reduce-features` mới đều chỉ chấp nhận cột SỐ, cột chữ
-      hoàn toàn không dùng được làm đặc trưng.
+- [x] One-Hot Encoding cho cột CHỮ (category) làm đặc trưng Class Noise — ĐÃ LÀM:
+      `class_noise/categorical_encoding.py` (one-hot kiểu drop-first, gộp giá trị hiếm
+      < 1% thành nhóm "Khac"), nối vào cả `/api/class-noise/detect` lẫn
+      `/api/class-noise/reduce-features`; Guide + mô tả Bước 3 đã ghi "cột chữ được mã
+      hoá tự động". Cột chữ có quá nhiều giá trị khác nhau (vd tên người) vẫn không nên chọn.
 - [ ] (Khuyến nghị, chưa có yêu cầu code cụ thể) Đánh giá định lượng: tính
       precision/recall/F1 của 7 detector + rule liên cột so với
       `noise_ground_truth.csv`/`noise_ground_truth_large.csv` — rủi ro lớn

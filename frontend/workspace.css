@@ -138,6 +138,16 @@ body { --ws-cw: min(calc(var(--ws-cmax) - 2 * var(--ws-pad)), calc(100% - 2 * va
   .ws-header .btn-small { height: 34px; padding: 0 11px; font-size: 10.5px; }
   .account-username { display: none; }
 }
+/* Điện thoại: logo + tài khoản ở hàng trên, 4 nút điều hướng xuống hàng dưới (trước đây tràn ngang ~260px). */
+@media (max-width: 640px) {
+  .ws-header-inner { flex-wrap: wrap; height: auto; padding: 10px 16px; row-gap: 8px; }
+  .ws-nav { order: 3; width: 100%; flex-wrap: wrap; justify-content: center; }
+}
+/* Điện thoại: hình minh hoạ "trước → sau" xếp dọc (2 hộp 200px đặt ngang làm trang tràn ngang). */
+@media (max-width: 640px) {
+  .tool-mock-frame { padding: 28px 12px; }
+  .tool-mock { flex-direction: column; gap: 10px; }
+}
 
 /* ===== Mega menu (dropdown "Product") -- vuông góc, viền đen, 4 cột ===== */
 .ws-megamenu {

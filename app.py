@@ -746,6 +746,11 @@ def class_noise_detect_api():
     # IQR của cột gần như toàn 1 giá trị sẽ suy biến (tự động bị cap_outliers()
     # bỏ qua), còn log1p sẽ biến 0/1 "sạch" thành 0/0.693 không cần thiết,
     # không có lợi gì cho 1 cột vốn đã nhị phân sẵn.
+    if not detect_feature_columns:
+        # Chỉ chọn cột chữ có quá nhiều giá trị khác nhau (vd tên người): các giá trị hiếm bị gộp hết thành 1 nhóm
+        # nên không còn cột đặc trưng nào dùng được -- báo rõ thay vì để thư viện báo lỗi tiếng Anh.
+        return jsonify({"error": "Không có cột đặc trưng nào dùng được: cột chữ đã chọn có quá nhiều giá trị khác nhau "
+                                 "(vd tên người). Hãy chọn thêm cột số hoặc cột nhóm có ít giá trị."}), 400
     cleaned_df = cap_outliers(encoded_df, numeric_feature_columns)
     cleaned_df = log_transform(cleaned_df, numeric_feature_columns)
 
@@ -1485,6 +1490,9 @@ def _read_df_for_noise_tool(req) -> pd.DataFrame:
         file.save(temp_path)
         try:
             return load_data(str(temp_path))
+        except pd.errors.EmptyDataError:
+            # File rỗng: pandas báo tiếng Anh "No columns to parse from file" -- đổi sang câu dễ hiểu.
+            raise QuickToolError("File rỗng: không có tên cột hay dòng dữ liệu nào.")
         finally:
             temp_path.unlink(missing_ok=True)
 
