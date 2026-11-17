@@ -77,6 +77,13 @@ KIND_LABELS = {"num": "Số", "date": "Ngày", "text": "Chữ", "bool": "Đúng/
 _MISSING_LOWER = frozenset(p.lower() for p in DEFAULT_MISSING_PLACEHOLDERS)
 
 
+def _clean_text(series: pd.Series) -> pd.Series:
+    """Cách bộ máy đọc 1 cột chữ: cắt khoảng trắng hai đầu, ô thiếu (trống, N/A, null, ?...) thành NaN. Dùng chung cho tính biểu thức (_Evaluator.raw),
+    chip giá trị (column_value_counts) và việc tự nhận chữ trần (bind_bare_values) để cả 3 luôn thấy CÙNG một tập giá trị."""
+    text = series.astype(str).str.strip()
+    return text.astype(object).mask(text.str.lower().isin(_MISSING_LOWER))
+
+
 class ExpressionError(ValueError):
     """Biểu thức sai cú pháp / sai kiểu / nhắc tới cột không có. Thông báo viết sẵn bằng tiếng Việt, hiển thị thẳng cho người dùng."""
 
@@ -463,7 +470,14 @@ class _ColumnResolver:
             self.stripped.setdefault(name.strip(), column)
             self.folded.setdefault(name.strip().casefold(), []).append(column)
 
-    def resolve(self, name: str, text: str = "", pos: int = 0):
+    def known(self, name: str) -> bool:
+        """Có cột nào khớp tên này không (kể cả trường hợp nhiều cột chỉ khác hoa/thường, vẫn là "tên cột")."""
+        wanted = _nfc(name)
+        return wanted in self.exact or wanted.strip() in self.stripped or bool(self.folded.get(wanted.strip().casefold()))
+
+    def resolve(self, name: str, text: str = "", pos: int = 0, value_col=None, near_values=()):
+        """value_col != None: từ này đứng cạnh cột `value_col` trong một phép so sánh và đã được tra KHÔNG phải giá trị nào của cột đó
+        (xem bind_bare_values); near_values = các giá trị gần giống để gợi ý."""
         wanted = _nfc(name)
         if wanted in self.exact:
             return self.exact[wanted]
@@ -474,14 +488,83 @@ class _ColumnResolver:
             return matches[0]
         if len(matches) > 1:
             raise _fail(text, pos, f"có nhiều cột chỉ khác nhau hoa/thường ({', '.join('«' + str(m) + '»' for m in matches)}), hãy gõ đúng một tên")
-        close = difflib.get_close_matches(wanted.strip(), [_nfc(c).strip() for c in self.columns], n=3, cutoff=0.5)
+        # Từ đứng cạnh một cột (value_col) nhiều khả năng là giá trị chứ không phải tên cột gõ nhầm: chỉ gợi ý tên cột khi giống rất sát (agee -> age),
+        # tránh gợi ý nhiễu kiểu "Salse -> age".
+        close = difflib.get_close_matches(wanted.strip(), [_nfc(c).strip() for c in self.columns], n=3, cutoff=0.5 if value_col is None else 0.75)
         hint = f" Có phải: {', '.join('«' + c + '»' for c in close)}?" if close else ""
         # Lỗi hay gặp nhất khi gõ tay: viết GIÁ TRỊ CHỮ mà quên dấu nháy (department == Sales) nên bị hiểu là tên một cột. Tên viết trong [ ] thì
         # chắc chắn là người dùng muốn nói tới cột, không nhắc nháy. Luôn nhắc cả khi đã có "Có phải ...?" vì tên giá trị (sales) có thể giống tên cột (salary).
         quote_hint = "" if text[pos:pos + 1] == "[" else f" Nếu «{name}» là giá trị chữ chứ không phải tên cột, hãy viết trong dấu nháy: \"{name}\"."
+        if value_col is not None:
+            # Từ này đứng cạnh một cột nên có thể là giá trị chữ viết trần, nhưng đã tra: cột đó không có giá trị nào như vậy (gõ nhầm, hoặc khác hoa/thường).
+            near = f" (giá trị gần giống: {', '.join('«' + v + '»' for v in near_values)})" if near_values else ""
+            quote_hint = f" «{name}» cũng không phải giá trị nào của cột «{value_col}»{near}. Muốn so với một chữ khác thì viết trong dấu nháy: \"{name}\"."
         sample = ", ".join(f"«{c}»" for c in list(map(str, self.columns))[:15])
         more = " …" if len(self.columns) > 15 else ""
         raise _fail(text, pos, f"không có cột «{name}» trong dữ liệu.{hint}{quote_hint} Các cột có sẵn: {sample}{more}")
+
+
+def bind_bare_values(node, text: str, df: pd.DataFrame, resolver: Optional["_ColumnResolver"] = None):
+    """Tự nhận GIÁ TRỊ CHỮ viết trần (không dấu nháy): `department = Sales` hiểu như `department = "Sales"`.
+
+    Chỉ áp dụng cho một từ đứng cạnh một CỘT trong phép so sánh, và chỉ khi từ đó (1) không phải tên cột nào, (2) không viết trong [ ], (3) đúng là một giá
+    trị thật của cột đứng cạnh (so ĐÚNG như phép so chữ: cắt khoảng trắng hai đầu, phân biệt hoa/thường, bỏ ô thiếu). Nhờ điều kiện (3) mà gõ nhầm tên cột
+    (agee) hay nhầm giá trị (Salse) KHÔNG bị hiểu thầm thành chữ rồi gắn cờ cả file: vẫn báo lỗi, kèm giá trị gần giống để chọn lại. Tên cột luôn thắng
+    (từ trùng tên một cột thì vẫn là cột). Giá trị có dấu cách hay ký tự lạ vẫn phải viết trong nháy (hoặc bấm chip giá trị).
+
+    Trả về CÂY MỚI (nút ("col", từ, pos) được đổi thành ("str", từ, pos)), cây gốc không bị sửa. Gọi sau parse_expression, trước khi tính / liệt kê cột."""
+    resolver = resolver or _ColumnResolver(df.columns)
+    cache: dict = {}  # cột thật -> các giá trị chữ khác nhau (đã sắp, để gợi ý ổn định)
+
+    def values_of(actual) -> list:
+        if actual not in cache:
+            cache[actual] = sorted(set(_clean_text(df[actual]).dropna()))
+        return cache[actual]
+
+    def is_bare_unknown(n) -> bool:
+        return n[0] == "col" and text[n[2]:n[2] + 1] != "[" and not resolver.known(n[1])
+
+    def known_column(n):
+        if n[0] != "col" or not resolver.known(n[1]):
+            return None
+        try:
+            return resolver.resolve(n[1], text, n[2])
+        except ExpressionError:  # nhiều cột chỉ khác hoa/thường: để lỗi gốc báo lúc tính
+            return None
+
+    def walk(n):
+        kind = n[0]
+        if kind in ("neg", "not"):
+            return (kind, walk(n[1]), n[2])
+        if kind == "bin":
+            return ("bin", n[1], walk(n[2]), walk(n[3]), n[4])
+        if kind in ("and", "or", "imp", "iff"):
+            return (kind, walk(n[1]), walk(n[2]), n[3])
+        if kind == "call":
+            return ("call", n[1], [walk(a) for a in n[2]], n[3])
+        if kind != "cmp":
+            return n
+        operands = [walk(o) for o in n[1]]
+        for j, operand in enumerate(operands):
+            if not is_bare_unknown(operand):
+                continue
+            for k in (j - 1, j + 1):  # a < b < c: mỗi vế xét với cột đứng liền kề
+                if not 0 <= k < len(operands):
+                    continue
+                actual = known_column(operands[k])
+                if actual is None:
+                    continue
+                word, values = operand[1], values_of(actual)
+                if word in values:
+                    operands[j] = ("str", word, operand[2])
+                else:
+                    near = [v for v in values if v.casefold() == word.casefold()]
+                    near += [v for v in difflib.get_close_matches(word, values, n=3, cutoff=0.6) if v not in near]
+                    resolver.resolve(word, text, operand[2], value_col=actual, near_values=near[:3])  # từ không phải cột nên luôn raise
+                break
+        return ("cmp", operands, n[2], n[3])
+
+    return walk(node)
 
 
 def expression_column_names(expression: Optional[str]) -> list:
@@ -500,8 +583,7 @@ def column_value_counts(series: pd.Series, limit: int = 30) -> tuple:
     Đếm theo ĐÚNG cách bộ máy đọc chữ (xem _Evaluator.raw): cắt khoảng trắng hai đầu (" HR" và "HR" là một), ô thiếu (trống, N/A, null, ?...)
     bỏ qua, PHÂN BIỆT hoa/thường ("Sales" và "SALES" là hai giá trị). Nhờ vậy số đếm của chip = số dòng thật sự khớp khi viết `cột = "giá trị"`.
     Trả về (danh sách [{"value", "count"}] đã sắp theo số dòng giảm dần rồi theo chữ, tối đa `limit` phần tử, số giá trị khác còn lại không hiện)."""
-    text = series.astype(str).str.strip()
-    text = text[~text.str.lower().isin(_MISSING_LOWER)]
+    text = _clean_text(series).dropna()
     ordered = sorted(text.value_counts().items(), key=lambda kv: (-int(kv[1]), str(kv[0])))
     shown = [{"value": str(v), "count": int(n)} for v, n in ordered[:limit]]
     return shown, max(0, len(ordered) - limit)
@@ -511,6 +593,7 @@ def expression_columns(df: pd.DataFrame, expression: Optional[str]) -> list:
     """Tên cột THẬT (đúng như trong bảng) mà biểu thức nhắc tới, theo thứ tự xuất hiện, không trùng -- dùng để tô ô và đặt tên rule."""
     node, text = parse_expression(expression)
     resolver = _ColumnResolver(df.columns)
+    node = bind_bare_values(node, text, df, resolver)  # chữ trần như Sales (giá trị của cột đứng cạnh) không phải là cột
     result: list = []
     for name, pos in _columns_in(node):
         actual = resolver.resolve(name, text, pos)
@@ -572,9 +655,7 @@ class _Evaluator:
     # ---- đọc cột thô -> chuỗi đã cắt khoảng trắng, ô thiếu = NaN ----
     def raw(self, actual) -> pd.Series:
         if actual not in self.raw_cache:
-            text = self.df[actual].astype(str).str.strip()
-            missing = text.str.lower().isin(_MISSING_LOWER)
-            self.raw_cache[actual] = text.astype(object).mask(missing)
+            self.raw_cache[actual] = _clean_text(self.df[actual])
         return self.raw_cache[actual]
 
     def numbers(self, text: pd.Series) -> pd.Series:
@@ -886,7 +967,9 @@ def evaluate_expression(df: pd.DataFrame, expression: Optional[str], tolerance: 
     """Tính biểu thức trên cả bảng. Raise ExpressionError nếu biểu thức sai (cú pháp, kiểu, cột không có)."""
     node, text = parse_expression(expression)
     tol, date_format = _prepare_options(tolerance, date_format)
-    evaluator = _Evaluator(df, _ColumnResolver(df.columns), text, tol, date_format)
+    resolver = _ColumnResolver(df.columns)
+    node = bind_bare_values(node, text, df, resolver)
+    evaluator = _Evaluator(df, resolver, text, tol, date_format)
     root = evaluator.ev(node)
     if root.kind != "bool":
         raise ExpressionError(f"Biểu thức phải cho kết quả Đúng/Sai (một phép so sánh hoặc điều kiện, vd a > b), đang cho kết quả kiểu {KIND_LABELS[root.kind]}")
@@ -921,6 +1004,10 @@ def if_then_columns(df: pd.DataFrame, if_expression: Optional[str], then_express
     result: list = []
     for label, source in (("NẾU", if_expression), ("THÌ", then_expression)):
         node, text = _parse_side(label, source)
+        try:
+            node = bind_bare_values(node, text, df, resolver)
+        except ExpressionError as exc:
+            raise ExpressionError(f"Vế {label}: {exc}") from None
         for name, pos in _columns_in(node):
             try:
                 actual = resolver.resolve(name, text, pos)
@@ -937,8 +1024,16 @@ def evaluate_conditional(df: pd.DataFrame, if_expression: Optional[str], then_ex
     kiểu...) mà chưa chắc sai thì bị bỏ qua và được đếm (logic 3 giá trị như evaluate_expression). Mỗi vế là 1 biểu thức đầy đủ (và/hoặc/không,
     so cột với cột, tính toán, ngày...). Hai vế dùng chung 1 bộ đọc cột nên 1 cột dùng ở cả 2 vế chỉ đọc 1 lần, và báo lỗi theo đúng vế."""
     tol, date_format = _prepare_options(tolerance, date_format)
-    sides = [(label,) + _parse_side(label, source) for label, source in (("NẾU", if_expression), ("THÌ", then_expression))]
-    evaluator = _Evaluator(df, _ColumnResolver(df.columns), sides[0][2], tol, date_format)
+    resolver = _ColumnResolver(df.columns)
+    sides = []
+    for label, source in (("NẾU", if_expression), ("THÌ", then_expression)):
+        node, text = _parse_side(label, source)
+        try:
+            node = bind_bare_values(node, text, df, resolver)
+        except ExpressionError as exc:
+            raise ExpressionError(f"Vế {label}: {exc}") from None
+        sides.append((label, node, text))
+    evaluator = _Evaluator(df, resolver, sides[0][2], tol, date_format)
     values = []
     for label, node, text in sides:
         evaluator.text = text  # vị trí ký tự trong thông báo lỗi tính theo đúng vế đang tính

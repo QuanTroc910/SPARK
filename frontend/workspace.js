@@ -692,7 +692,7 @@ const CF_INFO = {
     steps: ["Chọn file; chọn kiểu rule: biểu thức hoặc phụ thuộc hàm.", "Viết biểu thức bằng cách bấm tên cột, giá trị và các nút so sánh / tính toán (muốn nói «nếu A thì B» thì bấm THÌ =>), hay khai phụ thuộc hàm, rồi bấm Phát hiện.", "Xem dòng vi phạm và số dòng bị bỏ qua; xoá dòng vi phạm hoặc giữ nguyên để rà tay."],
     explainer: [
       { t: "Hai kiểu rule", b: "Biểu thức: một điều kiện mà mọi dòng phải thoả, vd ngay_nghi > ngay_vao, tong == so_luong * don_gia, tuoi >= 18 và tuoi <= 65. Muốn nói «nếu A thì B» thì viết A => B (nút THÌ =>): với mọi dòng thoả A thì B phải đúng, dòng không thoả A luôn đạt, vd phong_ban = \"Sales\" => luong >= 10000000. Phụ thuộc hàm: mỗi giá trị cột A chỉ được đi với đúng một giá trị của từng cột phụ thuộc." },
-      { t: "Cách viết biểu thức", b: "Tên cột bấm chip để chèn; bấm chip cột Nhóm (vd phong_ban) thì hiện thêm các giá trị trong cột đó để bấm chèn kèm dấu nháy. So sánh: < <= > >= = !=. Tính: + - * /, phần trăm thì chia 100 (giam_gia / 100). Nối điều kiện: và, hoặc, không (viết va, hoac, khong cũng được). Chữ để trong dấu nháy: \"Sales\", và phân biệt hoa/thường. Tên cột có dấu cách để trong [ ], vd [Ngày vào]. Ngày: Denoise tự nhận khuôn (dd/mm/yyyy, yyyy-mm-dd...), hai ngày trừ nhau ra số ngày, ngày + 30 là một ngày. Khi Denoise đọc sai kiểu cột, ép bằng so(cột), ngay(cột, \"%d/%m/%Y\"), chu(cột). Viết liền 0 <= tuoi <= 120 cũng được. Kéo theo: a => b (nếu a thì b), tương đương: a <=> b. Kiểm tra ô có giá trị: có(cột), vd phong_ban = \"Sales\" => có(ma_khach)." },
+      { t: "Cách viết biểu thức", b: "Tên cột bấm chip để chèn; bấm chip cột Nhóm (vd phong_ban) thì hiện thêm các giá trị trong cột đó để bấm chèn kèm dấu nháy. So sánh: < <= > >= = !=. Tính: + - * /, phần trăm thì chia 100 (giam_gia / 100). Nối điều kiện: và, hoặc, không (viết va, hoac, khong cũng được). Giá trị chữ có sẵn trong cột viết trần cũng được (department = Sales), Denoise tự tra trong cột đó, gõ nhầm (Salse) thì báo lỗi kèm giá trị gần giống; giá trị có dấu cách hoặc không có sẵn thì để trong dấu nháy: \"Marketing Team\". Chữ phân biệt hoa/thường. Tên cột có dấu cách để trong [ ], vd [Ngày vào]. Ngày: Denoise tự nhận khuôn (dd/mm/yyyy, yyyy-mm-dd...), hai ngày trừ nhau ra số ngày, ngày + 30 là một ngày. Khi Denoise đọc sai kiểu cột, ép bằng so(cột), ngay(cột, \"%d/%m/%Y\"), chu(cột). Viết liền 0 <= tuoi <= 120 cũng được. Kéo theo: a => b (nếu a thì b), tương đương: a <=> b. Kiểm tra ô có giá trị: có(cột), vd phong_ban = \"Sales\" => có(ma_khach)." },
       { t: "Dòng bị bỏ qua, và an toàn", b: "Ô trống, ô sai kiểu hoặc phép chia cho 0 làm kết quả chưa biết, nên dòng đó không bị gắn cờ mà bị bỏ qua. Denoise đếm và báo lại số dòng bị bỏ qua cùng cách đọc từng cột, để kết quả «0 lỗi» không đánh lừa bạn; «sai và chưa biết» vẫn là sai. Biểu thức được phân tích bằng bộ đọc tự viết: không có eval(), không gọi được hàm nào ngoài so, ngay, chu, có." },
       PRIVACY_COLUMN(),
     ],
@@ -2482,7 +2482,7 @@ const EXPR_BUTTON_GROUPS = [
   ]],
   ["Tính toán và chữ", [
     ["+", "+", "cộng"], ["−", "-", "trừ"], ["×", "*", "nhân (chèn dấu *)"], ["÷", "/", "chia (chèn dấu /). Phần trăm thì chia 100, vd giam_gia / 100"],
-    ['" "', '""', "Giá trị chữ: gõ chữ vào giữa hai dấu nháy, vd \"Sales\". Chữ phân biệt hoa/thường"],
+    ['" "', '""', "Giá trị chữ trong dấu nháy, vd \"Marketing Team\". Cần khi giá trị có dấu cách hoặc không có sẵn trong cột. Chữ phân biệt hoa/thường"],
   ]],
 ];
 // Khối chèn nhanh: 3 hàng nút + chip tên cột + (khi bấm chip cột Nhóm) chip giá trị của cột đó.
@@ -2540,7 +2540,7 @@ function renderCfRuleFields() {
       </div>
       ${exprHelperHTML(cols)}
       ${exprOptionsHTML()}
-      <p class="hint-note">Dòng nào chắc chắn sai thì bị gắn cờ. Muốn nói «nếu A thì B»: bấm THÌ => giữa A và B, dòng thoả A mà không thoả B bị gắn cờ, dòng không thoả A luôn đạt. Chữ viết trong dấu nháy (phân biệt hoa/thường), tên cột có dấu cách viết trong [ ], phần trăm viết /100. Ô trống hoặc sai kiểu không kết luận được nên bị bỏ qua, và Denoise báo lại số dòng đó sau khi phát hiện. Cách viết đầy đủ ở phần giới thiệu phía trên.</p></div>`;
+      <p class="hint-note">Dòng nào chắc chắn sai thì bị gắn cờ. Muốn nói «nếu A thì B»: bấm THÌ => giữa A và B, dòng thoả A mà không thoả B bị gắn cờ, dòng không thoả A luôn đạt. Chữ là giá trị có sẵn trong cột (vd Sales) viết trần cũng được, Denoise tự tra; giá trị có dấu cách hoặc không có sẵn thì viết trong dấu nháy. Chữ phân biệt hoa/thường. Tên cột có dấu cách viết trong [ ], phần trăm viết /100. Ô trống hoặc sai kiểu không kết luận được nên bị bỏ qua, và Denoise báo lại số dòng đó sau khi phát hiện. Cách viết đầy đủ ở phần giới thiệu phía trên.</p></div>`;
     renderCfValueChips(state.cf.valueCol); // dựng lại form (đổi tab / đọc lại cột): hiện lại giá trị của cột đang chọn nếu còn
   } else {
     box.innerHTML = `<div class="cf-row cf-fd-row">${c("cf-det-col", "Cột xác định (A)")}<div class="field" id="cf-fd-deps"></div></div>

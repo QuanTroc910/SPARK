@@ -45,6 +45,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     (`RuleType.IF_THEN`, field `if_expression`/`then_expression`), `if_then_columns()`/`if_then_column_names()`.
     **Mục 28**: `column_value_counts(series, limit)` (giá trị chữ + số dòng theo ĐÚNG cách bộ máy đọc chữ: cắt khoảng trắng, bỏ ô thiếu,
     phân biệt hoa/thường) cho "chip giá trị"; câu báo lỗi "không có cột «X»" nối thêm gợi ý viết trong dấu nháy khi gõ chữ trần.
+    **Mục 29**: `bind_bare_values(node, text, df, resolver)` tự nhận CHỮ TRẦN (không nháy) là giá trị của cột đứng cạnh trong phép so sánh (xem mục 29);
+    `_clean_text()` = cách đọc 1 cột chữ dùng chung cho tính biểu thức, chip giá trị và chữ trần.
     Chỉ import `config.py` để `cross_field_rules.py` import được mà không vòng tròn.
   - `pipeline.py` — `load_data()`, `detect_noise()` (nhận thêm
     `cross_field_rules` tuỳ chọn), `get_flagged_rows()`, `guess_column_dtype()`
@@ -1606,8 +1608,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       còn giúp thấy các cách viết lệch. Chỉ cột được đoán là `category` (≤ 50 giá trị khác nhau và ≤ 50% số dòng) có chip; cột số/ngày/tên người thì ẩn.
       Backend: `/api/noise-tools/inspect` nhận `include_values` (FE `cfInspect` luôn gửi) → `column_values`, tối đa `INSPECT_VALUE_CHIP_LIMIT` = 30 giá trị
       phổ biến nhất mỗi cột + `more` = số giá trị còn lại; đoán kiểu cột 1 lần dùng cho cả 3 phần của response (trước đó đoán lặp 2 lần).
-    - **Gợi ý thiếu nháy:** gõ `department = Sales` báo "không có cột «Sales»... Nếu «Sales» là giá trị chữ chứ không phải tên cột, hãy viết trong dấu nháy:
-      "Sales"" (không nhắc khi tên viết trong `[ ]`); luôn nhắc kể cả khi đã có "Có phải: …?" vì giá trị có thể giống tên cột.
+    - **Gợi ý thiếu nháy [ĐÃ THAY MỘT PHẦN Ở MỤC 29: chữ trần là giá trị thật của cột giờ chạy luôn]:** từ lạ KHÔNG đứng cạnh cột nào (vd `so(x) > abc`) vẫn báo
+      "không có cột «X»... Nếu «X» là giá trị chữ chứ không phải tên cột, hãy viết trong dấu nháy" (không nhắc khi tên viết trong `[ ]`).
     - **Chữ hướng dẫn đã sửa** (trang chủ, menu, mục hướng dẫn "Cần cấu hình"): "Hai kiểu rule", nút THÌ =>, phần trăm viết /100, chữ phân biệt hoa/thường,
       hàm `có` trong danh sách hàm cho phép.
     - **Kiểm chứng:** Playwright `test_expr_toolbar_ui.js` (2 tab, không còn mẫu/ô NẾU/THÌ, 3 hàng nút đúng nhãn + title, ghép bằng bấm ra `age >= 18 và
@@ -1618,6 +1620,26 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       `test_ifthen_ui.js` (tab Nếu – thì) đã bỏ vì tab không còn; hai test UI cũ `test_expr_ui.js` / `test_stale_ui.js` phải sửa cho khớp (tab, mẫu).
     - **Giới hạn / chưa làm:** chip giá trị chỉ cho cột Nhóm (cột số nhiều giá trị ít như điểm 1–5 vẫn gõ số tay); không có "gợi ý điều kiện" dựng sẵn
       (đã đề xuất, user chưa yêu cầu); mũ `^` chưa có trong bộ máy; không kiểm tra cú pháp khi đang gõ.
+
+29. **Tự nhận chữ trần (không dấu nháy) là giá trị của cột đang so — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user mong "máy tự nhận số hay chữ", người dùng đỡ phải gõ nháy; sau khi mình giải thích hiện trạng (chữ trần bị hiểu là tên cột) và đề xuất
+      "chỗ 1" thì user chốt "làm chỗ 1 đi". Chỗ 2 (kiểm tra cú pháp khi đang gõ, tự kiểm tra sau ~1s ngừng gõ) mình đã nêu nhưng user CHƯA yêu cầu.
+    - **Luật** (`expression_rules.py::bind_bare_values`, chạy sau `parse_expression`, trước khi tính / liệt kê cột; trả CÂY MỚI, đổi nút `("col", từ, pos)` thành
+      `("str", từ, pos)`): một từ được coi là chữ khi đồng thời (1) không phải tên cột nào (`_ColumnResolver.known()`, tên cột luôn thắng), (2) không viết trong
+      `[ ]`, (3) đứng LIỀN KỀ một CỘT trong phép so sánh (`cmp`, kể cả chuỗi `a < b < c`, hai chiều `Sales = department`), (4) đúng là một giá trị thật của cột
+      đó theo ĐÚNG phép so chữ (`_clean_text`: cắt khoảng trắng hai đầu, bỏ ô thiếu null/NA/?..., PHÂN BIỆT hoa/thường). Không thoả (4) thì KHÔNG đoán: báo lỗi
+      "«Salse» cũng không phải giá trị nào của cột «department» (giá trị gần giống: «Sales»)" (gần giống = khác hoa/thường trước, rồi `difflib` cutoff 0.6, tối đa 3),
+      và chỉ gợi ý tên cột khi giống rất sát (cutoff 0.75, `agee → age` có, `Salse → age` không). Lý do chọn "phải là giá trị thật" thay vì coi mọi từ lạ là chữ:
+      gõ nhầm tên cột/giá trị sẽ không bị hiểu thầm thành chữ rồi gắn cờ CẢ FILE.
+    - **Nối vào 4 nơi:** `evaluate_expression`, `evaluate_conditional` (lỗi ghi rõ "Vế NẾU/THÌ"), `expression_columns`, `if_then_columns` — nên `expression_info`, nhãn rule
+      (`describe_rule(cfg, df)`) và ô tô màu không coi `Sales` là cột. Nhánh không có df (`expression_column_names`) không đổi.
+    - **Giới hạn:** giá trị có dấu cách / ký tự đặc biệt / không có sẵn trong cột vẫn phải để trong nháy (hoặc bấm chip giá trị, luôn chèn kèm nháy đúng); chỉ cho
+      phép so sánh có một vế là cột (không áp dụng trong `so(...)`, phép tính...); chữ vẫn phân biệt hoa/thường nên `department = sales` báo lỗi gợi ý «Sales», «SALES».
+    - **Giao diện:** chỉ sửa chữ (dòng hướng dẫn dưới form, chú thích nút `" "`, mục giải thích "Cách viết biểu thức"); chip giá trị vẫn chèn `"giá trị"` có nháy.
+    - **Kiểm chứng:** `test_bare_values.py` (chữ trần = có nháy ở 8 cách viết, hai chiều, `!=`, `=>`, ' HR' có dấu cách, evaluate_conditional, expression_columns,
+      if_then_columns, describe_rule; typo Salse / sales / agee / [Sales] / hai vế lạ / lỗi theo vế; tên cột thắng giá trị; giá trị có dấu cách vẫn cần nháy; đối chiếu ngẫu nhiên
+      560 cấu hình `c = word` vs `c = "word"` = 0 khác biệt; đạt pandas 3.0.5 và 2.2.3); Playwright `test_expr_toolbar_ui.js` (gõ `department = Sales` = 253 dòng, nếu–thì gõ trần = 6 dòng,
+      Salse / sales báo lỗi gợi ý); chạy lại toàn bộ test Biểu thức (lõi, route, 2.580 đối chiếu = 0 khác biệt), Phụ thuộc hàm, IQR, báo cấu hình đổi, xác nhận + hoàn tác: không hồi quy.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -1713,6 +1735,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       (a → b)" trước khi Áp dụng ở tool nhiều cột — xem mục 26.
 - [x] Hộp xác nhận xoá dòng (chạy thử `dry_run`) + nút Hoàn tác 5 bước ở dải nối tiếp (3 nhóm tool) — xem mục 27.
 - [x] Biểu thức dễ dùng hơn: bỏ 2 mẫu, gộp Nếu – thì vào Biểu thức (nút THÌ =>), 3 hàng nút dấu, chip giá trị cột Nhóm — xem mục 28.
+- [x] Tự nhận chữ trần (không nháy) là giá trị thật của cột đang so; gõ nhầm thì báo lỗi kèm giá trị gần giống — xem mục 29.
 - [x] Phụ thuộc hàm: 1 cột xác định → nhiều cột phụ thuộc, đoán ô sai (so các cột còn lại), 2 cách xử lý
       "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" + xem trước (mục 23, commit `3ee977f`, `73978bc`).
 - [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).
