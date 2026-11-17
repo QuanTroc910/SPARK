@@ -236,8 +236,8 @@ function setAuthMode(mode) {
   $("ws-auth-eyebrow").textContent = isLogin ? "[ Chào mừng trở lại ]" : "[ Bắt đầu ]";
   $("ws-auth-title").textContent = isLogin ? "Đăng nhập" : "Tạo tài khoản";
   $("ws-auth-desc").textContent = isLogin
-    ? "Tiếp tục việc đang dở. Dữ liệu gắn với tài khoản của bạn, người khác không thấy được."
-    : "Tải lên, làm sạch và xuất file. Mỗi tài khoản là 1 không gian riêng, không qua bên thứ ba.";
+    ? "Tiếp tục việc đang dở."
+    : "Tải lên, làm sạch và xuất file.";
   $("ws-auth-submit").textContent = isLogin ? "Đăng nhập" : "Tạo tài khoản";
   $("ws-auth-switch-text").textContent = isLogin ? "Chưa có tài khoản?" : "Đã có tài khoản?";
   $("ws-auth-toggle").textContent = isLogin ? "Tạo tài khoản" : "Đăng nhập";
@@ -516,12 +516,6 @@ function mockTextPair(beforeLabel, beforeLines, afterLabel, afterLines, delta) {
     `${mockTextBox(afterLabel, afterLines)}</div></div>`
   );
 }
-function PRIVACY_COLUMN() {
-  return {
-    t: "Riêng tư theo thiết kế",
-    b: "File được backend Flask thật đọc để xử lý rồi xoá file tạm NGAY sau khi đọc xong, không giữ lại bản nào. Vẫn cần đăng nhập như mọi chỗ khác trong Denoise.",
-  };
-}
 
 /* ----- Nhãn dùng chung ----- */
 const TOOL_TAB_LABEL = {
@@ -566,46 +560,42 @@ function delimiterLabel(d) {
 const TOOL_INFO = {
   "remove-duplicates": {
     headline: "XOÁ DÒNG TRÙNG<br>TRONG FILE CSV",
-    desc: "Tìm và xoá các dòng lặp lại chỉ trong vài giây. So khớp trên mọi cột, hoặc chỉ những cột xác định 1 bản ghi (vd email) -- bản đầu tiên (hoặc cuối cùng) luôn được giữ lại.",
+    desc: "Xoá các dòng lặp lại, giữ bản đầu hoặc bản cuối. So khớp mọi cột, hoặc chỉ vài cột bạn chọn.",
     mock: mockPair([[[]], [[]], [["is-hit", "is-hit", "is-hit"], { tag: "TRÙNG" }], [[]]], [[[]], [[]], [[]]], "-1 dòng"),
-    steps: ["Thả file CSV/Excel vào, hoặc dán text.", "Chọn cột xác định trùng lặp (để trống = so toàn bộ cột).", "Xem số dòng đã xoá, rồi tải file đã làm sạch."],
+    steps: ["Thả file CSV / Excel hoặc dán text.", "Chọn cột để so (để trống = so mọi cột).", "Tải file đã làm sạch."],
     explainer: [
-      { t: "Thế nào là trùng", b: "Mặc định, 1 dòng bị coi là trùng khi MỌI cột khớp y hệt dòng trước đó. Chọn cột cụ thể để coi 2 dòng là cùng 1 bản ghi dù các cột khác khác nhau." },
-      { t: "Vì sao gần-trùng lọt lưới", b: `"an@x.com" và "AN@X.com" giống nhau với người nhưng khác nhau với máy. Bật "Bỏ qua hoa/thường" và "Bỏ qua khoảng trắng thừa" để bắt được cả 2 trường hợp đó.` },
-      PRIVACY_COLUMN(),
+      { t: "Thế nào là trùng", b: "Mọi cột khớp hệt một dòng trước đó. Chọn cột cụ thể để chỉ so các cột đó." },
+      { t: "Trùng gần giống", b: "Bật \"Bỏ qua hoa/thường\" và \"Bỏ qua khoảng trắng thừa\" để bắt cả \"an@x.com\" và \"AN@X.com \"." },
     ],
   },
   "trim-whitespace": {
     headline: "CẮT KHOẢNG TRẮNG THỪA<br>TRONG FILE CSV",
-    desc: "Cắt khoảng trắng vô hình làm 2 giá trị tưởng giống nhau mà máy tính lại coi là khác nhau: khoảng trắng đầu/cuối, non-breaking space, và ký tự zero-width.",
+    desc: "Cắt khoảng trắng đầu / cuối và ký tự vô hình, thứ khiến hai giá trị giống nhau bị máy coi là khác.",
     mock: mockPair([[["is-hit"]], [["", "is-hit"]], [[]], [["", "", "is-hit"]]], [[["is-fixed"]], [["", "is-fixed"]], [[]], [["", "", "is-fixed"]]], "3 ô"),
-    steps: ["Thả file CSV/Excel vào, hoặc dán text.", "Chọn có gộp khoảng trắng lặp lại/xoá ký tự vô hình hay không.", "Xem số ô đã đổi, rồi tải file đã làm sạch."],
+    steps: ["Thả file CSV / Excel hoặc dán text.", "Chọn có gộp khoảng trắng lặp lại hay không.", "Tải file đã làm sạch."],
     explainer: [
-      { t: "Những gì bị xoá", b: `Khoảng trắng đầu/cuối MỌI ô (kể cả non-breaking space) luôn bị cắt. "Gộp khoảng trắng lặp lại" biến "a␣␣b" thành "a␣b"; "Xoá ký tự vô hình" bỏ các ký tự zero-width không nhìn thấy nhưng vẫn tính là ký tự.` },
-      { t: "Vì sao quan trọng", b: `1 khoảng trắng thừa biến "Hà Nội " thành giá trị KHÁC "Hà Nội" -- lookup/so khớp sẽ thất bại, kiểm tra trùng lặp sẽ bỏ sót. Cắt khoảng trắng trước giúp mọi bước xử lý sau đáng tin hơn.` },
-      PRIVACY_COLUMN(),
+      { t: "Những gì bị cắt", b: "Khoảng trắng đầu / cuối luôn bị cắt. Tuỳ chọn thêm: gộp khoảng trắng lặp, xoá ký tự vô hình." },
+      { t: "Vì sao quan trọng", b: "\"Hà Nội \" khác \"Hà Nội\" với máy, nên so khớp và kiểm tra trùng sẽ sai." },
     ],
   },
   "blanks": {
     headline: "XỬ LÝ Ô TRỐNG<br>TRONG FILE CSV",
-    desc: 'Ô trống, "NA", "null", "-", "?" đều là thiếu. Một tool làm cả ba việc: xoá dòng trống hoàn toàn, điền ô trống từng cột (từ ô phía trên, giá trị cố định, trung bình, trung vị, KNN, giá trị phổ biến nhất) hoặc xoá dòng có ô trống, và xoá cột trống hoàn toàn.',
+    desc: "Ô trống, \"NA\", \"null\", \"-\", \"?\" đều là thiếu. Xoá dòng / cột trống hoặc điền ô trống theo từng cột.",
     mock: mockPair([[[]], [["", "is-hit"]], [[], { removed: true, tag: "TRỐNG" }], [[]]], [[[]], [["", "is-fixed"]], [[]]], "Điền · -1 dòng"),
-    steps: ["Thả file CSV/Excel vào, hoặc dán text.", "Xem các cột có ô trống; mỗi cột chọn cách xử lý (không chọn thì giữ nguyên).", "Bấm Chạy, xem số ô đã điền / dòng đã xoá rồi tải file."],
+    steps: ["Thả file CSV / Excel hoặc dán text.", "Mỗi cột có ô trống chọn một cách xử lý.", "Bấm Chạy rồi tải file."],
     explainer: [
-      { t: "Thế nào là ô trống, làm theo thứ tự nào", b: `Ô trống, chỉ có khoảng trắng, hoặc ghi "NA", "null", "none", "?", "-". Thứ tự: xoá dòng trống hoàn toàn, rồi xoá dòng mà cột nào đó đòi xoá, sau cùng mới điền. Nhờ vậy dòng sắp bị xoá không làm lệch trung bình hay trung vị dùng để điền.` },
-      { t: "Cách điền hợp với kiểu cột", b: "Cột số có trung bình, trung vị, KNN (tìm 5 dòng giống nhất theo các cột số khác rồi lấy trung bình); cột nhóm có giá trị phổ biến nhất. Email, số điện thoại, ngày không có impute vì không thể đoán giá trị thay thế, chỉ điền từ ô phía trên, giá trị cố định hoặc xoá dòng." },
-      PRIVACY_COLUMN(),
+      { t: "Thế nào là ô trống", b: "Ô trống, chỉ có khoảng trắng, hoặc ghi \"NA\", \"null\", \"none\", \"?\", \"-\"." },
+      { t: "Cách điền theo kiểu cột", b: "Cột số điền được trung bình, trung vị, KNN. Cột nhóm điền giá trị phổ biến nhất." },
     ],
   },
   "format-noise": {
     headline: "BẮT Ô SAI ĐỊNH DẠNG<br>TRONG FILE CSV",
-    desc: "Email thiếu @, số điện thoại lẫn chữ, ngày ghi sai khuôn, số nguyên có chữ cái. Denoise tự đoán kiểu của từng cột rồi quét mọi cột một lượt, gắn cờ ô không khớp. Đoán sai kiểu cột nào thì bạn chọn lại ngay dưới bảng dữ liệu.",
+    desc: "Email thiếu @, SĐT lẫn chữ, ngày sai khuôn. Denoise đoán kiểu từng cột rồi gắn cờ ô không khớp.",
     mock: mockPair([[[]], [["", "is-hit"]], [[]], [["", "is-hit"]]], [[[]], [["", "is-fixed"]], [[]], [["", "is-fixed"]]], "2 ô"),
-    steps: ["Thả file CSV/Excel vào, hoặc dán text.", "Xem kiểu Denoise đoán cho từng cột, sửa nếu đoán sai.", "Chọn chỉ báo, để trống ô sai hoặc xoá dòng, rồi bấm Chạy."],
+    steps: ["Thả file CSV / Excel hoặc dán text.", "Xem kiểu Denoise đoán cho từng cột, sửa nếu sai.", "Chọn cách xử lý ô sai rồi bấm Chạy."],
     explainer: [
-      { t: "Kiểu nào kiểm tra gì", b: "Email cần dạng ten@mien; số điện thoại chỉ chữ số và vài ký tự +, -, khoảng trắng; ngày phải đúng khuôn (vd %Y-%m-%d); số nguyên/số thực phải ép được thành số. Cột kiểu Nhóm hoặc Văn bản không có khuôn nên không bị kiểm tra." },
-      { t: "Kiểu cột được đoán thế nào", b: "Denoise nhìn giá trị thật của cột chứ không nhìn tên cột: từ 90% giá trị khớp khuôn nào thì đoán cột là kiểu đó, nên vài ô sai không làm hỏng việc đoán và vẫn bị bắt. Đoán sai kiểu cột nào thì sửa ở bảng ngay dưới dữ liệu đầu vào." },
-      PRIVACY_COLUMN(),
+      { t: "Kiểu nào kiểm tra gì", b: "Email cần dạng ten@mien, SĐT chỉ gồm chữ số và + - khoảng trắng, ngày đúng khuôn, số phải ép được thành số." },
+      { t: "Kiểu cột được đoán thế nào", b: "Từ giá trị thật của cột chứ không phải tên cột. Đoán sai thì sửa ở bảng dưới dữ liệu." },
     ],
   },
 };
@@ -613,38 +603,35 @@ const TOOL_INFO = {
 const CV_INFO = {
   delimiter: {
     headline: "ĐỔI DELIMITER<br>CỦA FILE CSV",
-    desc: "Đổi dấu phẩy thành chấm phẩy, tab, gạch đứng hoặc ngược lại mà không làm hỏng các giá trị có dấu ngoặc kép.",
+    desc: "Đổi dấu phân cách của CSV (phẩy, chấm phẩy, tab, gạch đứng) mà không làm hỏng giá trị có ngoặc kép.",
     mock: mockTextPair("export_eu.csv", ["ma;ten;gia", ["A01;But bi;12,50", true], "A02;Kep giay;3,00"], "export.csv", ["ma,ten,gia", ['A01,But bi,"12,50"', true], 'A02,Kep giay,"3,00"'], "; → ,"),
     dropTitle: "Thả file CSV vào đây", accept: ".csv,.txt",
-    steps: ["Thêm file; delimiter hiện tại được tự nhận diện.", "Chọn delimiter mới bạn cần.", "Tải file đã đổi về."],
+    steps: ["Thêm file, delimiter hiện tại tự nhận diện.", "Chọn delimiter mới.", "Tải file đã đổi."],
     explainer: [
-      { t: "Vì sao delimiter khác nhau", b: "Ở nơi dùng dấu phẩy làm dấu thập phân, Excel lưu CSV bằng chấm phẩy. Hệ thống khác lại xuất tab hoặc gạch đứng. Công cụ nhập thường chỉ nhận đúng 1 loại, nên phải đổi file chứ không sửa tay." },
-      { t: "Dấu ngoặc kép được lo sẵn", b: "Giá trị có chứa delimiter mới, dấu ngoặc kép hoặc xuống dòng sẽ tự được bọc trong ngoặc kép; giá trị chỉ bọc vì delimiter cũ thì được ghi lại bình thường." },
-      PRIVACY_COLUMN(),
+      { t: "Vì sao cần đổi", b: "Nhiều nơi dùng dấu phẩy làm dấu thập phân nên xuất CSV bằng chấm phẩy." },
+      { t: "Ngoặc kép tự xử lý", b: "Giá trị chứa delimiter mới, ngoặc kép hoặc xuống dòng được tự bọc trong ngoặc kép." },
     ],
   },
   "csv-to-json": {
     headline: "CHUYỂN CSV<br>SANG JSON",
-    desc: "Biến CSV thành JSON sạch, khoá theo tên cột, tuỳ chọn tự nhận diện số và true/false.",
+    desc: "Biến CSV thành JSON, khoá theo tên cột, tuỳ chọn tự nhận số và true / false.",
     mock: mockTextPair("products.csv", ["sku,name,price", ["A-100,But bi,3.2", true], "A-101,Kep giay,0.5"], "products.json", ["[", "  {", ['    "sku": "A-100",', true], ['    "name": "But bi",', true], ['    "price": 3.2', true], "  },", "  …", "]"], "→ JSON"),
     dropTitle: "Thả file CSV vào đây", accept: ".csv,.txt",
-    steps: ["Thêm file CSV.", "Chọn Objects hay Arrays, có ép kiểu số / true-false không.", "Sao chép JSON hoặc tải về dạng .json."],
+    steps: ["Thêm file CSV.", "Chọn Objects hay Arrays, có ép kiểu hay không.", "Sao chép JSON hoặc tải về."],
     explainer: [
-      { t: "Khoá lấy từ dòng tiêu đề", b: 'Mỗi dòng thành 1 object, khoá là tên cột. Tên cột trống thành "column_1", tên trùng được thêm hậu tố như "name_2" nên không mất giá trị nào.' },
-      { t: "Kiểu dữ liệu không bất ngờ", b: "Bật ép kiểu thì số và true/false thành số và boolean JSON, ô trống thành null. Giá trị có số 0 ở đầu như mã bưu điện, số điện thoại vẫn giữ nguyên dạng chuỗi." },
-      PRIVACY_COLUMN(),
+      { t: "Khoá lấy từ dòng tiêu đề", b: "Tên cột trống thành \"column_1\", tên trùng được thêm hậu tố như \"name_2\"." },
+      { t: "Ép kiểu", b: "Số và true / false thành kiểu JSON thật. Giá trị bắt đầu bằng số 0 (SĐT, mã bưu điện) giữ dạng chuỗi." },
     ],
   },
   "json-to-csv": {
     headline: "CHUYỂN JSON<br>SANG CSV",
-    desc: "Làm phẳng mảng JSON hoặc JSON Lines thành CSV mở được bằng bảng tính, object lồng nhau thành cột.",
+    desc: "Làm phẳng mảng JSON hoặc JSON Lines thành CSV mở được bằng bảng tính.",
     mock: mockTextPair("users.json", ["[", "  {", '    "id": 1,', ['    "address": {', true], ['      "city": "Ha Noi"', true], "    }", "  }", "]"], "users.csv", [["id,address.city", true], "1,Ha Noi"], "→ CSV"),
     dropTitle: "Thả file JSON vào đây", accept: ".json,.jsonl,.txt",
-    steps: ["Dán JSON hoặc thả file .json / .jsonl.", 'Xem lại cột: trường lồng nhau thành tên như "address.city".', "Tải CSV về."],
+    steps: ["Dán JSON hoặc thả file .json / .jsonl.", "Xem lại cột, trường lồng nhau thành \"address.city\".", "Tải CSV về."],
     explainer: [
-      { t: "Nhận những gì", b: "1 mảng object, 1 object đơn, mảng của mảng, hoặc JSON Lines (mỗi dòng 1 object). Cột xuất theo thứ tự khoá xuất hiện lần đầu; khoá thiếu thành ô trống." },
-      { t: "Dữ liệu lồng nhau", b: 'Object lồng nhau được làm phẳng thành tên cột nối bằng dấu chấm, vd "address.city". Mảng bên trong được ghi nguyên dạng JSON trong 1 ô nên không mất dữ liệu.' },
-      PRIVACY_COLUMN(),
+      { t: "Nhận những gì", b: "Mảng object, object đơn hoặc JSON Lines (mỗi dòng một object). Khoá thiếu thành ô trống." },
+      { t: "Dữ liệu lồng nhau", b: "Object lồng nhau thành cột \"address.city\". Mảng bên trong được ghi nguyên dạng JSON trong một ô." },
     ],
   },
 };
@@ -652,53 +639,43 @@ const CV_INFO = {
 const CF_INFO = {
   "out-of-range": {
     headline: "BẮT GIÁ TRỊ<br>NGOÀI KHOẢNG",
-    desc: "Tuổi 210, lương âm, điểm 11/10. Bạn khai min và max hợp lý cho một cột số, Denoise gắn cờ mọi giá trị nằm ngoài rồi kéo về biên, điền lại hoặc xoá dòng theo ý bạn.",
+    desc: "Tuổi 210, lương âm, điểm 11/10. Bạn khai min và max cho cột số, Denoise gắn cờ giá trị nằm ngoài.",
     mock: mockPair([[[]], [["is-hit"]], [[]], [[]], [["is-hit"]]], [[[]], [["is-fixed"]], [[]], [[]], [["is-fixed"]]], "Kéo về biên"),
-    steps: ["Chọn file; chọn cột số cần kiểm tra. Bấm Thêm cột kiểm tra để kiểm nhiều cột một lượt.", "Gõ giá trị nhỏ nhất và lớn nhất hợp lệ của từng cột, bấm Phát hiện.", "Xem bảng lỗi theo từng cột, chọn cách xử lý cho từng cột (kéo về biên / điền lại / xoá dòng) rồi bấm Áp dụng."],
+    steps: ["Chọn file và cột số cần kiểm. Thêm cột để kiểm nhiều cột một lượt.", "Gõ giá trị nhỏ nhất và lớn nhất hợp lệ, bấm Phát hiện.", "Chọn cách xử lý từng cột rồi bấm Áp dụng."],
     explainer: [
-      { t: "Cột nào được liệt kê", b: "Chỉ các cột số (số nguyên hoặc số thực) do Denoise đoán từ giá trị thật. Mỗi cột có khoảng hợp lệ riêng và mỗi cột chỉ khai một lần. Kiểu số nguyên hay số thực đã đoán sẵn, bạn đổi lại được." },
-      { t: "Chọn cách xử lý từng cột", b: "Mỗi cột có cách xử lý riêng, mặc định là chưa chọn để bấm Áp dụng không xoá nhầm. Cột nào chưa chọn thì không bị đụng tới. Nếu nhiều cột cùng chọn xoá dòng, dòng nào lỗi ở bất kỳ cột đó đều bị xoá." },
-      { t: "Khoảng là do bạn quyết", b: "Không có khoảng đúng cho mọi file: tuổi nhân viên khác tuổi bệnh nhân. Denoise không tự đoán, bạn khai theo hiểu biết về dữ liệu của mình." },
-      { t: "Kéo về biên nghĩa là gì", b: "Giá trị nhỏ hơn min thành min, lớn hơn max thành max. Giữ được dòng, chỉ sửa đúng ô lỗi. Khác với Giá trị bất thường (outlier) dựa trên thống kê, ở đây biên là con số cứng bạn chọn." },
-      PRIVACY_COLUMN(),
+      { t: "Khoảng do bạn khai", b: "Mỗi file một khác (tuổi nhân viên khác tuổi bệnh nhân), nên Denoise không tự đoán khoảng." },
+      { t: "Kéo về biên", b: "Nhỏ hơn min thành min, lớn hơn max thành max. Giữ được dòng, chỉ sửa ô lỗi." },
     ],
   },
   outlier: {
     headline: "BẮT GIÁ TRỊ<br>BẤT THƯỜNG",
-    desc: "Không cần biết trước khoảng hợp lý. Denoise tính biên từ chính dữ liệu bằng IQR hoặc Z-score (dùng cả hai cũng được), gắn cờ các giá trị lệch hẳn so với phần còn lại của cột.",
+    desc: "Không cần biết trước khoảng hợp lý. Denoise tính biên từ chính dữ liệu bằng IQR hoặc Z-score.",
     mock: mockPair([[[]], [[]], [["", "", "is-hit"]], [[]], [[]]], [[[]], [[]], [["", "", "is-fixed"]], [[]], [[]]], "1 ô"),
-    steps: ["Chọn file; chọn cột số cần kiểm. Bấm Thêm cột kiểm tra để kiểm nhiều cột một lượt.", "Mỗi cột chọn IQR (hệ số 1.5) và/hoặc Z-score (3 độ lệch chuẩn); bấm Thêm phương pháp để dùng cả hai, rồi bấm Phát hiện.", "Xem bảng lỗi theo từng cột; chọn cách xử lý cho từng cột (kéo về biên, điền lại, xoá dòng hoặc giữ nguyên nếu đó là dữ liệu thật) rồi bấm Áp dụng."],
+    steps: ["Chọn file và cột số cần kiểm. Thêm cột để kiểm nhiều cột một lượt.", "Mỗi cột chọn IQR và / hoặc Z-score, bấm Phát hiện.", "Chọn cách xử lý từng cột rồi bấm Áp dụng."],
     explainer: [
-      { t: "IQR và Z-score", b: "IQR lấy khoảng giữa tứ phân vị 1 và 3, nhân hệ số 1.5 làm biên; bền với dữ liệu lệch. Z-score đo số độ lệch chuẩn so với trung bình; hợp với dữ liệu phân phối chuông. Cột mà đa số ô cùng một giá trị (vd 80% là số 0) làm IQR bằng 0, khi đó IQR gắn cờ mọi giá trị khác: bảng lỗi sẽ cảnh báo, nên dùng Z-score hoặc giữ nguyên." },
-      { t: "Dùng cả hai phương pháp", b: "Ô bị gắn cờ nếu bất thường theo IQR hoặc theo Z-score. Bảng lỗi ghi mỗi phương pháp bắt được bao nhiêu ô và bao nhiêu ô cả hai cùng bắt. Khi kéo về biên, ô được kéo về khoảng chung của cả hai phương pháp (biên chặt hơn)." },
-      { t: "Cột nào được liệt kê", b: "Chỉ các cột số (số nguyên hoặc số thực) do Denoise đoán từ giá trị thật. Mỗi cột chỉ khai một lần, có phương pháp và ngưỡng riêng; kiểu số nguyên hay số thực đã đoán sẵn, bạn đổi lại được." },
-      { t: "Chọn cách xử lý từng cột", b: "Mỗi cột có cách xử lý riêng, mặc định là chưa chọn để bấm Áp dụng không xoá nhầm. Cột nào chưa chọn thì không bị đụng tới. Nếu nhiều cột cùng chọn xoá dòng, dòng nào lỗi ở bất kỳ cột đó đều bị xoá." },
-      { t: "Bất thường không chắc là sai", b: "Một đơn hàng rất lớn có thể là thật. Vì vậy luôn xem bảng ô bị gắn cờ trước, và có lựa chọn Giữ nguyên để chỉ ghi nhận mà không sửa." },
-      PRIVACY_COLUMN(),
+      { t: "IQR và Z-score", b: "IQR dựa trên tứ phân vị, bền với dữ liệu lệch. Z-score đo số độ lệch chuẩn, hợp dữ liệu phân phối chuông." },
+      { t: "Bất thường không chắc là sai", b: "Một đơn hàng rất lớn có thể là thật. Xem ô bị gắn cờ trước, và có lựa chọn Giữ nguyên." },
     ],
   },
   "inconsistent-category": {
     headline: "CHUẨN HOÁ GIÁ TRỊ<br>KHÔNG NHẤT QUÁN",
-    desc: '"Nam", "nam", "NAM", " Nam " cùng một nghĩa nhưng là bốn giá trị khác nhau với máy. Bạn khai danh sách giá trị chuẩn, Denoise tìm biến thể gần giống và tự đưa về đúng giá trị chuẩn.',
+    desc: "\"Nam\", \"nam\", \"NAM\" là ba giá trị khác nhau với máy. Bạn khai giá trị chuẩn, Denoise đưa các biến thể về giá trị đó.",
     mock: mockPair([[["is-hit"]], [[]], [["is-hit"]], [[]]], [[["is-fixed"]], [[]], [["is-fixed"]], [[]]], "Chuẩn hoá"),
-    steps: ["Chọn file; chọn cột nhóm (category) cần kiểm. Bấm Thêm cột kiểm tra để kiểm nhiều cột một lượt.", "Gõ danh sách giá trị chuẩn của từng cột, cách nhau bởi dấu phẩy, bấm Phát hiện.", "Xem bảng lỗi theo từng cột, chọn cách xử lý cho từng cột rồi bấm Áp dụng."],
+    steps: ["Chọn file và cột nhóm cần kiểm. Thêm cột để kiểm nhiều cột một lượt.", "Gõ danh sách giá trị chuẩn, cách nhau bởi dấu phẩy, bấm Phát hiện.", "Chọn cách xử lý từng cột rồi bấm Áp dụng."],
     explainer: [
-      { t: "Thế nào là gần giống", b: "Denoise so độ giống chuỗi (sau khi bỏ hoa/thường và khoảng trắng) với từng giá trị chuẩn. Ngưỡng mặc định 1 chỉ bắt biến thể khác hoa/thường. Hạ xuống khoảng 0.85 để bắt thêm lỗi gõ nhẹ, nhưng càng thấp càng dễ gộp nhầm hai nhóm khác nhau." },
-      { t: "Cột nào được liệt kê", b: "Chỉ các cột Denoise đoán là nhóm (category): ít giá trị khác nhau, lặp lại nhiều lần như giới tính, phòng ban. Mỗi cột có danh sách giá trị chuẩn và ngưỡng riêng, và mỗi cột chỉ khai một lần." },
-      { t: "Giá trị không khớp gì cả", b: "Một giá trị không giống bất kỳ giá trị chuẩn nào vẫn bị gắn cờ nhưng không tự sửa, vì không biết đưa về đâu. Hãy xem lại danh sách chuẩn hoặc xử lý tay." },
-      PRIVACY_COLUMN(),
+      { t: "Thế nào là gần giống", b: "Ngưỡng 1 chỉ bắt biến thể khác hoa/thường. Hạ xuống khoảng 0.85 để bắt thêm lỗi gõ." },
+      { t: "Không khớp giá trị chuẩn nào", b: "Vẫn bị gắn cờ nhưng không tự sửa vì không biết đưa về đâu." },
     ],
   },
   "cross-rule": {
     headline: "BẮT MÂU THUẪN<br>GIỮA CÁC CỘT",
-    desc: "Ngày nghỉ việc trước ngày vào làm, tổng tiền không bằng số lượng nhân đơn giá, một mã nhân viên gắn với hai tên. Bạn viết điều kiện, Denoise kiểm tra từng dòng.",
+    desc: "Ngày nghỉ trước ngày vào, tổng tiền sai, một mã gắn với hai tên. Bạn viết điều kiện, Denoise kiểm tra từng dòng.",
     mock: mockPair([[[]], [["is-hit", "", "is-hit"]], [[]], [[]]], [[[]], [[]], [[]]], "-1 dòng"),
-    steps: ["Chọn file; chọn kiểu rule: biểu thức hoặc phụ thuộc hàm.", "Viết biểu thức bằng cách bấm tên cột, giá trị và các nút so sánh / tính toán (muốn nói «nếu A thì B» thì bấm THÌ =>), hay khai phụ thuộc hàm, rồi bấm Phát hiện.", "Xem dòng vi phạm và số dòng bị bỏ qua; xoá dòng vi phạm hoặc giữ nguyên để rà tay."],
+    steps: ["Chọn file và kiểu rule: biểu thức hoặc phụ thuộc hàm.", "Viết biểu thức bằng cách bấm tên cột và các nút, rồi bấm Phát hiện.", "Xoá dòng vi phạm hoặc giữ nguyên để rà tay."],
     explainer: [
-      { t: "Hai kiểu rule", b: "Biểu thức: một điều kiện mà mọi dòng phải thoả, vd ngay_nghi > ngay_vao, tong == so_luong * don_gia, tuoi >= 18 và tuoi <= 65. Muốn nói «nếu A thì B» thì viết A => B (nút THÌ =>): với mọi dòng thoả A thì B phải đúng, dòng không thoả A luôn đạt, vd phong_ban = \"Sales\" => luong >= 10000000. Phụ thuộc hàm: mỗi giá trị cột A chỉ được đi với đúng một giá trị của từng cột phụ thuộc." },
-      { t: "Cách viết biểu thức", b: "Tên cột bấm chip để chèn; bấm chip cột Nhóm (vd phong_ban) thì hiện thêm các giá trị trong cột đó để bấm chèn kèm dấu nháy. So sánh: < <= > >= = !=. Tính: + - * /, phần trăm thì chia 100 (giam_gia / 100). Nối điều kiện: và, hoặc, không (viết va, hoac, khong cũng được). Giá trị chữ có sẵn trong cột viết trần cũng được (department = Sales), Denoise tự tra trong cột đó, gõ nhầm (Salse) thì báo lỗi kèm giá trị gần giống; giá trị có dấu cách hoặc không có sẵn thì để trong dấu nháy: \"Marketing Team\". Chữ phân biệt hoa/thường. Tên cột có dấu cách để trong [ ], vd [Ngày vào]. Ngày: Denoise tự nhận khuôn (dd/mm/yyyy, yyyy-mm-dd...), hai ngày trừ nhau ra số ngày, ngày + 30 là một ngày. Khi Denoise đọc sai kiểu cột, ép bằng so(cột), ngay(cột, \"%d/%m/%Y\"), chu(cột). Viết liền 0 <= tuoi <= 120 cũng được. Kéo theo: a => b (nếu a thì b), tương đương: a <=> b. Kiểm tra ô có giá trị: có(cột), vd phong_ban = \"Sales\" => có(ma_khach)." },
-      { t: "Dòng bị bỏ qua, và an toàn", b: "Ô trống, ô sai kiểu hoặc phép chia cho 0 làm kết quả chưa biết, nên dòng đó không bị gắn cờ mà bị bỏ qua. Denoise đếm và báo lại số dòng bị bỏ qua cùng cách đọc từng cột, để kết quả «0 lỗi» không đánh lừa bạn; «sai và chưa biết» vẫn là sai. Biểu thức được phân tích bằng bộ đọc tự viết: không có eval(), không gọi được hàm nào ngoài so, ngay, chu, có." },
-      PRIVACY_COLUMN(),
+      { t: "Hai kiểu rule", b: "Biểu thức: điều kiện mọi dòng phải thoả. Phụ thuộc hàm: mỗi giá trị cột A chỉ đi với một giá trị của cột phụ thuộc." },
+      { t: "Nếu … thì …", b: "Viết A => B (nút THÌ =>): dòng thoả A thì B phải đúng. Vd phong_ban = \"Sales\" => luong >= 10000000." },
+      { t: "Dòng bị bỏ qua", b: "Ô trống, sai kiểu hoặc chia cho 0 thì chưa kết luận được nên bị bỏ qua, và Denoise báo lại số dòng đó." },
     ],
   },
 };
@@ -856,18 +833,18 @@ async function handleFileSelected(g, file) {
     return;
   }
   if (g === "cv" && (!/\.(csv|txt)$/i.test(file.name) || st.tool === "json-to-csv")) {
-    showRawPreview(g, file.name, sizeText, null, 'File JSON -- bấm "Convert" để xem kết quả dạng bảng.');
+    showRawPreview(g, file.name, sizeText, null, 'File JSON. Bấm "Convert" để xem kết quả.');
     return;
   }
   if (!/\.csv$/i.test(file.name) && g === "ft") {
-    showRawPreview(g, file.name, sizeText, null, 'Không xem trước được file Excel trong trình duyệt -- bấm "Chạy" để xem kết quả.');
+    showRawPreview(g, file.name, sizeText, null, 'Không xem trước được file Excel. Bấm "Chạy" để xem kết quả.');
     return;
   }
   let text;
   try {
     text = await readFileAsText(file);
   } catch (err) {
-    showRawPreview(g, file.name, sizeText, null, "Không đọc được file để xem trước -- vẫn chạy được bình thường.");
+    showRawPreview(g, file.name, sizeText, null, "Không xem trước được file, nhưng vẫn chạy bình thường.");
     return;
   }
   const { rows, totalDataRows } = naiveParseCsvPreview(text, PREVIEW_ROWS);
@@ -1326,7 +1303,7 @@ const LIST_VIEW = {
     tag: "Dòng trùng",
     dims: (d) => `${d.group_row_count} dòng trùng · ${d.removed_row_count} dòng đã xoá`,
     truncated: (d) => `Hiện ${d.shown_count}/${d.group_row_count} dòng trùng đầu tiên. `,
-    note: 'Cột "Dòng" là số thứ tự dòng trong đầu vào · các dòng cùng nhóm trùng nằm cạnh nhau · "Giữ" = bản được giữ lại, "Xoá" = bản đã bị xoá.',
+    note: 'Các dòng cùng nhóm trùng nằm cạnh nhau · "Giữ" = bản được giữ, "Xoá" = bản đã bị xoá.',
     // Cột "Dòng" = số dòng GỐC, cột "Kết quả" = Giữ / Xoá; dòng bị xoá tô riêng (class is-removed).
     tableOpts: (d) => ({ rowNumbers: d.row_numbers, rowClasses: d.row_status.map((x) => (x === "remove" ? "is-removed" : "is-kept")) }),
   },
@@ -1339,7 +1316,7 @@ const LIST_VIEW = {
     tag: "Ô đã sửa",
     dims: (d) => `${d.changed_cell_count} ô đã sửa · ${d.changed_row_count} dòng`,
     truncated: (d) => `Hiện ${d.shown_count}/${d.changed_row_count} dòng có ô đã sửa đầu tiên. `,
-    note: 'Cột "Dòng" là số thứ tự dòng trong đầu vào · ô tô nền là ô đã bị sửa, hiện giá trị TRƯỚC khi sửa · ␣ dấu cách · ⇥ tab · ⏎ xuống dòng · ⍽ non-breaking space · ⟨ZW⟩ ký tự vô hình.',
+    note: 'Ô tô nền = ô đã sửa, hiện giá trị trước khi sửa · ␣ dấu cách · ⇥ tab · ⏎ xuống dòng · ⍽ khoảng trắng cứng · ⟨ZW⟩ ký tự vô hình.',
     // Ô đã sửa tô nền (class is-changed).
     tableOpts: (d) => ({ rowNumbers: d.row_numbers, cellClasses: d.cell_changed.map((row) => row.map((c) => (c ? "is-changed" : ""))) }),
   },
@@ -1352,7 +1329,7 @@ const LIST_VIEW = {
     tag: "Ô trống đã xử lý",
     dims: (d) => `${d.filled_cell_count} ô đã điền · ${d.removed_row_count} dòng đã xoá`,
     truncated: (d) => `Hiện ${d.shown_count}/${d.affected_row_count} dòng đầu tiên. `,
-    note: (d) => 'Cột "Dòng" là số thứ tự dòng trong đầu vào · dòng gạch ngang = đã bị xoá · ô tô nền = ô trống đã xử lý, hiện "trước → sau"' +
+    note: (d) => 'Dòng gạch ngang = đã xoá · ô tô nền = ô trống đã xử lý ("trước → sau")' +
       (d.removed_columns && d.removed_columns.length ? ` · cột trống hoàn toàn đã xoá: ${d.removed_columns.join(", ")}` : "") + ".",
     // Dòng bị xoá gạch ngang (is-removed); ô trống đã xử lý tô nền (is-flagged).
     tableOpts: (d) => ({
@@ -1370,7 +1347,7 @@ const LIST_VIEW = {
     tag: "Ô sai định dạng",
     dims: (d) => `${d.flagged_cell_count} ô sai · ${d.flagged_row_count} dòng`,
     truncated: (d) => `Hiện ${d.shown_count}/${d.flagged_row_count} dòng có ô sai đầu tiên. `,
-    note: 'Cột "Dòng" là số thứ tự dòng trong đầu vào · ô tô nền là ô sai định dạng so với kiểu cột đang chọn, giữ nguyên giá trị gốc. Kiểu cột sai thì sửa ở bảng bên dưới rồi bấm Chạy lại.',
+    note: 'Ô tô nền = ô sai định dạng. Đoán sai kiểu cột thì sửa ở bảng bên dưới rồi chạy lại.',
     // Ô sai tô nền (class is-flagged).
     tableOpts: (d) => ({ rowNumbers: d.row_numbers, cellClasses: d.cell_flagged.map((row) => row.map((c) => (c ? "is-flagged" : ""))) }),
   },
@@ -1500,12 +1477,12 @@ function renderFtColTypes() {
   const st = state.ft;
   if (st.colState === "loading") { box.innerHTML = '<p class="ft-coltypes-msg">Đang đọc cột và đoán kiểu dữ liệu…</p>'; return; }
   if (st.colState === "error") { box.innerHTML = `<p class="ft-coltypes-msg is-error">${escapeHtml(st.colError || "Không đọc được cột.")}</p>`; return; }
-  if (!st.colTypes) { box.innerHTML = '<p class="ft-coltypes-msg">Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ đọc tên cột và đoán kiểu của từng cột ở đây, bạn sửa được.</p>'; return; }
+  if (!st.colTypes) { box.innerHTML = '<p class="ft-coltypes-msg">Chọn file hoặc dán dữ liệu để xem kiểu từng cột.</p>'; return; }
   const counts = st.colCounts || {};
   box.innerHTML =
     `<div class="ft-coltypes-bar"><span class="ft-coltypes-title">Kiểu dữ liệu từng cột</span><span class="ft-coltypes-meta">${st.colTypes.length} cột</span>` +
     '<button type="button" class="btn btn-ghost btn-small" data-role="reset">↺ Về kiểu tự đoán</button></div>' +
-    '<p class="ft-coltypes-hint">Denoise đoán kiểu mỗi cột từ giá trị thật. Chỉ cột kiểu Số nguyên, Số thực, Email, Số điện thoại, Ngày tháng mới bị kiểm tra khuôn. Đoán sai thì chọn lại.</p>' +
+    '<p class="ft-coltypes-hint">Kiểu do Denoise đoán, sai thì chọn lại. Cột Nhóm và Văn bản không bị kiểm tra.</p>' +
     `<div class="ft-coltypes-list">${st.colTypes.map((c, i) => ftColRowHTML(c, i, counts)).join("")}</div>`;
 }
 // Người dùng sửa 1 cột: cập nhật trạng thái + đánh dấu "đã sửa"; số ô sai cũ không còn đúng nên xoá.
@@ -1673,11 +1650,11 @@ function renderFtBlanksList() {
   const st = state.ft;
   if (st.blankState === "loading") { box.innerHTML = '<p class="ft-coltypes-msg">Đang đọc cột và đếm ô trống…</p>'; return; }
   if (st.blankState === "error") { box.innerHTML = `<p class="ft-coltypes-msg is-error">${escapeHtml(st.blankError || "Không đọc được cột.")}</p>`; return; }
-  if (!st.blankCols) { box.innerHTML = '<p class="ft-coltypes-msg">Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ liệt kê các cột có ô trống ở đây để bạn chọn cách xử lý từng cột.</p>'; return; }
+  if (!st.blankCols) { box.innerHTML = '<p class="ft-coltypes-msg">Chọn file hoặc dán dữ liệu để xem các cột có ô trống.</p>'; return; }
   box.innerHTML =
     `<div class="ft-coltypes-bar"><span class="ft-coltypes-title">Ô trống từng cột</span><span class="ft-coltypes-meta">${st.blankCols.length} cột có ô trống</span>` +
     '<button type="button" class="btn btn-ghost btn-small" data-role="reset">↺ Đặt lại</button></div>' +
-    '<p class="ft-coltypes-hint">Chỉ liệt kê cột có ô trống; cột để "Giữ nguyên" thì không bị đụng tới. Denoise đoán kiểu mỗi cột để chỉ đưa ra cách điền hợp lệ (số mới có trung bình / trung vị / KNN, nhóm mới có giá trị phổ biến nhất). Đoán sai thì chọn lại kiểu.</p>' +
+    '<p class="ft-coltypes-hint">Chỉ liệt kê cột có ô trống. Cột để "Giữ nguyên" không bị đụng tới.</p>' +
     (st.blankCols.length
       ? `<div class="ft-coltypes-list">${st.blankCols.map((c, i) => ftBlankRowHTML(c, i)).join("")}</div>`
       : '<p class="ft-coltypes-msg">Không có cột nào có ô trống.</p>');
@@ -1840,9 +1817,9 @@ function renderBlankManual(focusFirst) {
   else {
     const d = entry.data;
     const notes = [];
-    if (d.shown_count < d.total_blank_rows) notes.push(`Cột này có ${d.total_blank_rows} ô trống, hiện ${d.shown_count} dòng đầu. Ô ngoài danh sách (và ô bạn để trống) lấy giá trị chung bên dưới, không có thì giữ trống.`);
-    else notes.push("Gõ giá trị vào từng ô của cột được tô nền. Ô để trống lấy giá trị chung bên dưới, không có thì giữ trống.");
-    if (d.excluded_empty_rows > 0) notes.push(`${d.excluded_empty_rows} dòng trống hoàn toàn không liệt kê (xoá hay giữ chúng do ô tick "Xoá dòng trống hoàn toàn" bên dưới).`);
+    if (d.shown_count < d.total_blank_rows) notes.push(`Cột này có ${d.total_blank_rows} ô trống, hiện ${d.shown_count} dòng đầu. Ô không điền lấy giá trị chung bên dưới, không có thì giữ trống.`);
+    else notes.push("Gõ giá trị vào từng ô được tô nền. Ô để trống lấy giá trị chung bên dưới, không có thì giữ trống.");
+    if (d.excluded_empty_rows > 0) notes.push(`${d.excluded_empty_rows} dòng trống hoàn toàn không được liệt kê.`);
     inner = d.total_blank_rows === 0
       ? '<p class="ft-coltypes-msg">Cột này không có dòng nào cần điền tay (chỉ còn các dòng trống hoàn toàn).</p>'
       : `<p class="ft-coltypes-hint">${escapeHtml(notes.join(" "))}</p>` +
@@ -2159,8 +2136,8 @@ function outlierMethodRowHTML(f, m, j, i) {
 const CF_MULTI = {
   "inconsistent-category": {
     dtypes: ["category"],
-    waitFile: "Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ liệt kê các cột Nhóm (category) để bạn khai giá trị chuẩn.",
-    noColumns: "Không có cột nào được đoán là Nhóm (category) trong dữ liệu này. Cột Nhóm là cột có ít giá trị khác nhau lặp lại nhiều lần (giới tính, phòng ban...).",
+    waitFile: "Chọn file hoặc dán dữ liệu để chọn cột Nhóm.",
+    noColumns: "Không có cột Nhóm nào (cột ít giá trị khác nhau, lặp lại nhiều, vd giới tính, phòng ban).",
     noColumnsError: "Không có cột Nhóm (category) nào để kiểm tra.",
     freeWord: "cột Nhóm",
     preselect: true, // cách xử lý duy nhất là chuẩn hoá tự động, không xoá dữ liệu nên chọn sẵn
@@ -2168,7 +2145,7 @@ const CF_MULTI = {
     fieldsHTML: (f, i) =>
       `<div class="field"><label>Danh sách giá trị chuẩn (cách nhau bởi dấu phẩy)</label><textarea class="input" rows="2" data-field="categories" placeholder="vd: Nam, Nữ" aria-label="Danh sách giá trị chuẩn ${i + 1}">${escapeHtml(f.categories)}</textarea></div>` +
       `<div class="field"><label>Ngưỡng giống nhau (0.5 – 1)</label><input class="input" type="number" step="0.01" min="0.5" max="1" data-field="threshold" value="${escapeAttr(f.threshold)}" aria-label="Ngưỡng giống nhau ${i + 1}" /></div>` +
-      '<p class="hint-note">1 = chỉ bắt biến thể khác hoa/thường ("nam", "NAM"). Thấp hơn (vd 0.85) bắt thêm lỗi gõ nhẹ ("Sale" so với "Sales").</p>',
+      '<p class="hint-note">1 = chỉ bắt biến thể khác hoa/thường. Hạ thấp (vd 0.85) để bắt thêm lỗi gõ.</p>',
     toItem: (f) => {
       const cats = f.categories.split(",").map((x) => x.trim()).filter(Boolean);
       if (!cats.length) return { error: `Cột "${f.column}": nhập ít nhất 1 giá trị chuẩn.` };
@@ -2179,7 +2156,7 @@ const CF_MULTI = {
   },
   "out-of-range": {
     dtypes: ["integer", "float"],
-    waitFile: "Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ liệt kê các cột số để bạn khai khoảng hợp lệ.",
+    waitFile: "Chọn file hoặc dán dữ liệu để chọn cột số.",
     noColumns: "Không có cột số nào (Số nguyên / Số thực) trong dữ liệu này.",
     noColumnsError: "Không có cột số nào để kiểm tra.",
     freeWord: "cột số",
@@ -2188,7 +2165,7 @@ const CF_MULTI = {
     fieldsHTML: (f, i) =>
       `<div class="cf-row"><div class="field"><label>Nhỏ nhất hợp lệ</label><input class="input" type="number" step="any" data-field="min" value="${escapeAttr(f.min)}" placeholder="vd: 18" aria-label="Nhỏ nhất hợp lệ ${i + 1}" /></div>` +
       `<div class="field"><label>Lớn nhất hợp lệ</label><input class="input" type="number" step="any" data-field="max" value="${escapeAttr(f.max)}" placeholder="vd: 65" aria-label="Lớn nhất hợp lệ ${i + 1}" /></div></div>` +
-      '<p class="hint-note">Ô nằm ngoài khoảng bị gắn cờ. Để trống 1 bên = không chặn bên đó.</p>',
+      '<p class="hint-note">Để trống một ô = không chặn phía đó.</p>',
     toItem: (f) => {
       const min = cfNumber(f.min);
       const max = cfNumber(f.max);
@@ -2200,7 +2177,7 @@ const CF_MULTI = {
   },
   outlier: {
     dtypes: ["integer", "float"],
-    waitFile: "Chọn file hoặc dán dữ liệu ở trên: Denoise sẽ liệt kê các cột số để bạn kiểm giá trị bất thường.",
+    waitFile: "Chọn file hoặc dán dữ liệu để chọn cột số.",
     noColumns: "Không có cột số nào (Số nguyên / Số thực) trong dữ liệu này.",
     noColumnsError: "Không có cột số nào để kiểm tra.",
     freeWord: "cột số",
@@ -2211,7 +2188,7 @@ const CF_MULTI = {
       return '<div class="cf-methods">' + f.methods.map((m, j) => outlierMethodRowHTML(f, m, j, i)).join("") +
         `<div class="cf-add-row"><button type="button" class="btn btn-ghost btn-small" data-role="mf-method-add"${free.length ? "" : " disabled"}>＋ Thêm phương pháp</button>` +
         `<span class="cf-add-hint">${free.length ? `Còn ${free.map((v) => OUTLIER_METHOD_LABELS[v]).join(", ")} chưa dùng` : "Đã dùng cả 2 phương pháp"}</span></div></div>` +
-        '<p class="hint-note">IQR thường dùng 1.5 · Z-score thường dùng 3. Dùng cả hai: ô bị gắn cờ nếu bất thường theo một trong hai phương pháp.</p>';
+        '<p class="hint-note">Thường dùng IQR 1.5 hoặc Z-score 3. Chọn cả hai thì chỉ cần một bên gắn cờ.</p>';
     },
     // Nút / ô riêng trong form (nằm trong các hàng phương pháp). onClick trả true (dựng lại form) hoặc chuỗi selector (dựng lại rồi
     // đưa con trỏ vào ô đó) hoặc false (không làm gì); onInput chỉ ghi lại ngưỡng đang gõ, không dựng lại (để không mất con trỏ).
@@ -2406,9 +2383,9 @@ function renderCfMultiSummary(perColumn, tool) {
     const iqrZero = has && (p.warnings || []).find((w) => w.code === "iqr_zero");
     if (iqrZero) {
       const v = Number.isInteger(iqrZero.value) ? String(iqrZero.value) : String(Math.round(iqrZero.value * 1000) / 1000);
-      warn = `<span class="cf-sum-warn">⚠ IQR của cột này bằng 0: ${Math.round(iqrZero.share * 100)}% ô đều bằng ${escapeHtml(v)}, nên IQR coi MỌI giá trị khác ${escapeHtml(v)} là bất thường, kể cả giá trị thật. ` +
-        `Cột kiểu này hợp với Z-score hơn; hãy xem kỹ các ô bị gắn cờ trước khi sửa.</span>` +
-        `<span class="cf-sum-risk" data-role="sum-risk" hidden>Cách xử lý đang chọn sẽ sửa hoặc xoá cả những giá trị có thể là dữ liệu thật (cột này chủ yếu là ${escapeHtml(v)}).</span>`;
+      warn = `<span class="cf-sum-warn">⚠ IQR của cột này bằng 0: ${Math.round(iqrZero.share * 100)}% ô đều bằng ${escapeHtml(v)}, nên mọi giá trị khác ${escapeHtml(v)} bị coi là bất thường, kể cả giá trị thật. ` +
+        `Nên dùng Z-score, hoặc xem kỹ các ô bị gắn cờ trước khi sửa.</span>` +
+        `<span class="cf-sum-risk" data-role="sum-risk" hidden>Cách xử lý này sẽ sửa hoặc xoá cả giá trị có thể là dữ liệu thật.</span>`;
     }
     return `<div class="cf-sum-row${has ? " has-errors" : ""}"><span class="cf-sum-name" title="${escapeAttr(p.column)}">${escapeHtml(p.column)}</span>` +
       `<span class="cf-sum-count">${p.findings_count} ô lỗi${has ? ` · ${p.flagged_rows_count} dòng` : ""}</span>${action}${fixed}${methods}${warn}</div>`;
@@ -2435,7 +2412,7 @@ function renderCfMultiPreview() {
   if (!chosen.length) { box.hidden = true; box.textContent = ""; return; }
   const names = chosen.map((c) => `«${c}»`).join(", ");
   if (chosen.some((c) => !byColumn[c] || !Array.isArray(byColumn[c].flagged_row_numbers))) {
-    box.textContent = `Cột ${names} chọn xoá dòng. Dữ liệu quá lớn nên chưa tính trước được số dòng sẽ xoá.`;
+    box.textContent = `Cột ${names} chọn xoá dòng. Dữ liệu lớn nên chưa tính trước được số dòng sẽ xoá.`;
     box.hidden = false;
     return;
   }
@@ -2479,14 +2456,14 @@ const EXPR_BUTTON_GROUPS = [
     ["không", "không", "Đảo điều kiện: đúng thành sai, sai thành đúng"],
     ["( )", "( )", "Ngoặc để gộp điều kiện, vd (a hoặc b) và c"],
     ["có( )", "có()", "Ô của cột đó có giá trị (không trống). Vd: có(email)"],
-    ["thì =>", "=>", "NẾU … THÌ …: dòng nào thoả điều kiện đứng trước thì điều kiện đứng sau cũng phải đúng (dòng không thoả điều kiện trước luôn đạt). Vd: phong_ban = \"Sales\" => luong >= 10000000"],
+    ["thì =>", "=>", "NẾU … THÌ …: dòng thoả điều kiện trước thì điều kiện sau phải đúng. Vd: phong_ban = \"Sales\" => luong >= 10000000"],
   ]],
   ["So sánh", [
     ["<", "<", "nhỏ hơn"], ["<=", "<=", "nhỏ hơn hoặc bằng"], ["=", "=", "bằng"], ["!=", "!=", "khác"], [">=", ">=", "lớn hơn hoặc bằng"], [">", ">", "lớn hơn"],
   ]],
   ["Tính toán và chữ", [
     ["+", "+", "cộng"], ["−", "-", "trừ"], ["×", "*", "nhân (chèn dấu *)"], ["÷", "/", "chia (chèn dấu /). Phần trăm thì chia 100, vd giam_gia / 100"],
-    ['" "', '""', "Giá trị chữ trong dấu nháy, vd \"Marketing Team\". Cần khi giá trị có dấu cách hoặc không có sẵn trong cột. Chữ phân biệt hoa/thường"],
+    ['" "', '""', "Giá trị chữ trong dấu nháy, vd \"Marketing Team\". Chữ phân biệt hoa/thường"],
   ]],
 ];
 // Khối chèn nhanh: 3 hàng nút + chip tên cột + (khi bấm chip cột Nhóm) chip giá trị của cột đó.
@@ -2516,12 +2493,12 @@ function renderCfValueChips(col) {
   const info = col ? state.cf.columnValues[col] : null;
   state.cf.valueCol = info ? col : "";
   if (!info) { box.hidden = true; return; }
-  $("cf-value-title").innerHTML = `Giá trị trong cột <b>${escapeHtml(col)}</b>: bấm để chèn kèm dấu nháy (chữ phân biệt hoa/thường)`;
+  $("cf-value-title").innerHTML = `Giá trị trong cột <b>${escapeHtml(col)}</b> (bấm để chèn, phân biệt hoa/thường)`;
   $("cf-value-chips").innerHTML = info.values.map((v) =>
     `<button type="button" class="cf-chip cf-chip-value" data-role="expr-value" data-value="${escapeAttr(v.value)}" title="${v.count} dòng">${escapeHtml(v.value)}<span class="cf-chip-count">${v.count}</span></button>`).join("");
   const more = $("cf-value-more");
   more.hidden = !info.more;
-  if (info.more) more.textContent = `Còn ${info.more} giá trị khác ít gặp hơn: muốn dùng thì gõ tay trong dấu nháy.`;
+  if (info.more) more.textContent = `Còn ${info.more} giá trị ít gặp, gõ tay trong dấu nháy.`;
   box.hidden = false;
 }
 // Khuôn ngày (trống = tự nhận) + sai số khi so bằng.
@@ -2542,17 +2519,17 @@ function renderCfRuleFields() {
     box.innerHTML = `<div class="cf-expr-form">
       <div class="field">
         <label for="cf-expression">Biểu thức: điều kiện mà MỌI dòng phải thoả</label>
-        <textarea class="input mono" id="cf-expression" rows="3" spellcheck="false" placeholder='vd: ngay_nghi > ngay_vao   ·   tong == so_luong * don_gia   ·   tuoi >= 18 và tuoi <= 65   ·   phong_ban = "Sales" => luong >= 10000000'>${escapeHtml(state.cf.expr.text)}</textarea>
+        <textarea class="input mono" id="cf-expression" rows="3" spellcheck="false" placeholder='vd: tuoi >= 18 và tuoi <= 65'>${escapeHtml(state.cf.expr.text)}</textarea>
         <p class="cf-live" id="cf-live-check" role="status" aria-live="polite" hidden></p>
       </div>
       ${exprHelperHTML(cols)}
       ${exprOptionsHTML()}
-      <p class="hint-note">Dòng nào chắc chắn sai thì bị gắn cờ. Muốn nói «nếu A thì B»: bấm THÌ => giữa A và B, dòng thoả A mà không thoả B bị gắn cờ, dòng không thoả A luôn đạt. Chữ là giá trị có sẵn trong cột (vd Sales) viết trần cũng được, Denoise tự tra; giá trị có dấu cách hoặc không có sẵn thì viết trong dấu nháy. Chữ phân biệt hoa/thường. Tên cột có dấu cách viết trong [ ], phần trăm viết /100. Ô trống hoặc sai kiểu không kết luận được nên bị bỏ qua, và Denoise báo lại số dòng đó sau khi phát hiện. Cách viết đầy đủ ở phần giới thiệu phía trên.</p></div>`;
+      <p class="hint-note">Dòng chắc chắn sai thì bị gắn cờ, ô trống hoặc sai kiểu bị bỏ qua và được báo lại. Tên cột có dấu cách viết trong [ ].</p></div>`;
     renderCfValueChips(state.cf.valueCol); // dựng lại form (đổi tab / đọc lại cột): hiện lại giá trị của cột đang chọn nếu còn
     scheduleLiveCheck(); // ... và kiểm tra lại biểu thức đang có (đầu vào có thể vừa đổi)
   } else {
     box.innerHTML = `<div class="cf-row cf-fd-row">${c("cf-det-col", "Cột xác định (A)")}<div class="field" id="cf-fd-deps"></div></div>
-      <p class="hint-note">Mỗi giá trị A chỉ được đi với đúng 1 giá trị của TỪNG cột phụ thuộc (vd ma_nv → ten, ngay_sinh, so_dien_thoai, cccd). Mỗi cột phụ thuộc được kiểm riêng. Không dùng cho cột là kết quả giao dịch lặp lại.</p>`;
+      <p class="hint-note">Mỗi giá trị A chỉ đi với đúng 1 giá trị của từng cột phụ thuộc (vd ma_nv → ten). Không dùng cho cột là kết quả giao dịch.</p>`;
     renderCfFdDeps();
   }
 }
@@ -2801,7 +2778,7 @@ function renderExprInfo(info) {
       return `${q(c.name)}: ${bits.join(", ")}`;
     });
     if (info.zero_division_rows) parts.push(`${info.zero_division_rows} dòng có phép chia cho 0`);
-    warns.push(["warn", `Bỏ qua ${skipped}/${total} dòng vì chưa tính được${parts.length ? ": " + parts.join(" · ") : ""}. Ô trống và ô sai định dạng xử lý bằng tool Ô trống / Sai định dạng (nhóm Tự động) rồi nối tiếp.`]);
+    warns.push(["warn", `Bỏ qua ${skipped}/${total} dòng vì chưa tính được${parts.length ? ": " + parts.join(" · ") : ""}. Xử lý ô trống / sai định dạng trước (nhóm Tự động) rồi nối tiếp.`]);
   }
   if (info.text_order_columns && info.text_order_columns.length) {
     warns.push(["warn", `Cột ${info.text_order_columns.map(q).join(", ")} đang được đọc là Chữ nên so thứ tự theo bảng chữ cái. Nếu đó là ngày hoặc số, hãy dùng ngay(cột, "%d/%m/%Y") hoặc so(cột).`]);
@@ -2933,7 +2910,7 @@ function cfCheckStale() {
   note.hidden = !stale;
   if (stale) {
     hideCfConfirm(); // số liệu trong hộp xác nhận là của cấu hình cũ
-    note.textContent = "⚠ Cấu hình hoặc dữ liệu đầu vào đã đổi so với lần Phát hiện cuối, nên kết quả bên dưới không còn khớp. Bấm «Phát hiện» lại trước khi Áp dụng.";
+    note.textContent = "⚠ Cấu hình hoặc dữ liệu đã đổi so với lần Phát hiện cuối. Bấm «Phát hiện» lại trước khi Áp dụng.";
     btn.disabled = true;
   } else if (state.cf.stale) {
     btn.disabled = false; // chỉ mở lại khi chính mình đã khoá (không đụng nút lúc đang chờ server trả lời)

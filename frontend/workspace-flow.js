@@ -219,9 +219,7 @@ function renderBackendStatus() {
   if (state.backendAvailable) {
     notice.textContent = "Đã kết nối backend Flask.";
   } else {
-    notice.textContent =
-      `Không kết nối được backend. Hãy chạy "python3 app.py" ở 1 terminal riêng rồi thử lại ` +
-      `-- trang này không có chế độ phân tích cục bộ, mọi phép detect/xử lý đều phải qua backend thật (attribute_noise/).`;
+    notice.textContent = `Không kết nối được backend. Hãy chạy "python3 app.py" rồi thử lại.`;
   }
 }
 function updateUploadButtonState() {
@@ -2089,9 +2087,8 @@ function renderFeatureReductionChart(ranked, afterImportance, afterCorrelation) 
 
   const summary = `
     <p class="hint-note">
-      <strong>${ranked.length}</strong> cột gốc → giữ <strong>${afterImportance.length}</strong> cột
-      (Bước 1 — Feature Importance + Elbow) → còn <strong>${afterCorrelation.length}</strong> cột
-      (Bước 2 — lọc tương quan ≥ 0.8). Đã tự tick ${afterCorrelation.length} cột này ở danh sách bên dưới.
+      <strong>${ranked.length}</strong> cột gốc → <strong>${afterImportance.length}</strong> cột (theo độ liên quan)
+      → <strong>${afterCorrelation.length}</strong> cột (lọc tương quan). Đã tự tick ${afterCorrelation.length} cột này bên dưới.
     </p>`;
 
   const rows = ranked
@@ -2122,7 +2119,7 @@ $("class-reduce-btn").addEventListener("click", async () => {
   }
 
   setButtonLoading(btn, true, "Đang chạy...", "🪄 Chạy giảm cột tự động");
-  statusEl.textContent = "Đang train Random Forest để xếp hạng cột, có thể mất chút thời gian…";
+  statusEl.textContent = "Đang xếp hạng cột, có thể mất chút thời gian…";
 
   let response;
   try {
@@ -2298,9 +2295,8 @@ function renderClassResultsDistance(diag) {
   if (isLowCoverage) {
     warnCard.hidden = false;
     warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
-      ⚠️ Chỉ ${coveragePct.toFixed(1)}% số dòng có "láng giềng lẫn nhau" (2 chiều) -- dữ liệu có thể quá thưa
-      hoặc k đang quá nhỏ so với số đặc trưng. Phần lớn dòng KHÔNG kết luận được gì, danh sách nghi ngờ bên
-      dưới có thể bỏ sót nhiều noise thật. Thử tăng k hoặc chọn lại cột đặc trưng.</p>`;
+      ⚠️ Chỉ ${coveragePct.toFixed(1)}% số dòng có láng giềng lẫn nhau, nên phần lớn dòng chưa kết luận được.
+      Thử tăng k hoặc chọn lại cột đặc trưng.</p>`;
   } else {
     warnCard.hidden = true;
   }
@@ -2359,9 +2355,8 @@ function renderClassResultsEnsemble(diag) {
   if (isWeak) {
     warnCard.hidden = false;
     warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
-      ⚠️ Cả 3 classifier đều chỉ nhỉnh hơn baseline rất ít (tốt nhất chỉ ${(bestDiff * 100).toFixed(2)} điểm %)
-      — không classifier nào học được gì đáng kể từ các cột đặc trưng đã chọn. Các dòng bị gắn cờ bên dưới
-      RẤT KHÔNG đáng tin, cân nhắc chọn lại cột đặc trưng khác trước khi kết luận.</p>`;
+      ⚠️ Cả 3 classifier chỉ nhỉnh hơn baseline ${(bestDiff * 100).toFixed(2)} điểm %, nên danh sách bên dưới rất khó tin.
+      Thử chọn lại cột đặc trưng.</p>`;
   } else {
     warnCard.hidden = true;
   }
@@ -2430,10 +2425,8 @@ function renderClassResultsSingleLearning(diag) {
   if (isWeak) {
     warnCard.hidden = false;
     warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
-      ⚠️ CV accuracy chỉ nhỉnh hơn (hoặc thấp hơn) baseline rất ít (chênh lệch ${(diffPct * 100).toFixed(2)} điểm %,
-      chỉ đạt ${ceilingPct.toFixed(1)}% mức trần tối đa có thể) — model gần như không học được gì từ các cột đặc
-      trưng đã chọn. Các dòng bị gắn cờ bên dưới RẤT KHÔNG đáng tin, cân nhắc chọn lại cột đặc trưng khác trước
-      khi kết luận.</p>`;
+      ⚠️ CV accuracy chỉ chênh baseline ${(diffPct * 100).toFixed(2)} điểm % (${ceilingPct.toFixed(1)}% mức trần),
+      nên danh sách bên dưới rất khó tin. Thử chọn lại cột đặc trưng.</p>`;
   } else {
     warnCard.hidden = true;
   }

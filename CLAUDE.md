@@ -1611,7 +1611,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Gợi ý thiếu nháy [ĐÃ THAY MỘT PHẦN Ở MỤC 29: chữ trần là giá trị thật của cột giờ chạy luôn]:** từ lạ KHÔNG đứng cạnh cột nào (vd `so(x) > abc`) vẫn báo
       "không có cột «X»... Nếu «X» là giá trị chữ chứ không phải tên cột, hãy viết trong dấu nháy" (không nhắc khi tên viết trong `[ ]`).
     - **Chữ hướng dẫn đã sửa** (trang chủ, menu, mục hướng dẫn "Cần cấu hình"): "Hai kiểu rule", nút THÌ =>, phần trăm viết /100, chữ phân biệt hoa/thường,
-      hàm `có` trong danh sách hàm cho phép.
+      hàm `có` trong danh sách hàm cho phép. [Phần chữ dài này đã được RÚT GỌN ở mục 31.]
     - **Kiểm chứng:** Playwright `test_expr_toolbar_ui.js` (2 tab, không còn mẫu/ô NẾU/THÌ, 3 hàng nút đúng nhãn + title, ghép bằng bấm ra `age >= 18 và
       age <= 65` = 10 dòng vi phạm, ký tự nút tính toán/so sánh, con trỏ giữa nháy và giữa `có()`, chip giá trị department 9 giá trị / gender 5 giá trị, ẩn ở
       cột số và cột tên, ghép `department = "Sales" => salary >= 10000000` bằng bấm = 6 dòng vi phạm khớp pandas độc lập, gợi ý nháy, 4 giá trị có ký tự đặc
@@ -1635,7 +1635,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       (`describe_rule(cfg, df)`) và ô tô màu không coi `Sales` là cột. Nhánh không có df (`expression_column_names`) không đổi.
     - **Giới hạn:** giá trị có dấu cách / ký tự đặc biệt / không có sẵn trong cột vẫn phải để trong nháy (hoặc bấm chip giá trị, luôn chèn kèm nháy đúng); chỉ cho
       phép so sánh có một vế là cột (không áp dụng trong `so(...)`, phép tính...); chữ vẫn phân biệt hoa/thường nên `department = sales` báo lỗi gợi ý «Sales», «SALES».
-    - **Giao diện:** chỉ sửa chữ (dòng hướng dẫn dưới form, chú thích nút `" "`, mục giải thích "Cách viết biểu thức"); chip giá trị vẫn chèn `"giá trị"` có nháy.
+    - **Giao diện:** chỉ sửa chữ (dòng hướng dẫn dưới form, chú thích nút `" "`, mục giải thích "Cách viết biểu thức" [mục giải thích này đã bỏ ở mục 31]); chip giá trị vẫn chèn `"giá trị"` có nháy.
     - **Kiểm chứng:** `test_bare_values.py` (chữ trần = có nháy ở 8 cách viết, hai chiều, `!=`, `=>`, ' HR' có dấu cách, evaluate_conditional, expression_columns,
       if_then_columns, describe_rule; typo Salse / sales / agee / [Sales] / hai vế lạ / lỗi theo vế; tên cột thắng giá trị; giá trị có dấu cách vẫn cần nháy; đối chiếu ngẫu nhiên
       560 cấu hình `c = word` vs `c = "word"` = 0 khác biệt; đạt pandas 3.0.5 và 2.2.3); Playwright `test_expr_toolbar_ui.js` (gõ `department = Sales` = 253 dòng, nếu–thì gõ trần = 6 dòng,
@@ -1661,6 +1661,24 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       (giả lập chậm 2,6s), Phát hiện vẫn ra 10 dòng, file 6,5MB chỉ hiện lời nhắc và không gọi máy chủ); chạy lại toàn bộ test Biểu thức (lõi, route, 2.580 đối chiếu), Phụ thuộc hàm, IQR,
       báo cấu hình đã đổi, hộp xác nhận + hoàn tác, dải nối tiếp: không hồi quy.
     - **Giới hạn:** mỗi lần kiểm tra đọc lại toàn bộ dữ liệu (≤ 5MB); chỉ cho tab Biểu thức (Phụ thuộc hàm không có ô gõ); lỗi hiện dưới ô, chưa tô vị trí ký tự sai trong ô.
+
+31. **Rút gọn chữ chú thích trên MỌI trang Denoise — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user gửi 5 ảnh chụp (trang chủ, các thẻ "Denoise sửa được gì", "Cách hoạt động" + khối giải thích của Free Tools và Ngoài khoảng, "Về dự án") và nói chú thích chữ bé
+      quá nhiều, nhìn như AI viết; muốn ít hơn, đơn giản hơn, ngắn gọn xúc tích, kiểm tra TẤT CẢ trang, còn bố cục giữ nguyên.
+    - **Quy ước đã áp dụng (giữ cho nhất quán khi thêm chữ mới):** (1) mỗi chú thích ngắn, một câu, thường ≤ ~100 ký tự; (2) mỗi tool chỉ 2–3 khối giải thích (trước 3–5), mỗi khối 1–2 câu;
+      bỏ khối "Riêng tư theo thiết kế" lặp ở mọi tool (xoá hàm `PRIVACY_COLUMN`, thông tin này đã có ở trang Quyền riêng tư) và khối "Cách viết biểu thức" dài của rule liên cột (nút bấm có `title`,
+      dòng xanh/đỏ kiểm tra khi gõ và thông báo lỗi đã đủ hướng dẫn); (3) "Cách hoạt động": 3 bước, mỗi bước một câu ngắn; (4) bỏ chữ thừa: `ft-section-meta` ("Ba bước · không cần cài gì"...),
+      dòng nhỏ dưới các con số (`hm-number small`), `hint-note` lặp đúng chữ của nhãn (vd "Bỏ qua hoa/thường" + '"An" và "AN" tính là trùng'); (5) Guide / Bảo mật / Quyền riêng tư giữ nguyên
+      mục lục và số mục, chỉ cô đọng thân mỗi mục (Guide "đọc trong ≈ 3 phút" thay vì 8); (6) chữ ĐỘNG (thông báo lỗi, cảnh báo, xem trước "Sẽ xoá N dòng") giữ nguyên ý, chỉ cắt câu thừa, và
+      GIỮ NGUYÊN các câu test đang kiểm (`Bỏ qua N/M dòng vì chưa tính được`, `chưa chắc là dữ liệu sạch`, `phân biệt hoa/thường` ở tiêu đề chip giá trị, `Sẽ xoá N dòng (a → b dòng)`...).
+    - **Không đổi:** bố cục / CSS (khối giải thích vẫn lưới 3 cột: tool chỉ có 2 khối thì cột thứ 3 để trống, thẳng hàng với 3 bước phía trên), logic, backend, id / class.
+    - **Chỗ sửa:** `workspace.html` (đăng nhập, menu, trang chủ, 3 trang chữ, hồ sơ, form 3 nhóm tool, Class Noise), `workspace.js` (`TOOL_INFO` / `CV_INFO` / `CF_INFO` chỉ đổi `desc` / `steps` /
+      `explainer`; hint-note, ghi chú dưới bảng, chữ "chọn file trước", cảnh báo IQR = 0, ghi chú Điền tay từng ô...), `workspace-flow.js` (3 cảnh báo Class Noise, thông báo backend, tóm tắt giảm cột).
+      Giao diện CŨ (`index.html`, `script.js`, `style.css`...) không đụng tới.
+    - **Kiểm chứng:** script quét mọi trang (bấm từng tab của 3 nhóm tool, liệt kê đoạn chữ dài; sau khi sửa chỉ còn vài đoạn ~100 ký tự) + chụp full-page xem tay trang chủ, 3 trang chữ, hồ sơ,
+      Class Noise, các tab tool: không vỡ bố cục, không lỗi JS; chạy lại 10 test giao diện (Biểu thức, thanh nút + chip, kiểm tra khi gõ, Phụ thuộc hàm x3, báo cấu hình đã đổi, hộp xác nhận + hoàn tác,
+      IQR, dải nối tiếp): PASS. Lỗi tìm ra khi chạy test: tiêu đề chip giá trị lỡ mất chữ "phân biệt hoa/thường" (thông tin thật) -> đã trả lại.
+    - **Chưa sửa:** nhánh Attribute 5 bước ẩn trong khối Class Noise (`#panel-3-attribute`, `#panel-5-attribute`...) vẫn còn đoạn mô tả dài nhưng không bao giờ hiển thị trong Denoise.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -1758,6 +1776,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 - [x] Biểu thức dễ dùng hơn: bỏ 2 mẫu, gộp Nếu – thì vào Biểu thức (nút THÌ =>), 3 hàng nút dấu, chip giá trị cột Nhóm — xem mục 28.
 - [x] Tự nhận chữ trần (không nháy) là giá trị thật của cột đang so; gõ nhầm thì báo lỗi kèm giá trị gần giống — xem mục 29.
 - [x] Kiểm tra biểu thức khi đang gõ (dòng xanh/đỏ dưới ô, ngừng gõ ~1s) — xem mục 30.
+- [x] Rút gọn chữ chú thích trên mọi trang Denoise (ít hơn, ngắn hơn, bỏ khối "Riêng tư" lặp ở mỗi tool) — xem mục 31.
 - [x] Phụ thuộc hàm: 1 cột xác định → nhiều cột phụ thuộc, đoán ô sai (so các cột còn lại), 2 cách xử lý
       "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" + xem trước (mục 23, commit `3ee977f`, `73978bc`).
 - [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).

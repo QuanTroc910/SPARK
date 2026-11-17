@@ -52,7 +52,7 @@
         <form class="ws-auth-form" id="ws-auth-form" novalidate>
           <p class="ws-auth-eyebrow" id="ws-auth-eyebrow">[ Chào mừng trở lại ]</p>
           <h1 class="ws-auth-title" id="ws-auth-title">Đăng nhập</h1>
-          <p class="ws-auth-desc" id="ws-auth-desc">Tiếp tục việc đang dở. Dữ liệu gắn với tài khoản của bạn, người khác không thấy được.</p>
+          <p class="ws-auth-desc" id="ws-auth-desc">Tiếp tục việc đang dở.</p>
           <div class="ws-auth-field">
             <label for="ws-auth-username">Tên đăng nhập</label>
             <input class="input" id="ws-auth-username" autocomplete="username" />
@@ -139,7 +139,7 @@
               </a>
               <a class="ws-megamenu-item" href="#" data-config-tool="cross-rule">
                 <span class="ws-megamenu-icon">⋈</span>
-                <span class="ws-megamenu-item-text"><strong>Rule liên cột</strong><small>Biểu thức (gồm nếu–thì) · phụ thuộc hàm</small></span>
+                <span class="ws-megamenu-item-text"><strong>Rule liên cột</strong><small>Biểu thức · phụ thuộc hàm</small></span>
               </a>
             </div>
 
@@ -148,15 +148,15 @@
               <span class="ws-megamenu-label">Convert</span>
               <a class="ws-megamenu-item" href="#" data-convert-tool="delimiter">
                 <span class="ws-megamenu-icon">⇄</span>
-                <span class="ws-megamenu-item-text"><strong>Đổi delimiter CSV</strong><small>Phẩy · chấm phẩy · tab · gạch đứng</small></span>
+                <span class="ws-megamenu-item-text"><strong>Đổi delimiter CSV</strong><small>Đổi dấu phân cách</small></span>
               </a>
               <a class="ws-megamenu-item" href="#" data-convert-tool="csv-to-json">
                 <span class="ws-megamenu-icon">{ }</span>
-                <span class="ws-megamenu-item-text"><strong>CSV → JSON</strong><small>Mỗi dòng 1 object, khoá là tên cột</small></span>
+                <span class="ws-megamenu-item-text"><strong>CSV → JSON</strong><small>Mỗi dòng thành 1 object</small></span>
               </a>
               <a class="ws-megamenu-item" href="#" data-convert-tool="json-to-csv">
                 <span class="ws-megamenu-icon">{ }</span>
-                <span class="ws-megamenu-item-text"><strong>JSON → CSV</strong><small>Làm phẳng JSON lồng nhau thành cột</small></span>
+                <span class="ws-megamenu-item-text"><strong>JSON → CSV</strong><small>Làm phẳng JSON thành cột</small></span>
               </a>
             </div>
 
@@ -169,7 +169,7 @@
               </a>
               <a class="ws-megamenu-item" href="#" data-tool="trim-whitespace">
                 <span class="ws-megamenu-icon">⇥</span>
-                <span class="ws-megamenu-item-text"><strong>Cắt khoảng trắng thừa</strong><small>Khoảng trắng lạc và vô hình</small></span>
+                <span class="ws-megamenu-item-text"><strong>Cắt khoảng trắng thừa</strong><small>Khoảng trắng lạc, ký tự vô hình</small></span>
               </a>
               <a class="ws-megamenu-item" href="#" data-tool="blanks">
                 <span class="ws-megamenu-icon">□</span>
@@ -232,7 +232,7 @@
         <div class="hm-hero-copy">
           <p class="hm-eyebrow">[ Denoise · dò &amp; xử lý nhiễu dữ liệu ]</p>
           <h1 class="hm-hero-headline">Dữ liệu nhiễu vào.<br><span>Dữ liệu sạch ra.</span></h1>
-          <p class="hm-hero-desc">Tải CSV hoặc Excel lên, Denoise chỉ ra từng ô thiếu, sai định dạng, dòng trùng, giá trị bất thường và cả dòng có thể bị gán sai nhãn. Bạn quyết định sửa gì, hoàn tác được mọi bước, rồi xuất file sạch.</p>
+          <p class="hm-hero-desc">Tải CSV hoặc Excel lên, xem từng ô lỗi, tự chọn cách sửa rồi xuất file sạch.</p>
           <div class="hm-hero-actions">
             <a class="btn btn-primary" href="#" data-tool="remove-duplicates">Làm sạch 1 file, miễn phí →</a>
             <a class="btn btn-ghost" href="#" data-section="guide">Xem hướng dẫn</a>
@@ -281,31 +281,31 @@
            dòng ghi nơi dùng được. -->
       <div class="ft-section-head hm-section-head">
         <h2 class="ft-h2">Denoise sửa được gì</h2>
-        <span class="ft-section-meta">7 loại nhiễu thuộc tính · 4 rule liên cột · class noise</span>
+        <span class="ft-section-meta">9 loại lỗi</span>
       </div>
       <div class="hm-fix-grid">
-        <div class="hm-card"><span class="hm-card-num">/01</span><span class="hm-card-icon">∅</span><h3>Thiếu giá trị</h3><p>Ô trống, "NA", "null", "-"... đều bị bắt. Xoá dòng, điền giá trị cố định, hoặc điền mean / median / KNN / mode theo kiểu cột.</p><small>Free Tools</small></div>
-        <div class="hm-card"><span class="hm-card-num">/02</span><span class="hm-card-icon">@</span><h3>Sai định dạng</h3><p>Email, số điện thoại, ngày tháng, số nguyên không đúng khuôn. Denoise tự đoán kiểu từng cột, bạn sửa được.</p><small>Free Tools</small></div>
-        <div class="hm-card"><span class="hm-card-num">/03</span><span class="hm-card-icon">↕</span><h3>Ngoài khoảng</h3><p>Tuổi 210, lương âm... Bạn khai min / max, Denoise gắn cờ và có thể kéo về biên.</p><small>Cần cấu hình</small></div>
-        <div class="hm-card"><span class="hm-card-num">/04</span><span class="hm-card-icon">σ</span><h3>Giá trị bất thường</h3><p>Outlier theo IQR hoặc Z-score trên cột số. Cap về biên, điền lại hoặc giữ nguyên nếu đó là dữ liệu thật.</p><small>Cần cấu hình</small></div>
-        <div class="hm-card"><span class="hm-card-num">/05</span><span class="hm-card-icon">Aa</span><h3>Không nhất quán</h3><p>"Nam", "nam", "NAM", " Nam " cùng một nghĩa. Tự chuẩn hoá về giá trị chuẩn bạn khai.</p><small>Cần cấu hình</small></div>
-        <div class="hm-card"><span class="hm-card-num">/06</span><span class="hm-card-icon">⇥</span><h3>Khoảng trắng thừa</h3><p>Khoảng trắng đầu/cuối, lặp nhiều lần, ký tự vô hình. Luôn an toàn để sửa tự động.</p><small>Free Tools · Cần cấu hình</small></div>
-        <div class="hm-card"><span class="hm-card-num">/07</span><span class="hm-card-icon">⧉</span><h3>Dòng trùng</h3><p>So toàn bộ cột hoặc chỉ vài cột bạn chọn. Giữ bản đầu hoặc bản cuối, xoá phần còn lại.</p><small>Free Tools · Cần cấu hình</small></div>
-        <div class="hm-card"><span class="hm-card-num">/08</span><span class="hm-card-icon">⇄</span><h3>Rule liên cột</h3><p>Mâu thuẫn giữa các cột: biểu thức (so sánh, tính toán, nếu-thì), phụ thuộc hàm. Bạn khai rule, Denoise kiểm tra từng dòng.</p><small>Cần cấu hình</small></div>
-        <div class="hm-card"><span class="hm-card-num">/09</span><span class="hm-card-icon">🏷</span><h3>Class noise</h3><p>Dòng có thể bị gán sai nhãn. 3 thuật toán độc lập: Confident Learning, Mutual k-NN, Ensemble biểu quyết.</p><small>Class Noise</small></div>
+        <div class="hm-card"><span class="hm-card-num">/01</span><span class="hm-card-icon">∅</span><h3>Thiếu giá trị</h3><p>Ô trống, "NA", "null", "-". Xoá dòng hoặc điền lại.</p><small>Free Tools</small></div>
+        <div class="hm-card"><span class="hm-card-num">/02</span><span class="hm-card-icon">@</span><h3>Sai định dạng</h3><p>Email, SĐT, ngày, số không đúng khuôn.</p><small>Free Tools</small></div>
+        <div class="hm-card"><span class="hm-card-num">/03</span><span class="hm-card-icon">↕</span><h3>Ngoài khoảng</h3><p>Tuổi 210, lương âm. Bạn khai min / max.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/04</span><span class="hm-card-icon">σ</span><h3>Giá trị bất thường</h3><p>Outlier theo IQR hoặc Z-score.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/05</span><span class="hm-card-icon">Aa</span><h3>Không nhất quán</h3><p>"Nam", "nam", "NAM" về một giá trị chuẩn.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/06</span><span class="hm-card-icon">⇥</span><h3>Khoảng trắng thừa</h3><p>Khoảng trắng đầu / cuối, ký tự vô hình.</p><small>Free Tools</small></div>
+        <div class="hm-card"><span class="hm-card-num">/07</span><span class="hm-card-icon">⧉</span><h3>Dòng trùng</h3><p>Giữ một bản, xoá các bản còn lại.</p><small>Free Tools</small></div>
+        <div class="hm-card"><span class="hm-card-num">/08</span><span class="hm-card-icon">⇄</span><h3>Rule liên cột</h3><p>Biểu thức và phụ thuộc hàm giữa các cột.</p><small>Cần cấu hình</small></div>
+        <div class="hm-card"><span class="hm-card-num">/09</span><span class="hm-card-icon">🏷</span><h3>Class noise</h3><p>Dòng có thể bị gán sai nhãn, 3 thuật toán.</p><small>Class Noise</small></div>
       </div>
 
       <!-- 4 ô quy trình nối liền, ô cuối nền đen (theo trang Features của CYD). -->
       <div class="ft-rule"></div>
       <div class="ft-section-head">
         <h2 class="ft-h2">Bốn bước, bạn giữ quyền quyết định</h2>
-        <span class="ft-section-meta">Không có bước nào tự sửa dữ liệu mà không hỏi</span>
+        <span class="ft-section-meta">Không tự sửa khi chưa hỏi</span>
       </div>
       <div class="hm-steps">
-        <div class="hm-step"><span class="hm-step-num">01</span><h3>Tải lên</h3><p>CSV hoặc Excel. File nằm trong bộ nhớ của server, gắn với tài khoản của bạn, không ghi ra đĩa.</p></div>
-        <div class="hm-step"><span class="hm-step-num">02</span><h3>Cấu hình</h3><p>Chọn cột, kiểu dữ liệu (Denoise đoán sẵn), loại nhiễu cần dò và rule liên cột nếu có.</p></div>
-        <div class="hm-step"><span class="hm-step-num">03</span><h3>Phát hiện</h3><p>Backend chạy đủ detector trên bản đang làm việc. Kết quả tô màu từng ô theo đúng loại lỗi.</p></div>
-        <div class="hm-step is-dark"><span class="hm-step-num">04</span><h3>Xử lý &amp; xuất</h3><p>Sửa từng dòng, chạy thử trước khi xoá, hoàn tác 5 bước gần nhất, rồi tải CSV sạch về.</p></div>
+        <div class="hm-step"><span class="hm-step-num">01</span><h3>Tải lên</h3><p>CSV hoặc Excel.</p></div>
+        <div class="hm-step"><span class="hm-step-num">02</span><h3>Cấu hình</h3><p>Chọn cột và loại lỗi cần dò.</p></div>
+        <div class="hm-step"><span class="hm-step-num">03</span><h3>Phát hiện</h3><p>Ô lỗi được tô màu theo loại.</p></div>
+        <div class="hm-step is-dark"><span class="hm-step-num">04</span><h3>Xử lý &amp; xuất</h3><p>Sửa, hoàn tác được, tải CSV sạch.</p></div>
       </div>
 
       <!-- Các con số khổng lồ (theo khối "THE LIMITS" của CYD) -- toàn số thật
@@ -313,15 +313,14 @@
       <div class="ft-rule"></div>
       <div class="ft-section-head">
         <h2 class="ft-h2">Các con số</h2>
-        <span class="ft-section-meta">Đếm từ mã nguồn hiện tại</span>
       </div>
       <div class="hm-numbers">
-        <div class="hm-number"><b>7</b><span>Loại nhiễu thuộc tính</span><small>missing · format · range · outlier · category · whitespace · duplicate</small></div>
-        <div class="hm-number"><b>2</b><span>Kiểu rule liên cột</span><small>biểu thức (gồm nếu-thì) · phụ thuộc hàm</small></div>
-        <div class="hm-number"><b>3</b><span>Thuật toán class noise</span><small>Confident Learning · Mutual k-NN · Ensemble</small></div>
-        <div class="hm-number"><b>10</b><span>Cách xử lý</span><small>từ xoá dòng tới impute KNN, chọn theo kiểu cột × loại lỗi</small></div>
-        <div class="hm-number"><b>7</b><span>Tool chạy ngay</span><small>4 Free Tools + 3 Convert, không cần cấu hình</small></div>
-        <div class="hm-number"><b>0</b><span>Dịch vụ bên thứ ba</span><small>không tracker, không gửi dữ liệu ra ngoài server của bạn</small></div>
+        <div class="hm-number"><b>7</b><span>Loại nhiễu thuộc tính</span></div>
+        <div class="hm-number"><b>2</b><span>Kiểu rule liên cột</span></div>
+        <div class="hm-number"><b>3</b><span>Thuật toán class noise</span></div>
+        <div class="hm-number"><b>10</b><span>Cách xử lý</span></div>
+        <div class="hm-number"><b>7</b><span>Tool chạy ngay</span></div>
+        <div class="hm-number"><b>0</b><span>Dịch vụ bên thứ ba</span></div>
       </div>
 
       <!-- Lưới tool: 4 Free Tools + 3 Convert (bấm là chuyển khối tại chỗ) +
@@ -329,17 +328,17 @@
       <div class="ft-rule"></div>
       <div class="ft-section-head">
         <h2 class="ft-h2">Bắt đầu từ một tool nhỏ</h2>
-        <span class="ft-section-meta">Bấm là chạy · mỗi tool xong trong 1 lần gọi</span>
+        <span class="ft-section-meta">Bấm là chạy</span>
       </div>
       <div class="hm-tools-grid">
-        <a class="hm-tool" href="#" data-tool="remove-duplicates"><span class="hm-tool-kind">Free Tools</span><b>Xoá dòng trùng</b><small>Giữ 1 bản cho mỗi dòng giống nhau</small><i>→</i></a>
-        <a class="hm-tool" href="#" data-tool="trim-whitespace"><span class="hm-tool-kind">Free Tools</span><b>Cắt khoảng trắng</b><small>Khoảng trắng lạc và ký tự vô hình</small><i>→</i></a>
-        <a class="hm-tool" href="#" data-tool="blanks"><span class="hm-tool-kind">Free Tools</span><b>Ô trống</b><small>Điền ô trống · xoá dòng và cột trống</small><i>→</i></a>
-        <a class="hm-tool" href="#" data-tool="format-noise"><span class="hm-tool-kind">Free Tools</span><b>Sai định dạng</b><small>Email · SĐT · ngày · số không đúng khuôn</small><i>→</i></a>
-        <a class="hm-tool" href="#" data-convert-tool="delimiter"><span class="hm-tool-kind">Convert</span><b>Đổi delimiter CSV</b><small>Phẩy · chấm phẩy · tab · gạch đứng</small><i>→</i></a>
-        <a class="hm-tool" href="#" data-convert-tool="csv-to-json"><span class="hm-tool-kind">Convert</span><b>CSV → JSON</b><small>Mỗi dòng 1 object, khoá là tên cột</small><i>→</i></a>
-        <a class="hm-tool" href="#" data-convert-tool="json-to-csv"><span class="hm-tool-kind">Convert</span><b>JSON → CSV</b><small>Làm phẳng JSON lồng nhau thành cột</small><i>→</i></a>
-        <a class="hm-tool is-dark" href="#" data-section="class-noise"><span class="hm-tool-kind">Class Noise</span><b>Nhãn bị gán sai</b><small>4 bước, 3 thuật toán độc lập, có chẩn đoán độ tin cậy trước khi tin kết quả.</small><i>→</i></a>
+        <a class="hm-tool" href="#" data-tool="remove-duplicates"><span class="hm-tool-kind">Free Tools</span><b>Xoá dòng trùng</b><small>Giữ 1 bản cho mỗi dòng</small><i>→</i></a>
+        <a class="hm-tool" href="#" data-tool="trim-whitespace"><span class="hm-tool-kind">Free Tools</span><b>Cắt khoảng trắng</b><small>Khoảng trắng lạc, ký tự vô hình</small><i>→</i></a>
+        <a class="hm-tool" href="#" data-tool="blanks"><span class="hm-tool-kind">Free Tools</span><b>Ô trống</b><small>Điền ô trống, xoá dòng / cột trống</small><i>→</i></a>
+        <a class="hm-tool" href="#" data-tool="format-noise"><span class="hm-tool-kind">Free Tools</span><b>Sai định dạng</b><small>Email, SĐT, ngày, số sai khuôn</small><i>→</i></a>
+        <a class="hm-tool" href="#" data-convert-tool="delimiter"><span class="hm-tool-kind">Convert</span><b>Đổi delimiter CSV</b><small>Đổi dấu phân cách</small><i>→</i></a>
+        <a class="hm-tool" href="#" data-convert-tool="csv-to-json"><span class="hm-tool-kind">Convert</span><b>CSV → JSON</b><small>Mỗi dòng thành 1 object</small><i>→</i></a>
+        <a class="hm-tool" href="#" data-convert-tool="json-to-csv"><span class="hm-tool-kind">Convert</span><b>JSON → CSV</b><small>Làm phẳng JSON thành cột</small><i>→</i></a>
+        <a class="hm-tool is-dark" href="#" data-section="class-noise"><span class="hm-tool-kind">Class Noise</span><b>Nhãn bị gán sai</b><small>4 bước, 3 thuật toán độc lập.</small><i>→</i></a>
       </div>
 
       <!-- "VỀ DỰ ÁN" (thay cho "WHO IT'S FOR" của CYD, vì đây là khoá luận) +
@@ -348,20 +347,20 @@
       <div class="hm-about">
         <div>
           <p class="hm-eyebrow">[ Về dự án ]</p>
-          <h2 class="hm-about-title">Sản phẩm khoá luận, dựng từ đầu để hiểu nhiễu dữ liệu là gì và sửa nó ra sao.</h2>
-          <p class="hm-about-desc">Denoise tách rõ hai lớp: lõi phát hiện và xử lý viết bằng Python thuần (không phụ thuộc web), và một backend Flask chỉ làm nhiệm vụ phiên dịch. Mọi phép tính đều chạy ở backend, trình duyệt chỉ hiển thị, nên kết quả bạn thấy trên màn hình cũng chính là kết quả trong file tải về.</p>
+          <h2 class="hm-about-title">Sản phẩm khoá luận về nhiễu dữ liệu.</h2>
+          <p class="hm-about-desc">Lõi phát hiện viết bằng Python thuần, Flask chỉ nối giao diện với lõi.</p>
           <div class="hm-hero-actions">
             <a class="btn btn-ghost" href="#" data-section="security">Bảo mật</a>
             <a class="btn btn-ghost" href="#" data-section="privacy">Quyền riêng tư</a>
           </div>
         </div>
         <table class="hm-spec">
-          <tr><th>Backend</th><td>Flask + pandas, SQLite cho tài khoản</td></tr>
-          <tr><th>Phát hiện</th><td>7 detector theo cột + 4 rule liên cột, tự viết, có test</td></tr>
-          <tr><th>Class noise</th><td>Confident Learning (Random Forest) · Mutual k-NN · Ensemble 3 classifier</td></tr>
-          <tr><th>Xử lý</th><td>Bảng quyết định kiểu cột × loại lỗi, chạy thử và hoàn tác</td></tr>
-          <tr><th>Biểu thức rule</th><td>Diễn giải bằng cây cú pháp có whitelist, không dùng eval()</td></tr>
-          <tr><th>Giao diện</th><td>HTML / CSS / JS thuần, không framework, không tracker</td></tr>
+          <tr><th>Backend</th><td>Flask + pandas, SQLite</td></tr>
+          <tr><th>Phát hiện</th><td>7 detector + rule liên cột, tự viết</td></tr>
+          <tr><th>Class noise</th><td>Confident Learning · Mutual k-NN · Ensemble</td></tr>
+          <tr><th>Xử lý</th><td>Chạy thử, hoàn tác</td></tr>
+          <tr><th>Biểu thức rule</th><td>Bộ phân tích tự viết, không dùng eval()</td></tr>
+          <tr><th>Giao diện</th><td>HTML / CSS / JS thuần</td></tr>
         </table>
       </div>
     </div>
@@ -376,7 +375,7 @@
       <div class="ft-topbar">
         <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i><b>Guide</b></span>
         <span class="ft-meta">
-          <span>Đọc trong<strong>≈ 8 phút</strong></span>
+          <span>Đọc trong<strong>≈ 3 phút</strong></span>
           <span>Cập nhật<strong>11 / 2026</strong></span>
         </span>
       </div>
@@ -384,7 +383,7 @@
         <div>
           <p class="hm-eyebrow">[ Hướng dẫn sử dụng ]</p>
           <h1 class="tx-title">Dùng Denoise<br>từ file bẩn tới file sạch</h1>
-          <p class="tx-desc">Trang này đi theo đúng thứ tự bạn sẽ gặp: chuẩn bị file, chạy tool nhanh, rồi vào Workspace đầy đủ khi cần cấu hình từng cột. Mỗi mục ngắn, có ghi rõ chỗ nào cần cẩn thận.</p>
+          <p class="tx-desc">Chuẩn bị file, chạy tool nhanh, rồi cấu hình chi tiết khi cần.</p>
         </div>
         <!-- Hình vẽ nét: cuốn sách mở, mục lục mono, 1 chấm vuông màu nhấn. -->
         <svg class="tx-illu" viewBox="0 0 420 260" aria-hidden="true">
@@ -424,80 +423,73 @@
         <article class="tx-content">
           <section class="tx-section" id="guide-01">
             <h2 class="tx-h2"><span>01</span>Denoise gồm những gì</h2>
-            <p>Có ba cách làm việc, xếp theo mức độ phải cấu hình. Chọn cách nhẹ nhất đủ cho việc của bạn.</p>
+            <p>Ba cách làm việc, từ nhẹ tới nặng:</p>
             <ul class="tx-list">
-              <li><b>Free Tools</b> — 4 thao tác gần như không cần khai gì: xoá dòng trùng, cắt khoảng trắng, xử lý ô trống (điền, xoá dòng, xoá cột trống), tìm ô sai định dạng. Denoise tự đoán kiểu từng cột, bạn sửa được. Tải file lên, bấm Chạy, có kết quả ngay.</li>
-              <li><b>Convert</b> — đổi delimiter CSV, CSV sang JSON, JSON sang CSV. Chỉ đổi định dạng, giữ nguyên văn từng giá trị.</li>
-              <li><b>Cần cấu hình</b> — 4 tool cho lỗi phải khai cột và tham số: ngoài khoảng, giá trị bất thường, không nhất quán, rule liên cột. Chạy hai nhịp: phát hiện rồi áp dụng.</li>
-              <li><b>Class Noise</b> — 4 bước riêng cho nhãn phân loại bị gán sai, 3 thuật toán để so sánh.</li>
+              <li><b>Free Tools</b>: 4 thao tác chạy ngay, không cần khai gì.</li>
+              <li><b>Convert</b>: đổi delimiter CSV, CSV sang JSON và ngược lại.</li>
+              <li><b>Cần cấu hình</b>: ngoài khoảng, giá trị bất thường, không nhất quán, rule liên cột.</li>
+              <li><b>Class Noise</b>: tìm dòng bị gán sai nhãn bằng 3 thuật toán.</li>
             </ul>
-            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Ba nhóm tool nối được với nhau: xong tool nào, panel "Xử lý tiếp" cho chọn bất kỳ tool nào khác và mang đúng kết quả vừa có sang làm đầu vào. Dải đen phía trên ghi lại chuỗi các bước; "Bắt đầu lại từ gốc" trả về file ban đầu.</p></div>
+            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Kết quả của tool này làm đầu vào cho tool kế tiếp.</p></div>
           </section>
 
           <section class="tx-section" id="guide-02">
             <h2 class="tx-h2"><span>02</span>Chuẩn bị file</h2>
-            <p>Denoise đọc CSV và Excel (.xlsx, .xls). Vài điều giúp kết quả đúng ngay từ lần đầu:</p>
             <ul class="tx-list">
-              <li>Dòng đầu tiên là tên cột. Không có dòng tiêu đề thừa phía trên bảng.</li>
-              <li>CSV nên lưu mã UTF-8. File xuất từ Excel trên Windows thường có BOM ở đầu, Denoise tự bỏ.</li>
-              <li>Mọi giá trị được đọc dưới dạng <b>chuỗi</b>, không tự ép kiểu. Nhờ vậy "007" vẫn là "007", ô trống không bị đoán thành NaN.</li>
-              <li>Delimiter trong Free Tools và Convert có thể để "tự nhận", Denoise thử nhận dạng rồi mới đọc.</li>
+              <li>Đọc CSV (nên lưu UTF-8) và Excel (.xlsx, .xls).</li>
+              <li>Dòng đầu tiên là tên cột.</li>
+              <li>Mọi giá trị được đọc dạng chữ, nên "007" vẫn là "007".</li>
             </ul>
           </section>
 
           <section class="tx-section" id="guide-03">
             <h2 class="tx-h2"><span>03</span>Free Tools</h2>
-            <p>Mỗi tool là một trang có hai khung: <b>01 Đầu vào</b> bên trái, <b>02 Kết quả</b> bên phải. Chọn file hoặc dán text, chỉnh vài tuỳ chọn, bấm Chạy. Kết quả hiện dạng bảng, tải về được ngay.</p>
+            <p>Chọn file hoặc dán text, bấm Chạy, rồi tải kết quả về.</p>
             <ul class="tx-list">
-              <li><b>Xoá dòng trùng</b>: chọn giữ bản đầu tiên hay cuối cùng; có thể bỏ qua hoa/thường và khoảng trắng thừa khi so sánh.</li>
-              <li><b>Cắt khoảng trắng</b>: cắt đầu/cuối, gộp khoảng trắng lặp, xoá ký tự có độ rộng bằng 0.</li>
-              <li><b>Ô trống</b>: bảng liệt kê cột nào có ô trống (kể cả "NA", "-", "?"). Mỗi cột chọn giữ nguyên, điền từ ô phía trên, điền giá trị cố định, hoặc xoá dòng; cột số có thêm trung bình, trung vị, KNN; cột nhóm có thêm giá trị phổ biến nhất. Hai ô tick chung: xoá dòng trống hoàn toàn (tick sẵn) và xoá cột trống hoàn toàn. Tải file lên rồi bấm Chạy ngay thì chỉ xoá dòng trống hoàn toàn.</li>
-              <li><b>Sai định dạng</b>: tự đoán kiểu từng cột rồi quét mọi cột một lượt (email, số điện thoại, ngày, số). Đoán sai kiểu cột nào thì chọn lại ở bảng ngay dưới dữ liệu. Chỉ báo, để trống ô sai hoặc xoá cả dòng.</li>
+              <li><b>Xoá dòng trùng</b>: giữ bản đầu hoặc bản cuối.</li>
+              <li><b>Cắt khoảng trắng</b>: cắt đầu cuối, gộp khoảng trắng lặp, bỏ ký tự vô hình.</li>
+              <li><b>Ô trống</b>: mỗi cột chọn giữ nguyên, điền hoặc xoá dòng.</li>
+              <li><b>Sai định dạng</b>: quét email, số điện thoại, ngày, số ở mọi cột.</li>
             </ul>
-            <p>Sau khi chạy, khung 01 không về trống mà hiện <b>kết quả vừa có</b> làm đầu vào cho tool kế tiếp. Dải đen phía trên ghi lại chuỗi các bước đã chạy; bạn có thể tải file khác hoặc quay về bản gốc bất cứ lúc nào.</p>
-            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Định nghĩa "ô trống" và "khoảng trắng thừa" của Free Tools dùng chung mã với Workspace, nên hai nơi luôn cho cùng một kết quả trên cùng một file.</p></div>
           </section>
 
           <section class="tx-section" id="guide-04">
             <h2 class="tx-h2"><span>04</span>Convert</h2>
             <ul class="tx-list">
-              <li><b>Đổi delimiter CSV</b>: chọn delimiter đích; delimiter nguồn có thể để tự nhận.</li>
-              <li><b>CSV → JSON</b>: mỗi dòng thành một object (khoá là tên cột) hoặc một mảng. Bật "ép kiểu" để số và true/false thành kiểu thật, nhưng giá trị có số 0 ở đầu vẫn giữ nguyên dạng chuỗi.</li>
-              <li><b>JSON → CSV</b>: nhận cả mảng JSON lẫn JSON Lines. Cột xuất ra là hợp của mọi khoá; object lồng nhau được làm phẳng thành <code>cha.con</code>.</li>
+              <li><b>Đổi delimiter CSV</b>: chọn dấu phân cách mới.</li>
+              <li><b>CSV → JSON</b>: mỗi dòng thành một object hoặc một mảng.</li>
+              <li><b>JSON → CSV</b>: nhận mảng JSON hoặc JSON Lines, object lồng nhau thành cột "cha.con".</li>
             </ul>
-            <p>Kết quả JSON hiện dạng chữ thô, kết quả CSV hiện dạng bảng. Nút Tải xuống làm việc ngay trên trình duyệt, không gọi thêm backend.</p>
           </section>
 
           <section class="tx-section" id="guide-05">
             <h2 class="tx-h2"><span>05</span>Tool cần cấu hình</h2>
-            <p>Cùng khuôn hai khung như Free Tools, nhưng chạy <b>hai nhịp</b> vì phải khai cột và tham số trước.</p>
+            <p>Chạy hai nhịp: khai cột rồi Phát hiện, sau đó chọn cách xử lý rồi Áp dụng.</p>
             <ol class="tx-steps">
-              <li><b>Chọn file hoặc dán text.</b> Denoise đọc tên cột và đoán kiểu dữ liệu từng cột để điền sẵn dropdown.</li>
-              <li><b>Khai cột và tham số.</b> Ví dụ cột <code>tuoi</code>, kiểu số nguyên, khoảng hợp lệ 18 đến 65; hay cột <code>phong_ban</code> với danh sách giá trị chuẩn. Rule liên cột khai quan hệ giữa hai cột.</li>
-              <li><b>Phát hiện.</b> Khung 02 liệt kê các dòng có lỗi, ô lỗi tô màu. Chưa sửa gì cả.</li>
-              <li><b>Áp dụng.</b> Chọn một cách xử lý cho mọi ô vừa gắn cờ rồi bấm Áp dụng. Khung 02 đổi thành dữ liệu đã sửa, tải về được, và nối tiếp sang tool khác được.</li>
+              <li><b>Chọn file</b> hoặc dán text.</li>
+              <li><b>Khai cột và tham số</b>, vd cột <code>tuoi</code> từ 18 đến 65.</li>
+              <li><b>Phát hiện</b>: ô lỗi được tô màu, chưa sửa gì.</li>
+              <li><b>Áp dụng</b>: chọn cách xử lý cho từng cột rồi bấm Áp dụng.</li>
             </ol>
-            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Cách xử lý khả dụng phụ thuộc vào cặp <b>kiểu cột × loại lỗi</b>. Ví dụ giá trị ngoài khoảng ở cột số được kéo về biên, còn cột không phải số thì không có cách này. Rule liên cột chỉ có xoá dòng vi phạm hoặc giữ nguyên để xem.</p></div>
           </section>
 
           <section class="tx-section" id="guide-06">
             <h2 class="tx-h2"><span>06</span>Class Noise</h2>
-            <p>Bạn chỉ cột nhãn và các cột đặc trưng (hiện chỉ nhận cột số). Denoise có 3 thuật toán độc lập để so sánh:</p>
+            <p>Chọn cột nhãn và các cột đặc trưng (chỉ cột số). Có 3 thuật toán để so sánh:</p>
             <ul class="tx-list">
-              <li><b>Confident Learning</b> với Random Forest: cần vài phút với file lớn. Xem <b>CV accuracy</b> so với <b>baseline</b> trước khi tin danh sách dòng nghi ngờ.</li>
-              <li><b>Mutual k-NN</b>: không train model, dựa trên láng giềng gần. Xem <b>độ phủ</b> (tỉ lệ dòng có láng giềng lẫn nhau).</li>
-              <li><b>Ensemble</b>: 3 classifier khác họ biểu quyết. Xem accuracy từng classifier.</li>
+              <li><b>Confident Learning</b>: Random Forest, có thể mất vài phút.</li>
+              <li><b>Mutual k-NN</b>: không train model, dựa vào láng giềng gần.</li>
+              <li><b>Ensemble</b>: 3 classifier khác họ biểu quyết.</li>
             </ul>
-            <p>Nút "Giảm cột tự động" xếp hạng cột theo mức liên quan tới nhãn, chọn điểm gãy bằng Elbow, rồi loại cột tương quan cao với nhau. Kết quả chỉ tick sẵn checkbox, bạn vẫn sửa tay được.</p>
           </section>
 
           <section class="tx-section" id="guide-07">
             <h2 class="tx-h2"><span>07</span>Xử lý an toàn</h2>
             <ul class="tx-list">
-              <li>Tool cần cấu hình luôn <b>phát hiện trước</b>: bạn thấy đúng những ô sẽ bị sửa rồi mới chọn cách xử lý.</li>
-              <li>File gốc không bao giờ bị đụng tới. Mỗi tool trả về một bản mới; "Bắt đầu lại từ gốc" trên dải đen quay về file ban đầu bất cứ lúc nào.</li>
-              <li>Mọi tool đều chạy qua backend và không giữ lại file sau khi trả kết quả.</li>
-              <li>Class Noise có chẩn đoán độ tin cậy ở bước Kết quả. Đọc nó trước khi tin danh sách dòng nghi ngờ.</li>
+              <li>Luôn phát hiện trước, rồi mới chọn cách xử lý.</li>
+              <li>File gốc không bị đụng tới. "Bắt đầu lại từ gốc" quay về bất cứ lúc nào.</li>
+              <li>Xoá dòng luôn được hỏi lại trước khi xoá thật.</li>
+              <li>Class Noise có phần độ tin cậy, đọc trước khi tin danh sách dòng nghi ngờ.</li>
             </ul>
           </section>
 
@@ -505,13 +497,11 @@
             <h2 class="tx-h2"><span>08</span>Câu hỏi thường gặp</h2>
             <dl class="tx-faq">
               <dt>Vì sao phải đăng nhập?</dt>
-              <dd>Mỗi file gắn với một tài khoản. Nhờ vậy hai người dùng chung một server không bao giờ thấy file của nhau.</dd>
+              <dd>Mỗi file gắn với một tài khoản, người khác không thấy được.</dd>
               <dt>File của tôi lưu ở đâu?</dt>
-              <dd>Free Tools, Convert và tool cần cấu hình không giữ lại file sau khi trả kết quả; chuỗi xử lý nằm trong trình duyệt của bạn. Class Noise giữ file trong bộ nhớ server trong lúc server chạy. Chỉ tài khoản được lưu lâu dài.</dd>
+              <dd>Chỉ trong bộ nhớ server lúc đang xử lý, không ghi ra đĩa. Chỉ tài khoản được lưu lâu dài.</dd>
               <dt>Mở trực tiếp file HTML được không?</dt>
-              <dd>Không. Phải chạy <code>python3 app.py</code> rồi mở <code>http://localhost:5000</code>, vì cookie đăng nhập chỉ hoạt động khi giao diện và backend cùng một địa chỉ.</dd>
-              <dt>Kết quả trên màn hình có khớp file tải về không?</dt>
-              <dd>Có. Trình duyệt không tự tính gì cả, mọi thứ đều do backend trả về, cùng một nguồn.</dd>
+              <dd>Không. Chạy <code>python3 app.py</code> rồi mở <code>http://localhost:5000</code>.</dd>
             </dl>
           </section>
         </article>
@@ -534,7 +524,7 @@
         <div>
           <p class="hm-eyebrow">[ Bảo mật ]</p>
           <h1 class="tx-title">Dữ liệu của ai,<br>người đó thấy</h1>
-          <p class="tx-desc">Denoise chạy trên server của chính bạn hoặc của nhóm. Trang này nói rõ file đi đâu, mật khẩu được giữ thế nào, và những giới hạn còn tồn tại.</p>
+          <p class="tx-desc">File đi đâu, mật khẩu giữ thế nào, giới hạn ra sao.</p>
         </div>
         <svg class="tx-illu" viewBox="0 0 420 260" aria-hidden="true">
           <rect x="40" y="40" width="150" height="180" fill="none" stroke="#111" stroke-width="1"/>
@@ -558,10 +548,10 @@
 
       <!-- Dải 4 ô ngay dưới phần mở đầu (CYD: Data / Passwords / Session / Scripts). -->
       <div class="tx-strip">
-        <div class="tx-strip-item"><span class="tx-icon">▦</span><b>Dữ liệu</b><small>Chỉ trong bộ nhớ server, gắn với tài khoản</small></div>
-        <div class="tx-strip-item"><span class="tx-icon">∗</span><b>Mật khẩu</b><small>Băm bằng thư viện chuẩn, không lưu bản rõ</small></div>
-        <div class="tx-strip-item"><span class="tx-icon">◷</span><b>Phiên</b><small>Cookie có chữ ký, hết khi đăng xuất</small></div>
-        <div class="tx-strip-item"><span class="tx-icon">ƒ</span><b>Biểu thức</b><small>Diễn giải có whitelist, không eval()</small></div>
+        <div class="tx-strip-item"><span class="tx-icon">▦</span><b>Dữ liệu</b><small>Trong bộ nhớ server, theo tài khoản</small></div>
+        <div class="tx-strip-item"><span class="tx-icon">∗</span><b>Mật khẩu</b><small>Đã băm, không lưu bản rõ</small></div>
+        <div class="tx-strip-item"><span class="tx-icon">◷</span><b>Phiên</b><small>Cookie có chữ ký</small></div>
+        <div class="tx-strip-item"><span class="tx-icon">ƒ</span><b>Biểu thức</b><small>Không dùng eval()</small></div>
       </div>
 
       <div class="tx-layout">
@@ -577,48 +567,39 @@
         <article class="tx-content">
           <section class="tx-section" id="sec-01">
             <h2 class="tx-h2"><span>01</span>File của bạn đi đâu</h2>
-            <p>File tải lên được đọc vào bộ nhớ của backend và giữ ở đó trong lúc server chạy. Không ghi ra đĩa, không gửi tới dịch vụ nào bên ngoài.</p>
+            <p>File được đọc vào bộ nhớ của backend, không ghi ra đĩa và không gửi tới dịch vụ bên ngoài.</p>
             <ul class="tx-list">
-              <li>Bản gốc không bao giờ bị sửa. Mọi thao tác xử lý tạo ra bản "đang làm việc" riêng.</li>
-              <li>Free Tools và Convert còn gọn hơn: đọc, xử lý, trả kết quả trong đúng một lần gọi, không giữ lại gì.</li>
-              <li>Khởi động lại server là toàn bộ file trong bộ nhớ biến mất.</li>
+              <li>Bản gốc không bao giờ bị sửa.</li>
+              <li>Free Tools và Convert không giữ lại gì sau khi trả kết quả.</li>
+              <li>Khởi động lại server là file trong bộ nhớ biến mất.</li>
             </ul>
           </section>
           <section class="tx-section" id="sec-02">
             <h2 class="tx-h2"><span>02</span>Mật khẩu</h2>
-            <p>Mật khẩu được băm bằng hàm chuẩn của thư viện Werkzeug đi kèm Flask trước khi lưu vào SQLite. Server không giữ bản rõ, nên không thể "xem lại" mật khẩu của ai.</p>
+            <p>Mật khẩu được băm bằng thư viện Werkzeug trước khi lưu vào SQLite. Server không giữ bản rõ.</p>
             <ul class="tx-list">
-              <li>Sai tên đăng nhập hay sai mật khẩu đều trả cùng một câu báo lỗi. Không thể dò xem tên nào đã tồn tại.</li>
-              <li>Tên đăng nhập tối thiểu 3 ký tự, mật khẩu tối thiểu 6 ký tự. Đổi mật khẩu cần nhập mật khẩu hiện tại.</li>
+              <li>Sai tên đăng nhập hay sai mật khẩu đều báo cùng một câu.</li>
+              <li>Tên đăng nhập từ 3 ký tự, mật khẩu từ 6 ký tự.</li>
             </ul>
-            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Denoise cố tình không tự viết thuật toán băm. Đây là chỗ sai một ly là mất an toàn mà không ai nhận ra, nên dùng thư viện đã được kiểm chứng.</p></div>
           </section>
           <section class="tx-section" id="sec-03">
             <h2 class="tx-h2"><span>03</span>Phiên đăng nhập</h2>
-            <p>Trạng thái đăng nhập nằm trong một cookie phiên do Flask ký bằng khoá bí mật của server. Trình duyệt không sửa được nội dung cookie mà server không phát hiện.</p>
-            <ul class="tx-list">
-              <li>Giao diện và backend cùng một địa chỉ nên cookie không đi xuyên trang web khác.</li>
-              <li>Đăng xuất xoá phiên ngay. Không có "ghi nhớ đăng nhập" dài hạn.</li>
-            </ul>
+            <p>Đăng nhập được giữ bằng cookie phiên do Flask ký. Đăng xuất là xoá phiên ngay.</p>
           </section>
           <section class="tx-section" id="sec-04">
             <h2 class="tx-h2"><span>04</span>Quyền sở hữu file</h2>
-            <p>Mỗi file và mỗi bản tải về được gắn với tài khoản đã tải lên. Mọi đường dẫn nhận mã file đều kiểm tra chủ sở hữu trước khi làm bất cứ việc gì.</p>
-            <ul class="tx-list">
-              <li>Yêu cầu tới file của tài khoản khác nhận cùng một câu trả lời như khi file không tồn tại.</li>
-              <li>Áp dụng cho toàn bộ 9 đường dẫn có dùng mã file: dò lỗi, xử lý, hoàn tác, xem dữ liệu, xuất, tải về, class noise.</li>
-            </ul>
+            <p>Mỗi file gắn với tài khoản đã tải lên. File của tài khoản khác được trả lời như file không tồn tại.</p>
           </section>
           <section class="tx-section" id="sec-05">
             <h2 class="tx-h2"><span>05</span>Biểu thức rule liên cột</h2>
-            <p>Rule dạng biểu thức (ví dụ <code>tong == gia * so_luong</code> hay <code>tuoi &gt;= 18 và tuoi &lt;= 65</code>) được đọc bằng bộ phân tích tự viết thành cây cú pháp, và chỉ hiểu đúng: so sánh, bốn phép tính, và / hoặc / không, nếu–thì (<code>=&gt;</code>), số, chữ, tên cột, cùng bốn hàm <code>so</code>, <code>ngay</code>, <code>chu</code>, <code>có</code>. Không có <code>eval()</code>, không gọi được hàm nào khác, không truy cập gì ngoài bảng dữ liệu.</p>
+            <p>Biểu thức được đọc bằng bộ phân tích tự viết, chỉ hiểu so sánh, phép tính và vài hàm cố định. Không dùng <code>eval()</code>.</p>
           </section>
           <section class="tx-section" id="sec-06">
             <h2 class="tx-h2"><span>06</span>Giới hạn đã biết</h2>
             <ul class="tx-list">
-              <li>Khoá bí mật ký cookie sinh ngẫu nhiên mỗi lần khởi động server (trừ khi đặt biến môi trường cố định). Khởi động lại là mọi người phải đăng nhập lại.</li>
-              <li>Chưa có quên mật khẩu, xác thực email, hay giới hạn số lần đăng nhập sai.</li>
-              <li>Chưa dùng HTTPS khi chạy cục bộ. Nếu đưa lên mạng, cần đặt sau một reverse proxy có TLS.</li>
+              <li>Khởi động lại server thì mọi người phải đăng nhập lại.</li>
+              <li>Chưa có quên mật khẩu, xác thực email hay giới hạn số lần đăng nhập sai.</li>
+              <li>Chạy cục bộ chưa có HTTPS. Đưa lên mạng cần đặt sau reverse proxy có TLS.</li>
             </ul>
           </section>
         </article>
@@ -641,7 +622,7 @@
         <div>
           <p class="hm-eyebrow">[ Quyền riêng tư ]</p>
           <h1 class="tx-title">Denoise biết gì<br>về bạn</h1>
-          <p class="tx-desc">Rất ít. Một tên đăng nhập, một mật khẩu đã băm, và các file bạn đang xử lý trong lúc server chạy. Không có theo dõi, không có phân tích hành vi, không có bên thứ ba.</p>
+          <p class="tx-desc">Rất ít: tên đăng nhập, mật khẩu đã băm và file bạn đang xử lý. Không theo dõi, không bên thứ ba.</p>
         </div>
         <svg class="tx-illu" viewBox="0 0 420 260" aria-hidden="true">
           <rect x="60" y="30" width="300" height="200" fill="none" stroke="#111" stroke-width="1" stroke-dasharray="4 3"/>
@@ -670,35 +651,33 @@
         <article class="tx-content">
           <section class="tx-section" id="priv-01">
             <h2 class="tx-h2"><span>01</span>Thu thập những gì</h2>
-            <div class="tx-icon-row"><span class="tx-icon">👤</span><div><b>Tên đăng nhập</b><p>Do bạn tự đặt. Không yêu cầu email, số điện thoại hay tên thật.</p></div></div>
-            <div class="tx-icon-row"><span class="tx-icon">∗</span><div><b>Mật khẩu đã băm</b><p>Chỉ lưu kết quả băm. Không ai, kể cả người quản trị server, đọc được mật khẩu gốc.</p></div></div>
-            <div class="tx-icon-row"><span class="tx-icon">◷</span><div><b>Thời điểm tạo tài khoản</b><p>Hiện ở trang hồ sơ của chính bạn. Không dùng vào việc gì khác.</p></div></div>
+            <div class="tx-icon-row"><span class="tx-icon">👤</span><div><b>Tên đăng nhập</b><p>Do bạn tự đặt, không cần email hay tên thật.</p></div></div>
+            <div class="tx-icon-row"><span class="tx-icon">∗</span><div><b>Mật khẩu đã băm</b><p>Không ai đọc được mật khẩu gốc.</p></div></div>
+            <div class="tx-icon-row"><span class="tx-icon">◷</span><div><b>Thời điểm tạo tài khoản</b><p>Chỉ hiện ở hồ sơ của bạn.</p></div></div>
           </section>
           <section class="tx-section" id="priv-02">
             <h2 class="tx-h2"><span>02</span>File bạn tải lên</h2>
-            <p>File chỉ tồn tại trong bộ nhớ của backend trong phiên làm việc và chỉ tài khoản của bạn truy cập được. Nội dung file không được ghi vào nhật ký, không được dùng để huấn luyện hay thống kê gì.</p>
+            <p>File chỉ nằm trong bộ nhớ backend khi đang xử lý, chỉ tài khoản của bạn truy cập được.</p>
             <ul class="tx-list">
-              <li>Khởi động lại server là file biến mất hoàn toàn.</li>
-              <li>Free Tools và Convert không giữ lại file sau khi trả kết quả.</li>
-              <li>Class Noise có train model trên dữ liệu của bạn, nhưng model đó chỉ sống trong lần gọi đó và bị bỏ ngay sau khi trả kết quả.</li>
+              <li>Khởi động lại server là file biến mất.</li>
+              <li>Class Noise train model trên dữ liệu của bạn, model bị bỏ ngay sau khi trả kết quả.</li>
             </ul>
           </section>
           <section class="tx-section" id="priv-03">
             <h2 class="tx-h2"><span>03</span>Không có bên thứ ba</h2>
-            <p>Không có mã theo dõi, không có công cụ phân tích, không có quảng cáo, không có CDN cho mã JavaScript. Toàn bộ giao diện và backend nằm trong cùng một dự án.</p>
-            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Ngoại lệ duy nhất: phông chữ IBM Plex được tải từ Google Fonts. Yêu cầu đó chỉ mang địa chỉ IP và thông tin trình duyệt tới Google, không mang dữ liệu nào của bạn. Có thể tải phông về server để bỏ cả ngoại lệ này.</p></div>
+            <p>Không có mã theo dõi, phân tích hay quảng cáo.</p>
+            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Ngoại lệ: phông IBM Plex tải từ Google Fonts, không mang dữ liệu của bạn.</p></div>
           </section>
           <section class="tx-section" id="priv-04">
             <h2 class="tx-h2"><span>04</span>Cookie</h2>
-            <p>Đúng một cookie: cookie phiên đăng nhập của Flask. Nó chỉ chứa mã tài khoản đã được ký, dùng để biết bạn là ai giữa các lần gọi backend. Không có cookie cho mục đích khác.</p>
+            <p>Chỉ một cookie phiên đăng nhập của Flask, chứa mã tài khoản đã ký.</p>
           </section>
           <section class="tx-section" id="priv-05">
             <h2 class="tx-h2"><span>05</span>Xoá dữ liệu</h2>
             <ul class="tx-list">
-              <li><b>File</b>: đăng xuất không xoá ngay, nhưng khởi động lại server thì xoá hết. Không có bản sao nào khác.</li>
-              <li><b>Tài khoản</b>: chưa có nút tự xoá tài khoản. Người quản trị server xoá được trực tiếp trong cơ sở dữ liệu SQLite.</li>
+              <li><b>File</b>: khởi động lại server là mất hết.</li>
+              <li><b>Tài khoản</b>: chưa có nút tự xoá, người quản trị xoá trong SQLite.</li>
             </ul>
-            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Denoise là sản phẩm khoá luận, chạy trên máy cá nhân hoặc máy của nhóm. Người quản trị server chính là người chịu trách nhiệm với dữ liệu trên đó.</p></div>
           </section>
         </article>
       </div>
@@ -744,7 +723,7 @@
       <section class="panel is-active" id="panel-1">
         <p class="eyebrow">[ Bước 1 / 4 ]</p>
         <h2 class="panel-title">Tải dữ liệu &amp; chọn phương pháp</h2>
-        <p class="panel-desc">CSV hoặc Excel, dòng đầu là tên cột, có một cột nhãn phân loại. Chọn một trong ba thuật toán phát hiện (Bảng 6, Gupta &amp; Gupta 2019) rồi bấm Tải lên.</p>
+        <p class="panel-desc">CSV hoặc Excel có một cột nhãn. Chọn thuật toán rồi bấm Tải lên.</p>
         <div class="convert-grid">
           <section class="convert-panel ft-panel">
             <div class="ft-panel-head"><span class="ft-eyebrow-tag">01 · File của bạn</span></div>
@@ -784,17 +763,17 @@
                   <div class="direction-card" data-method="distance_based" tabindex="0" role="button">
                     <span class="dir-num">N13</span>
                     <h3>Distance-based</h3>
-                    <p>Mutual k-Nearest Neighbor. Dựa thuần vào khoảng cách giữa các dòng, không train model nào. Nhanh.</p>
+                    <p>Mutual k-NN, dựa vào khoảng cách giữa các dòng. Nhanh.</p>
                   </div>
                   <div class="direction-card" data-method="single_learning" tabindex="0" role="button">
                     <span class="dir-num">CL</span>
                     <h3>Single learning-based</h3>
-                    <p>Confident Learning với Random Forest. Dùng xác suất dự đoán của một model để tìm dòng nghi ngờ. Có thể mất vài phút.</p>
+                    <p>Confident Learning với Random Forest. Có thể mất vài phút.</p>
                   </div>
                   <div class="direction-card" data-method="ensemble_based" tabindex="0" role="button">
                     <span class="dir-num">N29</span>
                     <h3>Ensemble-based</h3>
-                    <p>Ba classifier khác họ (Logistic Regression, Naive Bayes, Linear SVM) biểu quyết. Dòng nào đa số bất đồng với nhãn ghi thì nghi ngờ.</p>
+                    <p>Ba classifier khác họ biểu quyết.</p>
                   </div>
                 </div>
               </div>
@@ -854,9 +833,8 @@
         <!-- Nhánh CLASS NOISE -->
         <div id="panel-3-class" hidden>
           <p class="panel-desc" id="panel-3-class-desc">
-            Chọn một cột làm <strong>nhãn</strong> và các cột <strong>số</strong> làm đặc trưng. Cột không ép được thành số
-            tự động bị loại lúc chạy. Trước khi chạy, các cột đặc trưng được tự động cap outlier về biên IQR và biến đổi
-            logarit (cột không âm), không xoá dữ liệu nào.
+            Chọn một cột làm <strong>nhãn</strong> và các cột <strong>số</strong> làm đặc trưng.
+            Trước khi chạy, cột đặc trưng được tự động cap outlier và biến đổi logarit.
           </p>
 
           <div class="field field-grow">
@@ -866,10 +844,7 @@
 
           <div class="sub-section">
             <h3 class="sub-title">Giảm cột tự động (tuỳ chọn)</h3>
-            <p class="panel-desc">
-              Xếp hạng mức liên quan tới nhãn (Feature Importance), tìm điểm "gãy" để giữ nhóm cột quan trọng nhất, rồi lọc
-              cột thừa thông tin lẫn nhau (tương quan ≥ 0.8). Kết quả tự tick vào danh sách bên dưới, vẫn sửa tay được.
-            </p>
+            <p class="panel-desc">Giữ các cột liên quan nhất tới nhãn và bỏ cột thừa. Kết quả tự tick bên dưới, vẫn sửa tay được.</p>
             <div class="panel-actions">
               <button class="btn btn-ghost" id="class-reduce-btn" type="button">Chạy giảm cột tự động</button>
               <span class="status-text" id="class-reduce-status"></span>
@@ -910,10 +885,7 @@
                 <input type="number" class="input" id="class-k-neighbors" value="5" min="1" max="50" />
               </div>
             </div>
-            <p class="panel-desc">
-              Mutual k-NN không train model nào, chỉ xét k láng giềng gần nhất của mỗi dòng sau khi chuẩn hoá z-score,
-              nên thường nhanh hơn Single learning-based với cùng kích thước file.
-            </p>
+            <p class="panel-desc">Không train model nên thường nhanh hơn.</p>
           </div>
 
           <div class="sub-section" id="class-params-ensemble" hidden>
@@ -924,16 +896,10 @@
                 <input type="number" class="input" id="class-ensemble-cv-folds" value="5" min="2" max="10" />
               </div>
             </div>
-            <p class="panel-desc">
-              Train ba classifier khác họ qua Cross-Validation, dòng nào bị đa số (≥ 2/3) classifier dự đoán khác nhãn ghi thì
-              gắn cờ. Nhẹ hơn nhiều so với Random Forest 300 cây.
-            </p>
+            <p class="panel-desc">Dòng bị ít nhất 2/3 classifier dự đoán khác nhãn ghi thì bị gắn cờ.</p>
           </div>
 
-          <p class="hint-note" id="class-wait-hint">
-            Huấn luyện qua Cross-Validation có thể mất từ vài giây đến vài phút tuỳ kích thước file. Trang không phản hồi gì
-            trong lúc chờ, đừng tắt tab.
-          </p>
+          <p class="hint-note" id="class-wait-hint">Có thể mất vài phút tuỳ kích thước file. Đừng tắt tab.</p>
 
           <div class="panel-actions">
             <button class="btn btn-primary" id="class-detect-btn" type="button">Phát hiện Class Noise →</button>
@@ -997,7 +963,7 @@
 
         <!-- Nhánh CLASS NOISE -->
         <div id="panel-4-class" hidden>
-          <p class="panel-desc">Độ tin cậy của phương pháp. Xem trước khi tin bất kỳ dòng nghi ngờ nào bên dưới.</p>
+          <p class="panel-desc">Xem độ tin cậy trước khi tin danh sách bên dưới.</p>
 
           <div class="stats-grid" id="class-stats-grid"></div>
 
@@ -1071,10 +1037,10 @@
         <!-- Nhánh CLASS NOISE: chưa có xử lý (xem roadmap CLAUDE.md) -->
         <div id="panel-5-class" hidden>
           <div class="tx-note"><span class="tx-note-tag">Đang phát triển</span>
-            <p>Xử lý cho Class Noise chưa có trong bản này. Danh sách dòng nghi ngờ ở Bước 4 vẫn dùng được để rà soát tay.</p>
+            <p>Chưa có xử lý cho Class Noise. Dùng danh sách dòng nghi ngờ ở bước Kết quả để rà soát tay.</p>
           </div>
           <div class="panel-actions">
-            <button class="btn btn-ghost" id="class-back-to-results-btn" type="button">← Quay lại Bước 4</button>
+            <button class="btn btn-ghost" id="class-back-to-results-btn" type="button">← Quay lại kết quả</button>
           </div>
         </div>
       </section>
@@ -1118,12 +1084,12 @@
         <div>
           <p class="hm-eyebrow">[ Tài khoản ]</p>
           <h1 class="tx-title">Hồ sơ<br>của bạn</h1>
-          <p class="tx-desc">Denoise chỉ giữ ba thứ về bạn: tên đăng nhập, mật khẩu đã băm và thời điểm tạo tài khoản. File bạn tải lên không nằm trong hồ sơ.</p>
+          <p class="tx-desc">Chỉ giữ tên đăng nhập, mật khẩu đã băm và thời điểm tạo tài khoản.</p>
         </div>
         <table class="hm-spec pf-spec">
           <tr><th>Tên đăng nhập</th><td class="mono" id="profile-username">—</td></tr>
           <tr><th>Tạo lúc</th><td class="mono" id="profile-created-at">—</td></tr>
-          <tr><th>File đang giữ</th><td>Trong bộ nhớ server, mất khi khởi động lại</td></tr>
+          <tr><th>File đang giữ</th><td>Trong bộ nhớ server</td></tr>
         </table>
       </section>
 
@@ -1152,9 +1118,9 @@
           <div class="ft-panel-head"><span class="ft-eyebrow-tag">Phiên làm việc</span></div>
           <div class="ft-panel-body">
             <ul class="tx-list pf-list">
-              <li>Đăng xuất xoá phiên ngay trên server. Không có "ghi nhớ đăng nhập" dài hạn.</li>
-              <li>Khởi động lại server là mọi người phải đăng nhập lại và file trong bộ nhớ biến mất.</li>
-              <li>Chưa có nút tự xoá tài khoản; người quản trị server xoá trực tiếp trong SQLite.</li>
+              <li>Đăng xuất là xoá phiên ngay.</li>
+              <li>Khởi động lại server thì phải đăng nhập lại.</li>
+              <li>Chưa có nút tự xoá tài khoản.</li>
             </ul>
             <div class="panel-actions">
               <a class="btn btn-ghost" href="#" data-section="home">← Về trang chủ</a>
@@ -1309,9 +1275,9 @@
                 <div class="ft-result-skeleton-rows" aria-hidden="true">
                   <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
                 </div>
-                <p class="ft-result-skeleton-sub">Phát hiện trước · xử lý sau · không lưu file gốc</p>
+                <p class="ft-result-skeleton-sub">Không lưu file gốc</p>
               </div>
-              <p class="ft-result-skeleton-caption">Bấm "Phát hiện" để xem ô lỗi, rồi chọn cách xử lý.</p>
+              <p class="ft-result-skeleton-caption">Bấm "Phát hiện" để xem ô lỗi.</p>
             </div>
             <div class="cyd-table" id="cf-result-card" hidden>
               <div class="cyd-table-bar">
@@ -1339,7 +1305,6 @@
       <div class="ft-rule"></div>
       <div class="ft-section-head">
         <h2 class="ft-h2">Cách hoạt động</h2>
-        <span class="ft-section-meta">Phát hiện trước · xử lý sau</span>
       </div>
       <div class="tool-steps" id="cf-steps"></div>
       <div class="ft-rule"></div>
@@ -1412,7 +1377,7 @@
                 <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
               </svg>
               <p class="ft-dropzone-title">Thả file CSV vào đây</p>
-              <p class="ft-dropzone-hint">Tối đa 10 MB · CSV hoặc Excel · không lưu lại file gốc</p>
+              <p class="ft-dropzone-hint">CSV hoặc Excel · tối đa 10 MB</p>
               <span class="btn btn-primary btn-small ft-choose-file-btn">Chọn file</span>
             </label>
             <input type="file" id="ft-file-input" accept=".csv,.xlsx,.xls" hidden />
@@ -1458,16 +1423,13 @@
               </select>
             </div>
             <label class="switch-row"><input type="checkbox" id="opt-ignore-case" /> Bỏ qua hoa/thường</label>
-            <p class="hint-note">"An" và "AN" tính là trùng</p>
             <label class="switch-row"><input type="checkbox" id="opt-ignore-whitespace" /> Bỏ qua khoảng trắng thừa</label>
-            <p class="hint-note">Khoảng trắng đầu, cuối và lặp lại</p>
           </div>
 
           <div class="convert-options" id="convert-options-trim-whitespace" hidden>
             <label class="switch-row"><input type="checkbox" id="opt-collapse-repeated" /> Gộp khoảng trắng lặp lại</label>
-            <p class="hint-note">"a␣␣b" thành "a␣b"</p>
             <label class="switch-row"><input type="checkbox" id="opt-remove-zero-width" checked /> Xoá ký tự vô hình (zero-width)</label>
-            <p class="hint-note">Luôn cắt khoảng trắng đầu/cuối và đổi non-breaking space thành dấu cách, dù tick hay không</p>
+            <p class="hint-note">Khoảng trắng đầu / cuối luôn được cắt.</p>
           </div>
 
           <!-- Ô trống (GỘP Xoá dòng trống + Điền/xoá ô trống + Thiếu giá trị nâng cao): bảng "Ô trống từng cột" do workspace.js dựng sau
@@ -1478,9 +1440,9 @@
                  cột để nhìn ngữ cảnh), gõ giá trị vào từng ô. Do workspace.js dựng (renderBlankManual). -->
             <div class="ft-coltypes ft-blank-manual" id="ft-blank-manual" hidden></div>
             <label class="switch-row"><input type="checkbox" id="opt-blank-remove-empty-rows" checked /> Xoá dòng trống hoàn toàn</label>
-            <p class="hint-note" id="opt-blank-rows-hint">Dòng mà mọi cột đều trống (kể cả "NA", "-", "?")</p>
+            <p class="hint-note" id="opt-blank-rows-hint">Mọi cột đều trống (kể cả "NA", "-", "?")</p>
             <label class="switch-row"><input type="checkbox" id="opt-blank-remove-empty-columns" /> Xoá luôn cột trống hoàn toàn</label>
-            <p class="hint-note" id="opt-blank-cols-hint">Cột mà mọi dòng đều trống, kể cả tiêu đề</p>
+            <p class="hint-note" id="opt-blank-cols-hint">Mọi dòng đều trống, kể cả tiêu đề</p>
           </div>
 
           <!-- Sai định dạng: bảng KIỂU DỮ LIỆU TỪNG CỘT (Denoise tự đoán từ giá trị thật, người dùng sửa được)
@@ -1501,7 +1463,7 @@
                 <option value="remove_row">Xoá cả dòng</option>
               </select>
             </div>
-            <p class="hint-note">"Để trống ô sai" biến ô sai thành ô trống, rồi dùng tool "Ô trống" nếu muốn điền lại. Ô vốn đã trống không bị tính là sai.</p>
+            <p class="hint-note">"Để trống ô sai" rồi dùng tool "Ô trống" nếu muốn điền lại.</p>
           </div>
 
           <p class="form-error" id="ft-error" hidden></p>
@@ -1532,9 +1494,9 @@
                 <div class="ft-result-skeleton-rows" aria-hidden="true">
                   <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
                 </div>
-                <p class="ft-result-skeleton-sub">Xử lý qua backend · không lưu file gốc</p>
+                <p class="ft-result-skeleton-sub">Không lưu file gốc</p>
               </div>
-              <p class="ft-result-skeleton-caption">Kết quả hiện ở đây ngay khi bạn bấm "Chạy".</p>
+              <p class="ft-result-skeleton-caption">Bấm "Chạy" để xem kết quả.</p>
             </div>
             <!-- Bảng kết quả kiểu CYD: thẻ đen = tên tool vừa chạy, phải = N DÒNG × M CỘT. -->
             <div class="cyd-table" id="ft-result-card" hidden>
@@ -1566,7 +1528,6 @@
       <div class="ft-rule"></div>
       <div class="ft-section-head">
         <h2 class="ft-h2">Cách hoạt động</h2>
-        <span class="ft-section-meta">Ba bước · không cần cài gì</span>
       </div>
       <div class="tool-steps" id="tool-steps"></div>
       <div class="ft-rule"></div>
@@ -1634,7 +1595,7 @@
                 <path d="M12 16V4" /><path d="M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
               </svg>
               <p class="ft-dropzone-title" id="cv-dropzone-title">Thả file CSV vào đây</p>
-              <p class="ft-dropzone-hint" id="cv-dropzone-hint">Tối đa 10 MB · không lưu lại file gốc</p>
+              <p class="ft-dropzone-hint" id="cv-dropzone-hint">Tối đa 10 MB</p>
               <span class="btn btn-primary btn-small ft-choose-file-btn">Chọn file</span>
             </label>
             <input type="file" id="convert-file-input" accept=".csv,.txt" hidden />
@@ -1703,7 +1664,6 @@
                 <option value="objects">Mỗi dòng 1 object (khoá = tên cột)</option>
                 <option value="arrays">Mỗi dòng 1 mảng (không có tên cột)</option>
               </select>
-              <p class="hint-note">Objects: mỗi dòng 1 object, khoá là tên cột · Arrays: mỗi dòng 1 mảng</p>
             </div>
             <label class="switch-row"><input type="checkbox" id="opt-convert-types" checked /> Tự ép kiểu số / true-false (giữ nguyên số có 0 ở đầu)</label>
             <label class="switch-row"><input type="checkbox" id="opt-indent" checked /> Thụt lề JSON cho dễ đọc</label>
@@ -1719,10 +1679,7 @@
                 <option value="|">Dấu gạch đứng (|)</option>
               </select>
             </div>
-            <p class="panel-desc">
-              Nhận 1 mảng JSON object, hoặc JSON Lines (mỗi dòng 1 object riêng). Cột xuất ra = hợp mọi khoá có
-              trong bất kỳ object nào; object lồng nhau tự làm phẳng thành "cha.con".
-            </p>
+            <p class="panel-desc">Nhận mảng JSON hoặc JSON Lines. Object lồng nhau thành cột "cha.con".</p>
           </div>
 
           <p class="form-error" id="convert-error" hidden></p>
@@ -1747,9 +1704,9 @@
                 <div class="ft-result-skeleton-rows" aria-hidden="true">
                   <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
                 </div>
-                <p class="ft-result-skeleton-sub">Xử lý qua backend · không lưu file gốc</p>
+                <p class="ft-result-skeleton-sub">Không lưu file gốc</p>
               </div>
-              <p class="ft-result-skeleton-caption">Kết quả hiện ở đây ngay khi bạn bấm "Convert".</p>
+              <p class="ft-result-skeleton-caption">Bấm "Convert" để xem kết quả.</p>
             </div>
             <!-- Kết quả dạng BẢNG (đổi delimiter, JSON → CSV) -->
             <div class="cyd-table" id="convert-result-card" hidden>
@@ -1783,7 +1740,6 @@
       <div class="ft-rule"></div>
       <div class="ft-section-head">
         <h2 class="ft-h2">Cách hoạt động</h2>
-        <span class="ft-section-meta">Ba bước · không cần cài gì</span>
       </div>
       <div class="tool-steps" id="cv-steps"></div>
       <div class="ft-rule"></div>
