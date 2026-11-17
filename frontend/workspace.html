@@ -763,6 +763,21 @@
                   </div>
                 </label>
                 <input type="file" id="file-input" accept=".csv,.xlsx,.xls" hidden />
+                <!-- Xem trước dữ liệu (cùng khuôn khung "01 · Đầu vào" của các tool khác). Hiện sau khi chọn file,
+                     thay cho ô kéo-thả; do workspace-flow.js dựng (showClassPreview), dữ liệu từ /api/noise-tools/inspect. -->
+                <div class="ft-raw-preview cyd-table" id="class-raw-preview" hidden>
+                  <div class="cyd-table-bar">
+                    <span class="cyd-table-tag" id="class-raw-preview-label"></span>
+                    <span class="cyd-table-right">
+                      <span class="cyd-table-dims" id="class-raw-preview-dims"></span>
+                      <button class="btn btn-ghost btn-small" id="class-change-file-btn" type="button">↺ Đổi file</button>
+                    </span>
+                  </div>
+                  <div class="table-wrap" id="class-raw-preview-table-wrap">
+                    <table class="results-table" id="class-raw-preview-table"></table>
+                  </div>
+                  <p class="ft-table-note" id="class-raw-preview-note" hidden></p>
+                </div>
               </div>
               <p class="hint-note" id="upload-notice">Đang kiểm tra kết nối tới backend…</p>
               <div class="panel-actions">

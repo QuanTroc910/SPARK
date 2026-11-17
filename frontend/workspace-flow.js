@@ -262,7 +262,71 @@ function handleFileSelected(file) {
   $("file-name-text").textContent = file.name;
   $("file-meta-text").textContent = `${(file.size / 1024).toFixed(1)} KB`;
   checkBackendHealth(); // re-check phòng khi user vừa bật backend lên
+  loadClassPreview(file); // hiện bảng xem trước dữ liệu như các tool khác
 }
+
+// ----- Xem trước dữ liệu ở Bước 1 (cùng cách các tool khác làm: workspace.js, cfInspect/showRawPreview) -----
+// Nhờ backend đọc file (/api/noise-tools/inspect: dùng chung bộ đọc CSV/Excel với mọi tool nên cả Excel cũng xem được)
+// rồi vẽ bảng bằng renderClassPreviewTable() bên dưới (KHÔNG dùng renderPreviewTable() của workspace.js: file này đã có 1 hàm
+// cùng tên cho panel xem dữ liệu cũ, trong IIFE nên đè lên hàm kia). Chỉ để XEM -- tải lên thật vẫn qua /api/upload.
+// classPreviewSeq: chọn file khác khi lần đọc trước chưa xong thì kết quả về muộn của file cũ bị bỏ.
+let classPreviewSeq = 0;
+// rows = [header, ...dòng], mọi ô là chuỗi. Cột đầu "Dòng" = số thứ tự 1,2,3... (cùng bảng xem trước của các tool khác).
+function renderClassPreviewTable(table, rows) {
+  const [header, ...body] = rows;
+  table.innerHTML =
+    "<thead><tr><th>Dòng</th>" + header.map((h) => `<th>${escapeHtml(h)}</th>`).join("") + "</tr></thead>" +
+    "<tbody>" + body.map((row, i) => `<tr><td>${i + 1}</td>` + row.map((c) => `<td>${escapeHtml(c)}</td>`).join("") + "</tr>").join("") + "</tbody>";
+}
+function showClassPreview(label, dims, rows, note) {
+  $("dropzone").hidden = true;
+  $("class-raw-preview").hidden = false;
+  $("class-raw-preview-label").textContent = label;
+  $("class-raw-preview-dims").textContent = dims || "";
+  const hasTable = !!(rows && rows.length);
+  $("class-raw-preview-table-wrap").hidden = !hasTable;
+  if (hasTable) renderClassPreviewTable($("class-raw-preview-table"), rows);
+  else $("class-raw-preview-table").innerHTML = "";
+  const noteEl = $("class-raw-preview-note");
+  noteEl.hidden = !note;
+  noteEl.textContent = note || "";
+  noteEl.classList.toggle("is-only", !hasTable);
+}
+async function loadClassPreview(file) {
+  const seq = ++classPreviewSeq;
+  const sizeText = `${(file.size / 1024).toFixed(1)} KB`;
+  showClassPreview(file.name, sizeText, null, "Đang đọc file…");
+  const fd = new FormData();
+  fd.append("file", file);
+  let response, data;
+  try {
+    response = await fetch(`${API_BASE}/api/noise-tools/inspect`, { method: "POST", body: fd });
+    data = await response.json();
+  } catch (err) {
+    if (seq === classPreviewSeq) showClassPreview(file.name, sizeText, null, "Không xem trước được file, nhưng vẫn tải lên được.");
+    return;
+  }
+  if (seq !== classPreviewSeq) return;
+  if (!response.ok) {
+    showClassPreview(file.name, sizeText, null, data.error || "Không đọc được file.");
+    return;
+  }
+  const shown = data.preview_rows.length - 1; // trừ dòng tiêu đề; backend đã cắt tối đa 100 dòng
+  const note = data.row_count > shown ? `Xem trước ${shown}/${data.row_count} dòng đầu · ${data.columns.length} cột.` : `${data.columns.length} cột.`;
+  showClassPreview(file.name, `${data.row_count} dòng × ${data.columns.length} cột`, data.preview_rows, note);
+}
+// "↺ Đổi file": bỏ file đang chọn, trả lại ô kéo-thả. (Dữ liệu đã tải lên ở các bước sau không đổi cho tới khi tải file mới.)
+$("class-change-file-btn").addEventListener("click", () => {
+  classPreviewSeq++; // bỏ lần đọc đang chờ (nếu có)
+  state.selectedFile = null;
+  fileInput.value = "";
+  $("class-raw-preview").hidden = true;
+  $("dropzone").hidden = false;
+  $("dropzone-idle").hidden = false;
+  $("dropzone-file").hidden = true;
+  setStatusMessage($("upload-status"), "", "");
+  updateUploadButtonState();
+});
 
 $("upload-btn").addEventListener("click", async () => {
   const file = state.selectedFile;

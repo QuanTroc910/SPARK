@@ -1708,6 +1708,14 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Ghi nhận, chưa sửa (nhỏ):** Class Noise báo thiếu cột đặc trưng bằng `alert()` của trình duyệt (các nơi khác dùng dòng báo trong trang); đổi mật khẩu sang CHÍNH mật khẩu cũ vẫn được chấp nhận;
       dán / chọn file chỉ có dòng tiêu đề cho kết quả "giữ nguyên 0 dòng" không kèm giải thích; "Sửa về giá trị phổ biến nhất" luôn bỏ qua nhóm 2 dòng (hoà) — đúng thiết kế nhưng người dùng dễ tưởng lỗi.
 
+34. **Class Noise Bước 1: hiện bảng xem trước dữ liệu như các tool khác — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user chụp Bước 1 Class Noise: chọn file xong chỉ thấy tên file + KB trong ô kéo-thả, không thấy dữ liệu như Free Tools / Cần cấu hình / Convert (các tool đó hiện bảng 100 dòng đầu + nút "↺ Đổi file").
+    - **Làm gì:** `workspace.html` thêm khối `#class-raw-preview` (cùng class `.ft-raw-preview .cyd-table` với `#cf-raw-preview`) ngay dưới ô kéo-thả trong khung 01. `workspace-flow.js`: `handleFileSelected()` gọi `loadClassPreview(file)` → `POST /api/noise-tools/inspect`
+      (dùng chung bộ đọc CSV/Excel với mọi tool nên Excel cũng xem được; route cũ, không sửa backend) → `showClassPreview()` ẩn ô kéo-thả và hiện bảng + "N dòng × M cột" + ghi chú "Xem trước 100/N dòng đầu · M cột". Nút `#class-change-file-btn`
+      bỏ file đang chọn, trả lại ô kéo-thả, khoá nút Tải lên. File lỗi (rỗng...) thì khung hiện đúng lời báo của backend, không có bảng. `classPreviewSeq` bỏ kết quả về muộn khi chọn file khác giữa chừng. Tải lên thật vẫn qua `/api/upload` (xem trước chỉ để XEM); quay lại Bước 1 sau khi tải lên vẫn thấy bảng.
+    - **Bẫy đã gặp:** `workspace-flow.js` (IIFE) đã có sẵn 1 hàm `renderPreviewTable()` riêng cho panel xem dữ liệu cũ, đè lên hàm cùng tên ở `workspace.js` → bảng rỗng, không báo lỗi gì. Nên Class Noise dùng hàm riêng `renderClassPreviewTable()`; ĐỪNG gọi các hàm của workspace.js từ trong workspace-flow.js mà không kiểm tra tên có bị trùng.
+    - **Kiểm chứng:** Playwright `test_class_preview_ui.js` (21 kiểm tra: ô kéo-thả ↔ xem trước, Adult Income 32561 × 15 hiện 100 dòng, Excel 552 × 26, chọn lại đúng file cũ sau Đổi file, file rỗng, tải lên thật sang Bước 2 rồi quay lại, màn 390px không tràn ngang, không lỗi JS).
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
