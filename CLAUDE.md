@@ -1437,8 +1437,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       khi chọn cách xử lý đổi dữ liệu (không phải "skip"/"keep"). Kết quả detect KHÔNG đổi.
       Mẫu để thử: `data/sample_zero_inflated.csv` (cột `capital_gain` 80 ô = 0 + 20 ô 500-9000).
     - [ĐÃ LÀM, mục 26] Hai việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại" (Áp dụng
-      dùng cấu hình lúc Phát hiện dù form đã sửa); báo "Sẽ xoá N dòng" trước khi Áp dụng. Vẫn chưa có
-      hộp xác nhận / hoàn tác như Bước 5 cũ cho 3 tool này (chỉ có dòng báo trước).
+      dùng cấu hình lúc Phát hiện dù form đã sửa); báo "Sẽ xoá N dòng" trước khi Áp dụng. Hộp xác nhận +
+      Hoàn tác như Bước 5 cũ cho 3 tool này: ĐÃ LÀM ở mục 27.
     - **Rule liên cột — đã rà, thiếu (cập nhật sau mục 24: (1), (5), (7) và lỗi chia cho 0 ĐÃ XONG ở
       tab "Biểu thức"; còn lại (2) một phần, (3), (4), vế xác định 1 cột):** (1) ~~không báo số dòng
       bị BỎ QUA~~ [ĐÃ LÀM cho Biểu thức: `expression_info`, riêng So sánh/Nếu–thì CŨ ở backend vẫn
@@ -1556,7 +1556,33 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Kiểm chứng:** Playwright `test_stale_ui.js` (sửa ngưỡng/thêm-xoá cột/sửa biểu thức → báo + khoá; sửa lại như cũ → hết báo;
       Phát hiện lại → hết báo; xem trước = số backend xoá thật; 3 cột nhân viên 10+2+11 → 23 dòng) + ca dòng lỗi ở CẢ 2 cột (2+2 → HỢP
       = 3, backend xoá đúng 3); chạy lại test IQR/Biểu thức/Nếu–thì/Phụ thuộc hàm (giao diện + backend) không hồi quy.
-    - **Chưa làm:** hộp xác nhận + hoàn tác như Bước 5 cũ cho 3 tool này; xem trước cho cách sửa giá trị (chỉ báo khi xoá dòng).
+    - **Chưa làm:** xem trước cho cách sửa giá trị (chỉ báo khi xoá dòng). (Hộp xác nhận + hoàn tác: xem mục 27.)
+
+27. **Cần cấu hình: hộp xác nhận xoá dòng + nút Hoàn tác ở dải nối tiếp — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user hỏi "hộp xác nhận là gì" (nợ ở mục 23/26) rồi bảo "Oke làm cái đấy đi". Đề xuất ban đầu của mình là có thể
+      bỏ qua vì đã có dòng báo trước + mặc định "— Chọn cách xử lý —"; user vẫn chọn làm.
+    - **Hộp xác nhận** (`workspace.js`: `cfSendApply()`, `cfFinishApply()`, `hideCfConfirm()`, khối `#cf-confirm`): bấm Áp dụng mà có XOÁ DÒNG
+      (tool nhiều cột: có cột chọn `remove_row`; Rule liên cột: `remove_row` hoặc `remove_suspect_rows`) thì gửi `dry_run=true` trước.
+      Backend (`/api/noise-tools/configured`, mode apply) chạy ĐÚNG đường tính như Áp dụng thật nhưng chỉ trả
+      `{dry_run, rows_before, rows_after, rows_removed, cells_changed}` (không đóng gói CSV, route không giữ dữ liệu nên không để dấu vết).
+      `rows_removed > 0` thì hiện hộp đỏ "Sẽ xoá N dòng (a → b). Bấm «Xác nhận» thì mới xoá thật." (kèm nhắc khi >= 20% số dòng, kèm "gồm cả
+      các dòng có thể là đúng" cho Phụ thuộc hàm → Xoá cả dòng); chỉ khi bấm "Xác nhận xoá và áp dụng" mới gửi lệnh thật. Huỷ / đổi lựa chọn
+      trong khối cách xử lý / Phát hiện lại / cấu hình đã đổi (stale) / đổi chuỗi nối tiếp → hộp tự ẩn. Cách chỉ sửa giá trị (điền, kéo về
+      biên...) hoặc chạy thử báo 0 dòng bị xoá thì áp dụng thẳng, không hỏi (giống Bước 5 cũ).
+    - **Hoàn tác** (nút `.pipe-undo-btn` "↶ Hoàn tác bước cuối" trong dải đen nối tiếp, có ở CẢ 3 nhóm vì chuỗi dùng chung): `state.pipe.undoStack`
+      ghi snapshot {text, kind, steps} TRƯỚC mỗi bước mới (giữ tham chiếu chuỗi chữ, không copy; tối đa `PIPE_UNDO_MAX` = 5 bước gần nhất,
+      khớp Bước 5 cũ). Bấm → lùi về snapshot cuối, dọn bảng kết quả (`resetResult`) và báo "↶ Đã hoàn tác «tên bước»". Bước ĐẦU TIÊN của
+      chuỗi không có snapshot (trước nó là file gốc) nên hoàn tác bước đó = "về gốc" (`resetPipeToOriginal()`, tách ra từ nút "Bắt đầu lại từ
+      gốc"). Hết snapshot mà còn > 1 bước thì nút ẩn (vẫn còn "Bắt đầu lại từ gốc"). Hoàn tác thuần phía trình duyệt, không gọi backend
+      (trừ lúc về gốc). `state.cf.applyBusy` chặn hoàn tác/về gốc khi lệnh Áp dụng đang chạy dở (tránh đổi chuỗi giữa chừng).
+    - **Giới hạn:** snapshot nằm trong RAM trình duyệt (mất khi tải lại trang, như cả chuỗi nối tiếp); không có "làm lại" (redo); hoàn tác
+      áp dụng cho MỌI nhóm tool vì dùng chung chuỗi (không phải riêng Cần cấu hình).
+    - **Kiểm chứng:** Playwright `test_confirm_undo_ui.js` (hộp hiện đúng số thật, Huỷ/đổi lựa chọn → ẩn, chạy thử KHÔNG ghi dấu vết
+      (`pipe.active` vẫn false), Xác nhận → xoá thật, cách không xoá dòng → không hỏi, 3 bước nối tiếp rồi hoàn tác từng bước đúng số dòng
+      313 → 311 → 311 → 303, hoàn tác bước đầu về gốc 313, làm lại sau hoàn tác); `test_pipe_other_groups.js` (Free Tools: xoá trùng +
+      cắt khoảng trắng rồi hoàn tác từng bước, "Bắt đầu lại từ gốc" vẫn chạy, dải Convert có nút); các test cũ (`test_stale_ui`,
+      `test_expr_ui`, `test_ifthen_ui`) phải bấm thêm "Xác nhận" khi Áp dụng có xoá dòng (hành vi mới, đã cập nhật test); IQR/Phụ thuộc hàm
+      UI + backend không hồi quy.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -1650,6 +1676,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 - [x] Cảnh báo IQR=0 ở tool Giá trị bất thường (mục 23, đã làm).
 - [x] 2 việc nhỏ cùng đợt: báo "Cấu hình đã đổi, bấm Phát hiện lại" (khoá Áp dụng) + báo "Sẽ xoá N dòng
       (a → b)" trước khi Áp dụng ở tool nhiều cột — xem mục 26.
+- [x] Hộp xác nhận xoá dòng (chạy thử `dry_run`) + nút Hoàn tác 5 bước ở dải nối tiếp (3 nhóm tool) — xem mục 27.
 - [x] Phụ thuộc hàm: 1 cột xác định → nhiều cột phụ thuộc, đoán ô sai (so các cột còn lại), 2 cách xử lý
       "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" + xem trước (mục 23, commit `3ee977f`, `73978bc`).
 - [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).

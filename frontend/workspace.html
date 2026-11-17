@@ -1205,6 +1205,7 @@
         <span class="pipeline-strip-text pipe-strip-text"></span>
         <span class="pipeline-strip-actions">
           <button class="btn btn-ghost btn-small pipe-new-file-btn" type="button">⬆ Tải file khác</button>
+          <button class="btn btn-ghost btn-small pipe-undo-btn" type="button" hidden>↶ Hoàn tác bước cuối</button>
           <button class="btn btn-ghost btn-small pipe-reset-btn" type="button">↺ Bắt đầu lại từ gốc</button>
         </span>
       </div>
@@ -1276,6 +1277,14 @@
             </div>
             <!-- Hiện khi form / đầu vào đã đổi so với lần Phát hiện cuối (workspace.js, cfCheckStale); lúc đó nút Áp dụng bị khoá. -->
             <p class="cf-stale-note" id="cf-stale-note" role="alert" hidden></p>
+            <!-- Hộp xác nhận: hiện sau khi bấm Áp dụng mà có xoá dòng (backend đã chạy thử, số liệu là số thật). Chỉ bấm "Xác nhận" mới xoá. -->
+            <div class="cf-confirm" id="cf-confirm" role="alertdialog" aria-labelledby="cf-confirm-text" hidden>
+              <p class="cf-confirm-text" id="cf-confirm-text"></p>
+              <div class="cf-confirm-actions">
+                <button class="btn btn-accent btn-small" id="cf-confirm-yes" type="button">Xác nhận xoá và áp dụng</button>
+                <button class="btn btn-ghost btn-small" id="cf-confirm-no" type="button">Huỷ</button>
+              </div>
+            </div>
             <p class="form-error" id="cf-apply-error" hidden></p>
             <div class="panel-actions" id="cf-apply-row">
               <button class="btn btn-accent" id="cf-apply-btn" type="button">Áp dụng</button>
@@ -1378,6 +1387,7 @@
         <span class="pipeline-strip-text pipe-strip-text" id="pipeline-strip-text"></span>
         <span class="pipeline-strip-actions">
           <button class="btn btn-ghost btn-small pipe-new-file-btn" id="pipeline-new-file-btn" type="button">⬆ Tải file khác</button>
+          <button class="btn btn-ghost btn-small pipe-undo-btn" type="button" hidden>↶ Hoàn tác bước cuối</button>
           <button class="btn btn-ghost btn-small pipe-reset-btn" id="pipeline-reset-btn" type="button">↺ Bắt đầu lại từ gốc</button>
         </span>
       </div>
@@ -1601,6 +1611,7 @@
         <span class="pipeline-strip-text pipe-strip-text"></span>
         <span class="pipeline-strip-actions">
           <button class="btn btn-ghost btn-small pipe-new-file-btn" type="button">⬆ Tải file khác</button>
+          <button class="btn btn-ghost btn-small pipe-undo-btn" type="button" hidden>↶ Hoàn tác bước cuối</button>
           <button class="btn btn-ghost btn-small pipe-reset-btn" type="button">↺ Bắt đầu lại từ gốc</button>
         </span>
       </div>

@@ -130,6 +130,7 @@ function wireInputToggle(toggleEl, dropzoneEl, pasteEl, onModeChange) {
 // sơ, free-tools, convert).
 const SECTIONS = ["home", "guide", "security", "privacy", "config", "class-noise", "profile", "free-tools", "convert"];
 const PUBLIC_SECTIONS = new Set(["home", "guide", "security", "privacy"]);
+const PIPE_UNDO_MAX = 5; // số bước gần nhất có thể Hoàn tác trong chuỗi nối tiếp (khớp Bước 5 cũ)
 
 const state = {
   section: "home", // 1 trong SECTIONS -- khối đang hiện (mặc định: trang chủ)
@@ -138,7 +139,10 @@ const state = {
   // (xem loadPipeOriginal). originalText/Kind = kết quả ĐẦU TIÊN của chuỗi, chỉ còn là DỰ PHÒNG khi không ghi nhớ được đầu vào thật.
   // currentText/Kind = kết quả mới nhất = đầu vào của tool kế tiếp
   // (kind "csv" hoặc "json" -- JSON chỉ nối tiếp được sang JSON → CSV).
-  pipe: { active: false, originalLabel: "", originalSource: null, originalText: null, originalKind: "csv", currentText: null, currentKind: "csv", steps: [], forceNewUpload: false },
+  pipe: { active: false, originalLabel: "", originalSource: null, originalText: null, originalKind: "csv", currentText: null, currentKind: "csv", steps: [], forceNewUpload: false,
+          // Nút "Hoàn tác": mỗi bước mới ghi lại TRẠNG THÁI TRƯỚC ĐÓ ({text, kind, steps}) vào đây, giữ tối đa PIPE_UNDO_MAX bước gần nhất.
+          // Bước đầu tiên của chuỗi không có snapshot (trước nó là file gốc) nên hoàn tác bước đó = "về gốc" (loadPipeOriginal).
+          undoStack: [] },
   // Trạng thái riêng từng nhóm: tool đang chọn, kiểu nhập, file đã chọn, bảng xem trước.
   // listView = danh sách của nút "Xem ..." sau lần chạy gần nhất: { kind: tên tool, data: dữ liệu backend trả, showing }
   // (kind "remove-duplicates" = các dòng trùng, "trim-whitespace" = các ô đã sửa; null = chưa có / đã bị xoá);
@@ -893,6 +897,13 @@ function renderPipeStrips() {
     const strip = $(TOOLSEC[g].strip);
     strip.hidden = !p.active;
     if (p.active) strip.querySelector(".pipe-strip-text").innerHTML = `📄 Đang dùng: <strong>${escapeHtml(p.originalLabel)}</strong>${escapeHtml(stepsText)}`;
+    // Nút Hoàn tác: có bước để lùi (còn snapshot) hoặc đang ở đúng bước đầu (lùi = về dữ liệu gốc); hết thì ẩn.
+    const undoBtn = strip.querySelector(".pipe-undo-btn");
+    if (undoBtn) {
+      const canUndo = p.active && p.steps.length > 0 && (p.undoStack.length > 0 || p.steps.length === 1);
+      undoBtn.hidden = !canUndo;
+      if (canUndo) undoBtn.title = `Hoàn tác «${p.steps[p.steps.length - 1].label}»${p.undoStack.length ? "" : " (quay về dữ liệu gốc)"}`;
+    }
     renderInputArea(g);
   });
   refreshFtColumns(); // đầu vào nối tiếp đổi -> bảng cột của tool Sai định dạng / Ô trống cập nhật theo
@@ -946,28 +957,58 @@ async function loadPipeOriginal() {
   if (!response.ok) throw new Error(data.error || "Không đọc lại được file gốc.");
   return { text: data.result_text, kind: "csv" };
 }
+// Quay về dữ liệu gốc của chuỗi (dùng cho nút "Bắt đầu lại từ gốc" và cho nút Hoàn tác khi chỉ còn bước đầu tiên). Trả về true nếu xong.
+async function resetPipeToOriginal(btn, g) {
+  const p = state.pipe;
+  const errEl = $(TOOLSEC[g].error);
+  setError(errEl, "");
+  btn.disabled = true; // đang lấy lại file gốc từ backend: chặn bấm chồng
+  let original;
+  try {
+    original = await loadPipeOriginal();
+  } catch (err) {
+    setError(errEl, err.message);
+    return false;
+  } finally {
+    btn.disabled = false;
+  }
+  p.currentText = original.text;
+  p.currentKind = original.kind;
+  p.steps = [];
+  p.undoStack = [];
+  p.forceNewUpload = false;
+  renderPipeStrips(); // đã tự đọc lại cột của Cần cấu hình theo đầu vào gốc (refreshCfColumns)
+  Object.keys(TOOLSEC).forEach(resetResult);
+  return true;
+}
+function pipeGroupOfButton(btn) {
+  return Object.keys(TOOLSEC).find((k) => $(TOOLSEC[k].strip).contains(btn));
+}
 document.querySelectorAll(".pipe-reset-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
+    if (state.cf.applyBusy) return; // đang chờ lệnh Áp dụng: không đổi chuỗi nối tiếp giữa chừng
+    await resetPipeToOriginal(btn, pipeGroupOfButton(btn));
+  });
+});
+// Hoàn tác BƯỚC CUỐI: quay về trạng thái ngay trước bước đó (tối đa PIPE_UNDO_MAX bước gần nhất). Còn đúng 1 bước thì quay về dữ liệu gốc.
+document.querySelectorAll(".pipe-undo-btn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
     const p = state.pipe;
-    const g = Object.keys(TOOLSEC).find((k) => $(TOOLSEC[k].strip).contains(btn));
-    const errEl = $(TOOLSEC[g].error);
-    setError(errEl, "");
-    btn.disabled = true; // đang lấy lại file gốc từ backend: chặn bấm chồng
-    let original;
-    try {
-      original = await loadPipeOriginal();
-    } catch (err) {
-      setError(errEl, err.message);
-      return;
-    } finally {
-      btn.disabled = false;
+    if (state.cf.applyBusy || !p.steps.length) return;
+    const g = pipeGroupOfButton(btn);
+    const undone = p.steps[p.steps.length - 1];
+    if (p.undoStack.length) {
+      const snap = p.undoStack.pop();
+      p.currentText = snap.text;
+      p.currentKind = snap.kind;
+      p.steps = snap.steps;
+      p.forceNewUpload = false;
+      renderPipeStrips();
+      Object.keys(TOOLSEC).forEach(resetResult); // bảng kết quả đang hiện là của bước vừa bị huỷ nên không còn đúng
+    } else if (!(await resetPipeToOriginal(btn, g))) {
+      return; // không lấy lại được file gốc (lỗi đã hiện ở khung lỗi của nhóm)
     }
-    p.currentText = original.text;
-    p.currentKind = original.kind;
-    p.steps = [];
-    p.forceNewUpload = false;
-    renderPipeStrips(); // đã tự đọc lại cột của Cần cấu hình theo đầu vào gốc (refreshCfColumns)
-    Object.keys(TOOLSEC).forEach(resetResult);
+    setStatus($(TOOLSEC[g].status), `↶ Đã hoàn tác «${undone.label}»`, "is-ok");
   });
 });
 // Ghi nhận 1 bước vừa xong: kết quả thành đầu vào kế tiếp của cả 3 nhóm.
@@ -983,6 +1024,11 @@ function recordPipeStep(label, text, kind, inputLabel, fresh, source) {
     p.originalKind = kind;
     p.originalLabel = inputLabel;
     p.steps = [];
+    p.undoStack = []; // chuỗi mới: không còn gì để hoàn tác của chuỗi cũ
+  } else {
+    // Ghi lại trạng thái TRƯỚC bước này để nút Hoàn tác quay về được (chỉ giữ THAM CHIẾU tới chuỗi chữ cũ, không copy dữ liệu).
+    p.undoStack.push({ text: p.currentText, kind: p.currentKind, steps: p.steps.slice() });
+    if (p.undoStack.length > PIPE_UNDO_MAX) p.undoStack.shift();
   }
   p.currentText = text;
   p.currentKind = kind;
@@ -1007,6 +1053,7 @@ function resetResult(g) {
   }
   if (g === "cf") {
     $("cf-handling").hidden = true;
+    hideCfConfirm();
     $("cf-result-note").hidden = true;
     setError($("cf-apply-error"), "");
     setStatus($("cf-apply-status"), "", "");
@@ -2736,6 +2783,7 @@ $("cf-detect-btn").addEventListener("click", async () => {
   const T = TOOLSEC.cf;
   setError($(T.error), "");
   $("cf-handling").hidden = true;
+  hideCfConfirm();
   $("cf-expr-info").hidden = true; // không để lại khung báo của lần phát hiện trước (kể cả khi lần này báo lỗi)
   const formData = new FormData();
   const fresh = !pipeUsable("cf");
@@ -2838,6 +2886,7 @@ function cfCheckStale() {
   const stale = !!det && !$("cf-handling").hidden && det.sig !== cfSignature();
   note.hidden = !stale;
   if (stale) {
+    hideCfConfirm(); // số liệu trong hộp xác nhận là của cấu hình cũ
     note.textContent = "⚠ Cấu hình hoặc dữ liệu đầu vào đã đổi so với lần Phát hiện cuối, nên kết quả bên dưới không còn khớp. Bấm «Phát hiện» lại trước khi Áp dụng.";
     btn.disabled = true;
   } else if (state.cf.stale) {
@@ -2924,13 +2973,58 @@ $("cf-apply-btn").addEventListener("click", async () => {
     if (action === "fixed_value" && !fixedValue) return setError($("cf-apply-error"), "Chưa nhập giá trị cố định.");
     applyExtra = { action, fixed_value: fixedValue };
   }
+  hideCfConfirm();
+  // Có XOÁ DÒNG thì chạy thử trước (backend tính đúng như Áp dụng thật nhưng không trả file) rồi hỏi xác nhận bằng SỐ THẬT.
+  // Các cách chỉ sửa giá trị (điền, kéo về biên...) không mất dòng nên áp dụng luôn, giống Bước 5 cũ.
+  const removesRows = det.multi
+    ? Object.values(applyExtra.actions).some((a) => a.action === "remove_row")
+    : (action === "remove_row" || action === "remove_suspect_rows");
+  if (removesRows) {
+    const trial = await cfSendApply(applyExtra, true, $("cf-apply-btn"), "Áp dụng");
+    if (!trial) return;
+    if (trial.rows_removed > 0) {
+      const before = trial.rows_before, after = trial.rows_after, n = trial.rows_removed;
+      const risky = before > 0 && n / before >= 0.2;
+      const maybeCorrect = !det.multi && action === "remove_row" && state.cf.fdPlan && !state.cf.fdPlan.generic;
+      $("cf-confirm-text").textContent = `Sẽ xoá ${n} dòng (${before} → ${after} dòng).` +
+        (maybeCorrect ? " Gồm cả các dòng có thể là đúng." : "") +
+        (trial.cells_changed ? ` Đồng thời sửa ${trial.cells_changed} ô ở các cột khác.` : "") +
+        (risky ? ` Đây là ${Math.round((n / before) * 100)}% số dòng, hãy xem lại cho chắc.` : "") +
+        " Bấm «Xác nhận» thì mới xoá thật.";
+      state.cf.pendingApply = { applyExtra, action };
+      $("cf-confirm").hidden = false;
+      return;
+    }
+    // Chạy thử báo không có dòng nào bị xoá (vd cách xử lý không đụng tới dòng nào): không cần hỏi, áp dụng luôn.
+  }
+  await cfFinishApply(applyExtra, action, $("cf-apply-btn"), "Áp dụng");
+});
+// Gửi lệnh Áp dụng lên backend. dryRun = true thì chỉ lấy số liệu (rows_before/after/removed, cells_changed), không có file.
+// applyBusy báo cho nút Hoàn tác / Bắt đầu lại từ gốc biết đang có lệnh chạy dở (tránh đổi chuỗi nối tiếp giữa chừng).
+async function cfSendApply(applyExtra, dryRun, btn, idleText) {
+  const det = state.cf.detect;
   const formData = new FormData();
   const inp = collectInput("cf", formData);
-  if (inp.error) return setError($("cf-apply-error"), inp.error);
+  if (inp.error) { setError($("cf-apply-error"), inp.error); return null; }
   formData.append("mode", "apply");
+  if (dryRun) formData.append("dry_run", "true");
   formData.append("config", JSON.stringify(Object.assign({}, det.config, applyExtra)));
-  const data = await callBackend($("cf-apply-btn"), "Áp dụng", "/api/noise-tools/configured", formData, $("cf-apply-error"));
+  state.cf.applyBusy = true;
+  try {
+    const data = await callBackend(btn, idleText, "/api/noise-tools/configured", formData, $("cf-apply-error"));
+    return data ? Object.assign(data, { _inp: inp }) : null;
+  } finally {
+    state.cf.applyBusy = false;
+  }
+}
+// Áp dụng THẬT rồi hiện kết quả + ghi vào chuỗi nối tiếp (phần này trước đây nằm thẳng trong handler của nút Áp dụng).
+async function cfFinishApply(applyExtra, action, btn, idleText) {
+  const T = TOOLSEC.cf;
+  const det = state.cf.detect;
+  hideCfConfirm();
+  const data = await cfSendApply(applyExtra, false, btn, idleText);
   if (!data) return;
+  const inp = data._inp;
   const label = CF_TAB_LABEL[state.cf.tool];
   const colCount = data.preview_rows && data.preview_rows.length ? data.preview_rows[0].length : 0;
   $("cf-result-table-wrap").hidden = false;
@@ -2944,7 +3038,20 @@ $("cf-apply-btn").addEventListener("click", async () => {
     : `${statusFromStats(data.stats)} · ${ACTION_LABELS[action] || action}`, "is-ok");
   recordPipeStep(label, data.result_text, "csv", inp.label, det.fresh, inp.source);
   renderContinuePanel("cf");
+}
+// ----- Hộp xác nhận xoá dòng -----
+function hideCfConfirm() {
+  $("cf-confirm").hidden = true;
+  state.cf.pendingApply = null;
+}
+$("cf-confirm-yes").addEventListener("click", async () => {
+  const pending = state.cf.pendingApply;
+  if (!pending || !state.cf.detect) return hideCfConfirm();
+  await cfFinishApply(pending.applyExtra, pending.action, $("cf-confirm-yes"), "Xác nhận xoá và áp dụng");
 });
+$("cf-confirm-no").addEventListener("click", hideCfConfirm);
+// Đổi lựa chọn cách xử lý (hoặc giá trị cố định) sau khi hộp đã hiện thì số liệu trong hộp không còn đúng: ẩn hộp, bắt bấm Áp dụng lại.
+["change", "input"].forEach((evt) => $("cf-handling").addEventListener(evt, hideCfConfirm));
 
 // ====== Khởi động ======
 // Hỗ trợ ?section=<tên khối> (home / guide / security / privacy / free-tools /

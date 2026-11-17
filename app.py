@@ -2163,6 +2163,17 @@ def noise_tool_configured():
         return jsonify({"error": f"Cấu hình không hợp lệ: {exc}"}), 400
     except Exception as exc:
         return jsonify({"error": f"Không đọc/xử lý được file: {exc}"}), 400
+    if _as_bool(request.form.get("dry_run")):
+        # CHẠY THỬ: đã tính xong kết quả thật ở trên (cùng đường chạy với Áp dụng nên số liệu khớp 100%) nhưng KHÔNG đóng gói CSV
+        # trả về; FE dùng để hỏi xác nhận "Sẽ xoá N dòng (a → b)" trước khi gửi lệnh thật. Route này không giữ dữ liệu trên server
+        # (mỗi request tự đọc lại đầu vào), nên chạy thử không để lại dấu vết nào.
+        return jsonify({
+            "dry_run": True,
+            "rows_before": stats["original_row_count"],
+            "rows_after": stats["final_row_count"],
+            "rows_removed": stats["removed_row_count"],
+            "cells_changed": stats["cells_changed"],
+        })
     return _noise_tool_response(new_df, stats, {"per_column": per_column_result} if per_column_result is not None else None)
 
 
