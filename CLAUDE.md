@@ -1680,6 +1680,40 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       IQR, dải nối tiếp): PASS. Lỗi tìm ra khi chạy test: tiêu đề chip giá trị lỡ mất chữ "phân biệt hoa/thường" (thông tin thật) -> đã trả lại.
     - **Chưa sửa:** nhánh Attribute 5 bước ẩn trong khối Class Noise (`#panel-3-attribute`, `#panel-5-attribute`...) vẫn còn đoạn mô tả dài nhưng không bao giờ hiển thị trong Denoise.
 
+32. **Thiết kế HANDLE cho Class Noise (Bước 4 "Xử lý" của khối Class Noise) — ĐÃ THIẾT KẾ DỰA TRÊN BÀI BÁO, CHƯA CODE:**
+    - **Nguồn gốc:** user yêu cầu gợi ý cách xử lý class noise "tra trong các bài báo học thuật tử tế, đừng đoán linh tinh". Mục này ghi lại kết quả tra cứu: cái gì ĐÃ ĐỌC TOÀN VĂN
+      (trích được nguyên văn), cái gì CHỈ ĐỌC TÓM TẮT, cái gì là SUY LUẬN của người thiết kế. Khi viết khoá luận, chỉ nên trích như "đã đọc" những bài ở bảng A.
+    - **Bảng A — nguồn ĐÃ ĐỌC TOÀN VĂN (đã tải PDF, trích nguyên văn):**
+      | Nguồn | Điều đã xác minh được |
+      |---|---|
+      | Brodley & Friedl, *Identifying Mislabeled Training Data*, JAIR 11 (1999) 131-167. https://jair.org/index.php/jair/article/view/10238 · https://arxiv.org/abs/1106.0219 | Họ XOÁ dòng nghi ngờ. Abstract: lọc "significantly improves classification accuracy for noise levels up to 30%" (nhiễu CẤY NHÂN TẠO vào 5 bộ dữ liệu). Bộ credit: từ 30% nhiễu lọc không còn cải thiện, ở 40% "the use of a consensus filter yields lower accuracy relative to not filtering". Lọc đa số (majority) bắt nhiều dòng sai hơn nhưng vứt nhầm nhiều dòng tốt hơn; lọc đồng thuận (consensus) thận trọng hơn; khuyên consensus khi dữ liệu ÍT, majority khi dữ liệu NHIỀU. Cảnh báo mục 3.4 + mục 5: "A danger in automatically removing instances that cannot be correctly classified is that they might be exceptions to the general rule." Họ CHƯA làm sửa nhãn, chỉ đề xuất cho tương lai (mục 5): "relabel instances if the consensus class is different than the observed class. Instances for which the consensus filter predicts two or more classes would still be discarded." |
+      | Northcutt, Jiang, Chuang, *Confident Learning*, JAIR 70 (2021). https://arxiv.org/abs/1911.00068 · https://www.jair.org/index.php/jair/article/view/12125 | Cách xử lý của họ là PRUNE (xoá) bằng PBC / PBNR / C+NR rồi huấn luyện với loss reweighting, KHÔNG sửa nhãn; nói rõ CL "finds errors, but does not prescribe a specific training procedure using the clean data" và chủ động tránh "the convergence pitfalls of iterative re-labeling". GIẢ ĐỊNH: nhiễu nhãn phụ thuộc theo lớp (class-conditional); xác suất dự đoán phải tính NGOÀI MẪU (cross-validation); và "input x is observed and error-free" (đặc trưng được coi là không có lỗi). Kiểm chứng bằng người trên ImageNet: trong 500 lỗi PBNR gắn cờ, chỉ 58% là "multi-label, ontological issues, or errors". |
+      | Northcutt, Athalye, Mueller, *Pervasive Label Errors in Test Sets Destabilize ML Benchmarks* (2021). https://arxiv.org/abs/2103.14749 | Người kiểm tra (Mechanical Turk, 5 người/mẫu) xác nhận trung bình chỉ **51%** ứng viên do CL gắn cờ là lỗi thật. Từng bộ (gắn cờ → lỗi thật → "correctable", tức đa số người đồng ý với nhãn CL gợi ý): MNIST 100 → 15 → 10; CIFAR-10 275 → 54 → 18; ImageNet 5.440 → 2.916 → 1.428. **Lưu ý khi dùng:** đây là dữ liệu ảnh/văn bản/âm thanh, tập test ít nhiễu (0,15%–10%) nên tỉ lệ cụ thể chưa chắc đúng với dữ liệu bảng; chỉ dùng làm bằng chứng cho nguyên tắc "nhãn gợi ý tự động hay sai, cần người duyệt". |
+      | Bernhardt et al., *Active label cleaning for improved dataset quality under resource constraints* (Nature Communications 2022). https://arxiv.org/abs/2109.00574 | Xếp hạng mẫu theo độ tin cậy của nhãn rồi để chuyên gia gán lại giúp sửa nhãn "up to 4× more effectively than typical random selection" (ảnh tự nhiên + ảnh y tế). **Chú ý:** công cụ tìm kiếm từng gắn nhầm link này cho bài Nicholson et al.; đây KHÔNG phải bài Nicholson. |
+    - **Bảng B — nguồn CHƯA đọc được toàn văn (chỉ tóm tắt qua tìm kiếm; ĐỐI CHIẾU LẠI bản gốc trước khi trích vào khoá luận):**
+      | Nguồn | Điều (chưa xác minh) mà tóm tắt nói | Vì sao chưa đọc được |
+      |---|---|---|
+      | Gupta & Gupta (2019), *Dealing with Noise Problem in ML Data-sets: A Systematic Review*, Procedia CS 161, 466-474. https://doi.org/10.1016/j.procs.2019.11.146 | Polishing thường nâng accuracy hơn filtering/robust nhưng có thể đưa thêm lỗi; có đánh đổi giữa lượng nhiễu bỏ được và lượng dữ liệu giữ lại. | Host PDF (research.vit.ac.in) trả 502. |
+      | Liebchen, Twala, Shepperd, Cartwright, Stephens (2007), *Filtering, Robust Filtering, Polishing*, ESEM 2007, 99-106. https://qastaffprofiles.bournemouth.ac.uk/display/conference/190109 | Filtering→Polishing cho kết quả tốt nhất vì bỏ ÍT dữ liệu nhất; nhưng nghiên cứu SƠ BỘ trên DỮ LIỆU PHẦN MỀM và polishing "có thể sinh giá trị phi lý". | Chỉ đọc tóm tắt. |
+      | Teng (1999), *Correcting Noisy Data*, ICML. https://bibtex.github.io/ICML-1999-Teng.html | Giới thiệu Polishing (sửa thay vì xoá, dựa trên dự đoán của cây quyết định C4.5). | Chỉ đọc mô tả thứ cấp. |
+      | Frénay & Verleysen (2014), *Classification in the presence of label noise: a survey*, IEEE TNNLS 25(5). https://research.dial.uclouvain.be/handle/2078.5/254107 | Chia 3 họ: label noise-robust / cleansing / tolerant. | Chỉ xác nhận phân loại ở mức tóm tắt. |
+      | Sáez, Galar, Luengo, Herrera (2016), *INFFC*, Information Fusion 27, 19-32. https://sci2s.ugr.es/node/222 | Bộ lọc nhiễu lặp nhiều vòng, có kiểm soát độ nhạy. | Server digibug.ugr.es lỗi. |
+      Sabzevari et al. 2015 và Kubica & Moore 2003 (đang nhắc ở roadmap) cũng CHƯA được kiểm chứng.
+    - **Quyết định thiết kế (mỗi ý ghi rõ nguồn TRỰC TIẾP hay SUY LUẬN):**
+      1. **Mặc định "— Chọn cách xử lý —", KHÔNG tự xoá/sửa** (cùng tinh thần Bước 5 an toàn của Attribute, mục 13). *Suy luận từ cảnh báo "exceptions" của Brodley & Friedl + con số 51% của Pervasive Label Errors.*
+      2. **3 hành động:** (a) Giữ nguyên / chỉ đánh dấu; (b) **Xoá dòng** (= Filtering, hành động có nhiều thực nghiệm nhất trong các bài đã đọc); (c) **Sửa nhãn về nhãn gợi ý** (= Polishing, TUỲ CHỌN có điều kiện, xem ý 3).
+      3. **Sửa nhãn CHỈ khả dụng cho dòng "đồng thuận"**, đúng quy tắc Brodley & Friedl đề xuất (mục 5): chỉ sửa khi mọi bên cùng dự đoán MỘT nhãn khác nhãn ghi; dòng không đồng thuận thì xoá hoặc để người dùng duyệt. Quy tắc này là ĐỀ XUẤT của Brodley (họ chưa kiểm chứng); việc ánh xạ sang SPARK là SUY LUẬN:
+         Ensemble (N29) = cả 3 classifier cùng bầu một nhãn khác nhãn ghi (`disagree_ratio == 1.0` VÀ 3 phiếu giống nhau); Distance (N13) = `disagreement_ratio == 1.0` VÀ các láng giềng lẫn nhau cùng một nhãn; Confident Learning (CL) = `margin` cao + nhãn `confident_label`.
+         **Việc cần code thêm:** `EnsembleFinding` hiện chỉ giữ `suggested_label` (nhãn đa số) và `disagree_ratio`, CHƯA lưu phiếu bầu từng classifier, nên không phân biệt được "3 phiếu cùng nhãn lạ" với "3 phiếu 3 nhãn khác nhau" khi đa lớp. Cần thêm trường (vd `votes_agree: bool`) trước khi bật tính năng này.
+      4. **Tham số "mức chặt" cho Ensemble: majority (như code hiện tại, `disagree_ratio > 0.5`) hoặc consensus (cả 3 bất đồng).** Gợi ý mặc định consensus khi dữ liệu ít, majority khi dữ liệu nhiều. *TRỰC TIẾP từ Brodley & Friedl (abstract + mục 5).*
+      5. **Cảnh báo khi tỉ lệ dòng bị gắn cờ cao** (vd > 30%): bộ lọc có thể không đáng tin. Thực tế đã gặp: chạy Distance-based trên `gender` (nhãn không đoán được từ tuổi/lương/điểm) gắn cờ 56/104 dòng (54%). Ngưỡng 30% của Brodley áp cho nhiễu cấy nhân tạo nên chỉ là THAM KHẢO. *SUY LUẬN, dựa trên kết quả Brodley & Friedl.*
+      6. **Duyệt từng dòng, xếp theo mức đáng ngờ giảm dần** (bảng hiện tại ở Bước 3 đã sắp sẵn theo `score`, chỉ cần thêm tick chọn + xem trước tác động `dry_run` + hoàn tác như Attribute). *Ủng hộ bởi Bernhardt et al. và hướng "expert review" Brodley & Friedl dẫn từ Guyon et al.*
+      7. **Làm sạch Attribute noise TRƯỚC Class noise** (nhắc người dùng ở UI: dải "nối tiếp" đã có sẵn), vì Confident Learning giả định đặc trưng "observed and error-free" và cột nhãn bẩn (vd `Male`/`MALE`/`male`/`M`/`NA` thành 8 "lớp" riêng) làm sai kết quả. *Giả định của CL là TRỰC TIẾP; kết luận về thứ tự là SUY LUẬN.*
+      8. **Không làm nhóm "robust"** (sửa thuật toán học / loss reweighting lúc huấn luyện): tool chỉ xuất CSV đã làm sạch, không huấn luyện mô hình cho người dùng. *Suy luận về phạm vi sản phẩm, không phải kết luận khoa học.*
+    - **Về dòng "Polishing có căn cứ thực nghiệm tốt nhất" từng ghi ở roadmap:** khi kiểm lại, các bài ĐÃ ĐỌC TOÀN VĂN ủng hộ FILTERING và coi sửa nhãn là hướng mở / rủi ro; ý "Polishing tốt nhất" chỉ đến từ tóm tắt Liebchen 2007 (nghiên cứu sơ bộ, dữ liệu phần mềm) và tóm tắt Gupta & Gupta. Vì vậy đã hạ Polishing xuống "tuỳ chọn có điều kiện".
+    - **Giới hạn của bằng chứng (nói thẳng khi viết khoá luận):** Brodley & Friedl dùng nhiễu cấy nhân tạo trên 5 bộ dữ liệu; Pervasive Label Errors / Active label cleaning là ảnh, văn bản, âm thanh; chưa có bài nào trong bảng A đo trực tiếp trên dữ liệu bảng kiểu SPARK. Nên tự đo bằng nhiễu nhãn cấy có kiểm soát (đã có `evaluate_class_noise_synthetic.py`): so xoá vs sửa-khi-đồng-thuận vs giữ nguyên, rồi huấn luyện lại và đo accuracy trên tập test sạch.
+    - **Trạng thái:** CHƯA code gì. Việc tiếp theo: thêm trường phiếu bầu cho `EnsembleFinding` → `class_noise/handling.py` (hành động xoá / sửa-khi-đồng-thuận / giữ nguyên + `dry_run`) → endpoint + UI Bước 4 → thí nghiệm đối chứng ở dòng trên.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -1792,17 +1826,13 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       chứng ở mục 9 mới chạy trên Credit Card Fraud/Adult Income (dữ liệu
       thay thế tạm thầy đồng ý dùng), chưa chạy được trên đúng dữ liệu mục
       tiêu. Cần chạy lại + đối chiếu kết quả khi có file thật.
-- [ ] Class noise — HANDLE: Bước 5 hiện CHỈ có placeholder "đang phát
-      triển". Cần thiết kế: hành động nào hợp lý cho 1 dòng bị gắn cờ sai
-      nhãn (xoá dòng? sửa lại nhãn theo `confident_label` model gợi ý? để
-      người dùng tự sửa tay?) — xem phân loại robust/filtering/polishing
-      trong bài báo "Dealing with Noise Problem in ML Data-sets: A
-      Systematic Review" (Gupta & Gupta, 2019) mà project này dựa theo. Đã
-      so sánh kỹ 3N đại diện mỗi nhóm (Robust: Sabzevari et al. 2015,
-      Filtering: Kubica & Moore 2003, Polishing: Liebchen et al. 2007) —
-      Polishing có căn cứ thực nghiệm tốt nhất (kết hợp Filtering+Polishing
-      cho accuracy cao nhất, ít mất dữ liệu nhất) và khớp tự nhiên với
-      `confident_label` đã có sẵn trong `ClassNoiseFinding`.
+- [ ] Class noise — HANDLE: Bước 4 (xử lý) hiện CHỈ có placeholder "đang phát
+      triển". ĐÃ THIẾT KẾ ở **mục 32** (dựa trên bài báo, có bảng nguồn ĐÃ ĐỌC / CHƯA ĐỌC):
+      mặc định không tự xoá; hành động Giữ nguyên / Xoá (Filtering) / Sửa nhãn CHỈ cho dòng
+      "đồng thuận" (Polishing có điều kiện); tham số majority-vs-consensus; cảnh báo khi tỉ lệ gắn
+      cờ cao; duyệt từng dòng. CHƯA code. Việc cần làm trước: thêm trường phiếu bầu cho
+      `EnsembleFinding`. (Ghi chú cũ "Polishing có căn cứ thực nghiệm tốt nhất" đã hạ xuống vì chỉ
+      dựa trên tóm tắt Liebchen 2007 + Gupta & Gupta, chưa đọc toàn văn — xem mục 32.)
 - [ ] One-Hot Encoding cho cột CHỮ (category) làm đặc trưng Class Noise —
       vẫn để dành chờ ý kiến thầy; hiện tại cả danh sách checkbox đặc trưng
       LẪN endpoint `reduce-features` mới đều chỉ chấp nhận cột SỐ, cột chữ
