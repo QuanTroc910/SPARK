@@ -371,24 +371,24 @@
       <div class="ft-topbar">
         <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i><b>Guide</b></span>
         <span class="ft-meta">
-          <span>Đọc trong<strong>≈ 3 phút</strong></span>
+          <span>Đọc trong<strong>≈ 5 phút</strong></span>
           <span>Cập nhật<strong>11 / 2026</strong></span>
         </span>
       </div>
       <section class="tx-hero">
         <div>
           <h1 class="tx-title">Dùng Denoise<br>từ file bẩn tới file sạch</h1>
-          <p class="tx-desc">Chuẩn bị file, chạy tool nhanh, rồi cấu hình chi tiết khi cần.</p>
+          <p class="tx-desc">Từng bước thao tác, từ lúc đăng nhập tới lúc tải file sạch về.</p>
         </div>
         <!-- Hình vẽ nét: cuốn sách mở, mục lục mono, 1 chấm vuông màu nhấn. -->
         <svg class="tx-illu" viewBox="0 0 420 260" aria-hidden="true">
           <rect x="30" y="30" width="170" height="200" fill="none" stroke="#111" stroke-width="1" stroke-dasharray="4 3"/>
           <rect x="220" y="30" width="170" height="200" fill="none" stroke="#111" stroke-width="1" stroke-dasharray="4 3"/>
           <line x1="210" y1="20" x2="210" y2="240" stroke="#111" stroke-width="1"/>
-          <text x="48" y="62" font-family="IBM Plex Mono" font-size="9" fill="#111">01 CHUẨN BỊ FILE</text>
+          <text x="48" y="62" font-family="IBM Plex Mono" font-size="9" fill="#111">01 BẮT ĐẦU NHANH</text>
           <text x="48" y="86" font-family="IBM Plex Mono" font-size="9" fill="#111">02 FREE TOOLS</text>
           <text x="48" y="110" font-family="IBM Plex Mono" font-size="9" fill="#111">03 CONVERT</text>
-          <text x="48" y="134" font-family="IBM Plex Mono" font-size="9" fill="#111">04 WORKSPACE</text>
+          <text x="48" y="134" font-family="IBM Plex Mono" font-size="9" fill="#111">04 CẦN CẤU HÌNH</text>
           <text x="48" y="158" font-family="IBM Plex Mono" font-size="9" fill="#111">05 CLASS NOISE</text>
           <line x1="238" y1="58" x2="370" y2="58" stroke="#111" stroke-width="3"/>
           <line x1="238" y1="76" x2="340" y2="76" stroke="#111" stroke-width="3"/>
@@ -406,85 +406,107 @@
       <div class="tx-layout">
         <nav class="tx-toc" aria-label="Mục lục Guide">
           <span class="tx-toc-label">Trên trang này</span>
-          <a href="#guide-01"><i>01</i>Denoise gồm những gì</a>
+          <a href="#guide-01"><i>01</i>Bắt đầu nhanh</a>
           <a href="#guide-02"><i>02</i>Chuẩn bị file</a>
           <a href="#guide-03"><i>03</i>Free Tools</a>
           <a href="#guide-04"><i>04</i>Convert</a>
           <a href="#guide-05"><i>05</i>Tool cần cấu hình</a>
           <a href="#guide-06"><i>06</i>Class Noise</a>
-          <a href="#guide-07"><i>07</i>Xử lý an toàn</a>
+          <a href="#guide-07"><i>07</i>Nối tiếp và hoàn tác</a>
           <a href="#guide-08"><i>08</i>Câu hỏi thường gặp</a>
         </nav>
         <article class="tx-content">
           <section class="tx-section" id="guide-01">
-            <h2 class="tx-h2"><span>01</span>Denoise gồm những gì</h2>
-            <p>Ba cách làm việc, từ nhẹ tới nặng:</p>
+            <h2 class="tx-h2"><span>01</span>Bắt đầu nhanh</h2>
+            <p>Làm sạch một file chỉ cần 4 bước:</p>
+            <ol class="tx-steps">
+              <li><b>Đăng nhập.</b> Bấm "Bắt đầu" ở góc phải trên cùng để tạo tài khoản, chỉ cần tên đăng nhập và mật khẩu.</li>
+              <li><b>Chọn tool.</b> Mở menu <b>Product</b> ở đầu trang rồi bấm tool bạn cần.</li>
+              <li><b>Đưa file vào.</b> Ở khung <b>01 · Đầu vào</b>, kéo thả file hoặc bấm "Dán text" để dán nội dung.</li>
+              <li><b>Chạy rồi tải về.</b> Bấm nút chạy, xem bảng ở khung <b>02 · Kết quả</b>, rồi bấm "Tải xuống CSV".</li>
+            </ol>
+            <p>Không biết dùng tool nào? Nhìn file của bạn đang gặp gì:</p>
             <ul class="tx-list">
-              <li><b>Free Tools</b>: 4 thao tác chạy ngay, không cần khai gì.</li>
-              <li><b>Convert</b>: đổi delimiter CSV, CSV sang JSON và ngược lại.</li>
-              <li><b>Cần cấu hình</b>: ngoài khoảng, giá trị bất thường, không nhất quán, rule liên cột.</li>
-              <li><b>Class Noise</b>: tìm dòng bị gán sai nhãn bằng 3 thuật toán.</li>
+              <li><b>Dòng lặp lại</b> → Xoá dòng trùng</li>
+              <li><b>Khoảng trắng thừa ở đầu hoặc cuối ô</b> → Cắt khoảng trắng</li>
+              <li><b>Ô trống, "NA", "-"</b> → Ô trống</li>
+              <li><b>Email, số điện thoại, ngày sai khuôn</b> → Sai định dạng</li>
+              <li><b>Số vô lý như tuổi 210</b> → Ngoài khoảng (nếu biết khoảng đúng) hoặc Giá trị bất thường (nếu chưa biết)</li>
+              <li><b>"Nam", "nam", "NAM" lẫn lộn</b> → Không nhất quán</li>
+              <li><b>Hai cột mâu thuẫn nhau</b> (ngày nghỉ trước ngày vào...) → Rule liên cột</li>
+              <li><b>Nghi nhãn phân loại bị gán sai</b> → Class Noise</li>
+              <li><b>Cần đổi định dạng file</b> → Convert</li>
             </ul>
-            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Kết quả của tool này làm đầu vào cho tool kế tiếp.</p></div>
           </section>
 
           <section class="tx-section" id="guide-02">
             <h2 class="tx-h2"><span>02</span>Chuẩn bị file</h2>
             <ul class="tx-list">
-              <li>Đọc CSV (nên lưu UTF-8) và Excel (.xlsx, .xls).</li>
-              <li>Dòng đầu tiên là tên cột.</li>
-              <li>Mọi giá trị được đọc dạng chữ, nên "007" vẫn là "007".</li>
+              <li>Dùng file CSV hoặc Excel (.xlsx, .xls). Riêng Convert JSON → CSV nhận .json và .jsonl.</li>
+              <li>Dòng đầu tiên phải là tên cột.</li>
+              <li>CSV nên lưu bằng mã UTF-8 để chữ có dấu không bị lỗi.</li>
+              <li>Denoise đọc mọi giá trị dưới dạng chữ, nên "007" vẫn là "007", không bị đổi thành 7.</li>
             </ul>
           </section>
 
           <section class="tx-section" id="guide-03">
             <h2 class="tx-h2"><span>03</span>Free Tools</h2>
-            <p>Chọn file hoặc dán text, bấm Chạy, rồi tải kết quả về.</p>
+            <p>Nhóm này không cần khai cột hay tham số. Chọn file, chỉnh vài tuỳ chọn, bấm <b>Chạy</b>.</p>
             <ul class="tx-list">
-              <li><b>Xoá dòng trùng</b>: giữ bản đầu hoặc bản cuối.</li>
-              <li><b>Cắt khoảng trắng</b>: cắt đầu cuối, gộp khoảng trắng lặp, bỏ ký tự vô hình.</li>
-              <li><b>Ô trống</b>: mỗi cột chọn giữ nguyên, điền hoặc xoá dòng.</li>
-              <li><b>Sai định dạng</b>: quét email, số điện thoại, ngày, số ở mọi cột.</li>
+              <li><b>Xoá dòng trùng:</b> để trống ô "Chỉ so theo các cột này" thì so cả dòng, hoặc gõ tên cột (vd <code>email</code>). Chọn giữ bản đầu tiên hay cuối cùng. Chạy xong bấm "Xem các dòng trùng" để kiểm tra.</li>
+              <li><b>Cắt khoảng trắng:</b> khoảng trắng đầu/cuối luôn được cắt. Tick thêm "Gộp khoảng trắng lặp lại" nếu cần. Bấm "Xem các ô đã sửa" để xem ô nào thay đổi.</li>
+              <li><b>Ô trống:</b> bảng liệt kê các cột có ô trống. Mỗi cột chọn một cách: Giữ nguyên, Điền từ ô phía trên, Điền tay từng ô, Điền trung bình / trung vị / KNN (cột số), Điền giá trị phổ biến nhất (cột nhóm) hoặc Xoá cả dòng. Cột để "Giữ nguyên" không bị đụng tới.</li>
+              <li><b>Sai định dạng:</b> Denoise đoán kiểu từng cột và hiện trong bảng "Kiểu dữ liệu từng cột", đoán sai thì chọn lại. Sau đó chọn "Chỉ báo", "Để trống ô sai" hoặc "Xoá cả dòng" rồi Chạy.</li>
             </ul>
+            <div class="tx-note"><span class="tx-note-tag">Mẹo</span><p>Thứ tự gợi ý: Cắt khoảng trắng, Sai định dạng, Ô trống, cuối cùng Xoá dòng trùng. Làm sạch trước thì việc so khớp dòng trùng mới chính xác.</p></div>
           </section>
 
           <section class="tx-section" id="guide-04">
             <h2 class="tx-h2"><span>04</span>Convert</h2>
             <ul class="tx-list">
-              <li><b>Đổi delimiter CSV</b>: chọn dấu phân cách mới.</li>
-              <li><b>CSV → JSON</b>: mỗi dòng thành một object hoặc một mảng.</li>
-              <li><b>JSON → CSV</b>: nhận mảng JSON hoặc JSON Lines, object lồng nhau thành cột "cha.con".</li>
+              <li><b>Đổi delimiter CSV:</b> chọn "Delimiter gốc" (hoặc Tự nhận diện) và "Delimiter mới", bấm Convert.</li>
+              <li><b>CSV → JSON:</b> chọn dòng đầu có phải header không, kiểu kết quả Objects hoặc Arrays, bấm Convert. Kết quả JSON hiện dạng chữ.</li>
+              <li><b>JSON → CSV:</b> dán JSON hoặc thả file .json / .jsonl, chọn delimiter đầu ra, bấm Convert. Object lồng nhau thành cột "cha.con".</li>
             </ul>
+            <p>Kết quả tải về bằng nút "Tải xuống" ở góc khung 02.</p>
           </section>
 
           <section class="tx-section" id="guide-05">
             <h2 class="tx-h2"><span>05</span>Tool cần cấu hình</h2>
-            <p>Chạy hai nhịp: khai cột rồi Phát hiện, sau đó chọn cách xử lý rồi Áp dụng.</p>
+            <p>Bốn tool này cần bạn khai cột và tham số, nên chạy hai nhịp: <b>Phát hiện</b> để xem lỗi, rồi <b>Áp dụng</b> để sửa.</p>
             <ol class="tx-steps">
-              <li><b>Chọn file</b> hoặc dán text.</li>
-              <li><b>Khai cột và tham số</b>, vd cột <code>tuoi</code> từ 18 đến 65.</li>
-              <li><b>Phát hiện</b>: ô lỗi được tô màu, chưa sửa gì.</li>
-              <li><b>Áp dụng</b>: chọn cách xử lý cho từng cột rồi bấm Áp dụng.</li>
+              <li><b>Chọn file</b> hoặc dán text. Danh sách cột hiện ra sau khi Denoise đọc xong.</li>
+              <li><b>Khai cột và tham số.</b> Bấm "＋ Thêm cột kiểm tra" để kiểm nhiều cột một lượt.</li>
+              <li><b>Phát hiện.</b> Ô lỗi được tô màu ở khung bên phải, bảng "Lỗi theo từng cột" cho biết mỗi cột có bao nhiêu lỗi. Lúc này chưa sửa gì.</li>
+              <li><b>Chọn cách xử lý</b> cho từng cột rồi bấm <b>Áp dụng</b>. Cột để "— Chọn cách xử lý —" thì không bị đụng tới. Nếu có xoá dòng, Denoise báo trước số dòng và hỏi xác nhận.</li>
             </ol>
+            <ul class="tx-list">
+              <li><b>Ngoài khoảng:</b> gõ giá trị nhỏ nhất và lớn nhất hợp lệ (vd tuổi từ 18 đến 65). Có thể kéo về biên, điền lại hoặc xoá dòng.</li>
+              <li><b>Giá trị bất thường:</b> chọn IQR và / hoặc Z-score (mặc định 1.5 và 3). Cột mà đa số ô cùng một giá trị sẽ có cảnh báo vàng.</li>
+              <li><b>Không nhất quán:</b> gõ danh sách giá trị chuẩn, cách nhau bởi dấu phẩy (vd <code>Nam, Nữ</code>). Các biến thể như "nam", " NAM " được đưa về giá trị chuẩn.</li>
+              <li><b>Rule liên cột, tab Biểu thức:</b> bấm tên cột và các nút để ghép điều kiện mọi dòng phải thoả, vd <code>tuoi &gt;= 18 và tuoi &lt;= 65</code> hoặc <code>phong_ban = "Sales" =&gt; luong &gt;= 10000000</code> (nút "thì =&gt;" nghĩa là "nếu … thì …"). Dòng chữ xanh hoặc đỏ dưới ô cho biết biểu thức đúng hay sai ngay khi gõ.</li>
+              <li><b>Rule liên cột, tab Phụ thuộc hàm:</b> chọn cột xác định A và các cột phụ thuộc (vd mã nhân viên → tên). Denoise gợi ý ô nào nghi sai, rồi bạn chọn sửa về giá trị phổ biến, xoá dòng nghi sai, xoá cả dòng hoặc giữ nguyên.</li>
+            </ul>
+            <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Nếu bạn đổi cấu hình sau khi Phát hiện, nút Áp dụng bị khoá cho tới khi bấm Phát hiện lại.</p></div>
           </section>
 
           <section class="tx-section" id="guide-06">
             <h2 class="tx-h2"><span>06</span>Class Noise</h2>
-            <p>Chọn cột nhãn và các cột đặc trưng (chỉ cột số). Có 3 thuật toán để so sánh:</p>
-            <ul class="tx-list">
-              <li><b>Confident Learning</b>: Random Forest, có thể mất vài phút.</li>
-              <li><b>Mutual k-NN</b>: không train model, dựa vào láng giềng gần.</li>
-              <li><b>Ensemble</b>: 3 classifier khác họ biểu quyết.</li>
-            </ul>
+            <p>Dùng khi file có một cột nhãn (vd loại khách hàng) và bạn nghi vài dòng bị gán sai nhãn. Có 4 bước:</p>
+            <ol class="tx-steps">
+              <li><b>File &amp; phương pháp.</b> Tải file lên và chọn thuật toán: Distance-based chạy nhanh nhất, Single learning-based (Random Forest) có thể mất vài phút, Ensemble-based lâu hơn Distance-based nhưng thường chính xác hơn. Bấm "Tải lên &amp; tiếp tục".</li>
+              <li><b>Nhãn &amp; đặc trưng.</b> Chọn cột nhãn, rồi tick các cột số dùng để dự đoán nhãn (chỉ nhận cột số). Bấm "Chạy giảm cột tự động" nếu muốn Denoise gợi ý cột nên giữ. Sau đó bấm "Phát hiện Class Noise".</li>
+              <li><b>Kết quả.</b> Xem phần độ tin cậy trước. Nếu có cảnh báo đỏ thì danh sách dòng nghi ngờ bên dưới rất khó tin, hãy chọn lại cột đặc trưng.</li>
+              <li><b>Xử lý.</b> Chưa có xử lý tự động, hiện bạn dùng danh sách dòng nghi ngờ để tự rà soát.</li>
+            </ol>
           </section>
 
           <section class="tx-section" id="guide-07">
-            <h2 class="tx-h2"><span>07</span>Xử lý an toàn</h2>
+            <h2 class="tx-h2"><span>07</span>Nối tiếp và hoàn tác</h2>
             <ul class="tx-list">
-              <li>Luôn phát hiện trước, rồi mới chọn cách xử lý.</li>
-              <li>File gốc không bị đụng tới. "Bắt đầu lại từ gốc" quay về bất cứ lúc nào.</li>
-              <li>Xoá dòng luôn được hỏi lại trước khi xoá thật.</li>
-              <li>Class Noise có phần độ tin cậy, đọc trước khi tin danh sách dòng nghi ngờ.</li>
+              <li>Chạy xong, kết quả trở thành đầu vào cho tool kế tiếp. Bấm một mục trong "Xong · xử lý tiếp bằng" để chuyển tool mà không phải tải file lại.</li>
+              <li>Dải đen phía trên ghi các bước đã qua, kèm 3 nút: "Tải file khác", "Hoàn tác bước cuối" (lùi tối đa 5 bước) và "Bắt đầu lại từ gốc".</li>
+              <li>File gốc không bị đụng tới. "Tải xuống CSV" luôn lấy kết quả mới nhất.</li>
             </ul>
           </section>
 
@@ -493,6 +515,10 @@
             <dl class="tx-faq">
               <dt>Vì sao phải đăng nhập?</dt>
               <dd>Mỗi file gắn với một tài khoản, người khác không thấy được.</dd>
+              <dt>Cột số của tôi không hiện trong Ngoài khoảng hoặc Giá trị bất thường?</dt>
+              <dd>Cột số lẫn chữ bị đoán là văn bản. Chạy Sai định dạng với "Để trống ô sai" trước, rồi bấm "Xử lý tiếp bằng" sang tool cần dùng.</dd>
+              <dt>Nút Áp dụng bị mờ?</dt>
+              <dd>Bạn đã đổi cấu hình hoặc dữ liệu sau lần Phát hiện cuối. Bấm Phát hiện lại.</dd>
               <dt>File của tôi lưu ở đâu?</dt>
               <dd>Chỉ trong bộ nhớ server lúc đang xử lý, không ghi ra đĩa. Chỉ tài khoản được lưu lâu dài.</dd>
               <dt>Mở trực tiếp file HTML được không?</dt>
@@ -754,19 +780,16 @@
               <div id="class-method-section">
                 <div class="direction-grid method-grid is-stacked" id="class-method-grid">
                   <div class="direction-card" data-method="distance_based" tabindex="0" role="button">
-                    <span class="dir-num">N13</span>
                     <h3>Distance-based</h3>
                     <p>Mutual k-NN, dựa vào khoảng cách giữa các dòng. Nhanh.</p>
                   </div>
                   <div class="direction-card" data-method="single_learning" tabindex="0" role="button">
-                    <span class="dir-num">CL</span>
                     <h3>Single learning-based</h3>
                     <p>Confident Learning với Random Forest. Có thể mất vài phút.</p>
                   </div>
                   <div class="direction-card" data-method="ensemble_based" tabindex="0" role="button">
-                    <span class="dir-num">N29</span>
                     <h3>Ensemble-based</h3>
-                    <p>Ba classifier khác họ biểu quyết.</p>
+                    <p>Ba classifier khác họ biểu quyết. Lâu hơn Distance-based nhưng thường chính xác hơn.</p>
                   </div>
                 </div>
               </div>

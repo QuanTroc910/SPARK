@@ -146,36 +146,36 @@ body { --ws-cw: min(calc(var(--ws-cmax) - 2 * var(--ws-pad)), calc(100% - 2 * va
   background: var(--bg); border: 1px solid #111; border-top: none;
   display: grid; grid-template-columns: 1fr 1fr 1fr 280px;
 }
-.ws-megamenu-col { padding: 22px 24px 26px; border-right: 1px solid #111; display: flex; flex-direction: column; gap: 6px; }
+.ws-megamenu-col { padding: 26px 28px 30px; border-right: 1px solid #111; display: flex; flex-direction: column; gap: 6px; }
 .ws-megamenu-label {
-  font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 12px;
+  font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 500; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px;
 }
 .ws-megamenu-item {
-  display: flex; align-items: flex-start; gap: 12px; padding: 8px 6px;
+  display: flex; align-items: flex-start; gap: 14px; padding: 10px 8px;
   text-decoration: none; color: inherit; transition: background 0.12s ease;
 }
 a.ws-megamenu-item:hover { background: #ebebe7; }
 .ws-megamenu-item--static { cursor: default; opacity: 0.6; }
 .ws-megamenu-icon {
-  flex: 0 0 auto; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-  border: 1px solid #111; background: var(--surface-2); font-size: 14px;
+  flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid #111; background: var(--surface-2); font-size: 17px;
 }
 .ws-megamenu-item-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.ws-megamenu-item-text strong { font-size: 15px; font-weight: 600; color: #111; letter-spacing: -0.01em; }
+.ws-megamenu-item-text strong { font-size: 18px; font-weight: 600; color: #111; letter-spacing: -0.01em; }
 .ws-megamenu-item-text small {
-  font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.03em;
+  font-family: "IBM Plex Mono", monospace; font-size: 13px; letter-spacing: 0.03em;
   text-transform: uppercase; color: var(--ink-faint); line-height: 1.4;
 }
 .ws-megamenu-cta {
-  padding: 24px; background: #111; color: #fff; display: flex; flex-direction: column;
+  padding: 28px; background: #111; color: #fff; display: flex; flex-direction: column;
   justify-content: space-between; text-decoration: none;
 }
 .ws-megamenu-cta-eyebrow {
-  font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.06em;
+  font-family: "IBM Plex Mono", monospace; font-size: 13px; letter-spacing: 0.06em;
   text-transform: uppercase; color: rgba(255, 255, 255, 0.7); margin: 0 0 18px; line-height: 1.5;
 }
-.ws-megamenu-cta-title { font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; text-transform: uppercase; margin: 0; }
+.ws-megamenu-cta-title { font-size: 34px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; text-transform: uppercase; margin: 0; }
 .ws-megamenu-cta-arrow { font-size: 30px; margin-top: 24px; line-height: 1; }
 
 /* ===== Nút (ghi đè .btn dùng chung: viên thuốc, mono viết hoa) ===== */
@@ -1268,8 +1268,8 @@ a.hm-tool:hover { background: #ebebe7; }
 #section-class-noise .method-grid.is-stacked { grid-template-columns: 1fr; }
 #section-class-noise .method-grid.is-stacked .direction-card { border-left: 0; border-top: 1px solid #111; min-height: 0; padding: 16px 18px 16px; }
 #section-class-noise .method-grid.is-stacked .direction-card:first-child { border-top: 0; }
-#section-class-noise .method-grid.is-stacked .direction-card h3 { font-size: 16px; margin-bottom: 6px; }
-#section-class-noise .method-grid.is-stacked .direction-card p { font-size: 13px; }
+#section-class-noise .method-grid.is-stacked .direction-card h3 { font-size: 19px; margin-bottom: 8px; }
+#section-class-noise .method-grid.is-stacked .direction-card p { font-size: 15px; }
 #section-class-noise .method-grid.is-stacked .dir-num { margin-bottom: 12px; }
 #section-class-noise .stepper { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 900px) { .cf-row, .cf-row-3 { grid-template-columns: 1fr; } }

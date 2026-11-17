@@ -1680,6 +1680,14 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       IQR, dải nối tiếp): PASS. Lỗi tìm ra khi chạy test: tiêu đề chip giá trị lỡ mất chữ "phân biệt hoa/thường" (thông tin thật) -> đã trả lại.
     - **Chưa sửa:** nhánh Attribute 5 bước ẩn trong khối Class Noise (`#panel-3-attribute`, `#panel-5-attribute`...) vẫn còn đoạn mô tả dài nhưng không bao giờ hiển thị trong Denoise.
 
+32. **Chỉnh giao diện sau mục 31 — ĐÃ XONG (commit `6fa2794` + đợt sau chưa commit lúc ghi):**
+    - Bỏ nhãn dạng `[ ... ]` (eyebrow) ở mọi trang trừ `[ Bước N / 4 ]` của Class Noise; thanh đường dẫn + 3 chỉ số góc phải (`.ft-topbar`) tăng chữ 10,5px → 14px (commit `6fa2794`).
+    - Menu "Product" chữ to hơn (nhãn cột 13px, tên tool 18px, mô tả 13px, ô icon 44px, chữ "Class Noise" 34px). 3 thẻ chọn thuật toán Class Noise: bỏ nhãn `N13` / `CL` / `N29`,
+      chữ tiêu đề 19px, mô tả 15px; mô tả Ensemble thêm "Lâu hơn Distance-based nhưng thường chính xác hơn" (đo thật 30.000 dòng × 6 cột: Distance 1,2s, Ensemble 1,9s, Single/Random Forest 23s —
+      nên Ensemble vẫn NHANH hơn Single learning, chỉ chậm hơn Distance).
+    - **Guide viết lại thành hướng dẫn thao tác** (8 mục, mục lục đổi tên mục 01 "Bắt đầu nhanh", mục 07 "Nối tiếp và hoàn tác"): 4 bước làm sạch 1 file, bảng "gặp gì → dùng tool nào", cách dùng từng tool
+      theo đúng tên nút / ô trên giao diện, 2 nhịp Phát hiện → Áp dụng, cách viết biểu thức, 4 bước Class Noise, dải nối tiếp + Hoàn tác, FAQ. Đọc ≈ 5 phút.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
