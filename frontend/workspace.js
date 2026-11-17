@@ -2488,9 +2488,11 @@ const EXPR_BUTTON_GROUPS = [
 // Khối chèn nhanh: 3 hàng nút + chip tên cột + (khi bấm chip cột Nhóm) chip giá trị của cột đó.
 function exprHelperHTML(cols) {
   const chips = cols.map((col) => `<button type="button" class="cf-chip" data-role="expr-col" data-col="${escapeAttr(col)}" title="Chèn cột ${escapeAttr(col)}">${escapeHtml(col)}</button>`).join("");
-  const groups = EXPR_BUTTON_GROUPS.map(([name, buttons]) =>
-    `<div class="cf-expr-words" role="group" aria-label="${escapeAttr(name)}">${buttons.map(([label, word, tip]) =>
-      `<button type="button" class="btn btn-ghost btn-small" data-role="expr-word" data-word="${escapeAttr(word)}" title="${escapeAttr(tip)}">${escapeHtml(label)}</button>`).join("")}</div>`).join("");
+  // Lưới 6 cột đều nhau (CSS .cf-expr-toolbar): hàng 1 và 2 đủ 6 nút; hàng 3 có 5 nút, nút cặp nháy rộng gấp đôi (is-wide) để cả 3 hàng thẳng hai mép.
+  // Hàng 2 và 3 toàn ký hiệu nên cỡ chữ to hơn cho dễ nhìn (is-symbols).
+  const groups = EXPR_BUTTON_GROUPS.map(([name, buttons], gi) =>
+    `<div class="cf-expr-words${gi > 0 ? " is-symbols" : ""}" role="group" aria-label="${escapeAttr(name)}">${buttons.map(([label, word, tip]) =>
+      `<button type="button" class="btn btn-ghost btn-small${word === '""' ? " is-wide" : ""}" data-role="expr-word" data-word="${escapeAttr(word)}" title="${escapeAttr(tip)}">${escapeHtml(label)}</button>`).join("")}</div>`).join("");
   return `<div class="field">
       <label>Bấm để chèn vào biểu thức (tại chỗ con trỏ)</label>
       <div class="cf-expr-toolbar">${groups}</div>

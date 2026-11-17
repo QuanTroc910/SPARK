@@ -1190,7 +1190,12 @@ a.hm-tool:hover { background: #ebebe7; }
 .cf-expr-words { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 /* 3 hàng nút (nối điều kiện / so sánh / tính toán và chữ): xếp dọc, mỗi hàng tự xuống dòng khi hẹp. */
 .cf-expr-toolbar { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.cf-expr-toolbar .cf-expr-words { margin-bottom: 0; }
+/* Lưới 6 cột bằng nhau: mọi nút cùng cỡ, ba hàng thẳng hai mép (hàng 3 có 5 nút, nút cặp nháy chiếm 2 cột). Hẹp màn hình thì còn 3 cột. */
+.cf-expr-toolbar .cf-expr-words { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-bottom: 0; }
+.cf-expr-toolbar .cf-expr-words .btn { width: 100%; padding-left: 4px; padding-right: 4px; text-align: center; white-space: nowrap; }
+.cf-expr-toolbar .cf-expr-words .is-wide { grid-column: span 2; }
+.cf-expr-toolbar .cf-expr-words.is-symbols .btn { font-size: 14px; letter-spacing: 0; }
+@media (max-width: 520px) { .cf-expr-toolbar .cf-expr-words { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .cf-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 112px; overflow-y: auto; padding: 2px; }
 .cf-chip { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; padding: 4px 11px; border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 999px; cursor: pointer; }
 .cf-chip:hover { border-color: var(--signal); color: var(--signal); }
