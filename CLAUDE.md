@@ -1704,7 +1704,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Lỗi thật tìm được + đã sửa:** (1) file rỗng báo tiếng Anh "No columns to parse from file" → `File rỗng: không có tên cột hay dòng dữ liệu nào.` (`_read_df_for_noise_tool`); (2) Class Noise chỉ chọn cột chữ
       nhiều giá trị (vd `ho_ten`) báo lỗi thư viện tiếng Anh "Found array with 0 feature(s)" → câu tiếng Việt rõ ràng (kiểm `detect_feature_columns` rỗng trong `class_noise_detect_api`);
       (3) trang tràn ngang ~260px ở màn 390px: header không xuống dòng và hình minh hoạ "trước → sau" của trang tool đặt ngang (thêm 2 `@media (max-width: 640px)` ở `workspace.css`);
-      (4) Guide + mô tả Class Noise ghi "chỉ cột số" trong khi cột chữ đã chọn được (tự one-hot) → sửa chữ.
+      (4) Guide + mô tả Class Noise ghi "chỉ cột số" trong khi cột chữ đã chọn được (tự one-hot) → sửa chữ. [ĐÃ ĐẢO NGƯỢC ở mục 35: One-Hot đã gỡ khỏi web, chữ lại ghi "chỉ cột số".]
     - **Ghi nhận, chưa sửa (nhỏ):** Class Noise báo thiếu cột đặc trưng bằng `alert()` của trình duyệt (các nơi khác dùng dòng báo trong trang); đổi mật khẩu sang CHÍNH mật khẩu cũ vẫn được chấp nhận;
       dán / chọn file chỉ có dòng tiêu đề cho kết quả "giữ nguyên 0 dòng" không kèm giải thích; "Sửa về giá trị phổ biến nhất" luôn bỏ qua nhóm 2 dòng (hoà) — đúng thiết kế nhưng người dùng dễ tưởng lỗi.
 
@@ -1715,6 +1715,36 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       bỏ file đang chọn, trả lại ô kéo-thả, khoá nút Tải lên. File lỗi (rỗng...) thì khung hiện đúng lời báo của backend, không có bảng. `classPreviewSeq` bỏ kết quả về muộn khi chọn file khác giữa chừng. Tải lên thật vẫn qua `/api/upload` (xem trước chỉ để XEM); quay lại Bước 1 sau khi tải lên vẫn thấy bảng.
     - **Bẫy đã gặp:** `workspace-flow.js` (IIFE) đã có sẵn 1 hàm `renderPreviewTable()` riêng cho panel xem dữ liệu cũ, đè lên hàm cùng tên ở `workspace.js` → bảng rỗng, không báo lỗi gì. Nên Class Noise dùng hàm riêng `renderClassPreviewTable()`; ĐỪNG gọi các hàm của workspace.js từ trong workspace-flow.js mà không kiểm tra tên có bị trùng.
     - **Kiểm chứng:** Playwright `test_class_preview_ui.js` (21 kiểm tra: ô kéo-thả ↔ xem trước, Adult Income 32561 × 15 hiện 100 dòng, Excel 552 × 26, chọn lại đúng file cũ sau Đổi file, file rỗng, tải lên thật sang Bước 2 rồi quay lại, màn 390px không tràn ngang, không lỗi JS).
+
+35. **CHỐT BỘ DỮ LIỆU: Credit Card Fraud (nguyên bộ); GỠ One-Hot khỏi web — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Quyết định của user:** "chốt Credit Card, bỏ phần One-Hot khỏi web, ghi vào file MD". Dùng NGUYÊN bộ `data/kaggle_creditcard_fraud.csv`
+      (284.807 dòng × 31 cột: `Time`, `V1`–`V28` (PCA), `Amount`, `Class`; 492 gian lận = 0,173%; không ô thiếu, không cột chữ, 1.081 dòng trùng hệt).
+      Adult Income thành bộ PHỤ (tuỳ chọn). Việc nên hỏi thầy xác nhận vì file gốc ~35 cột của thầy vẫn chưa có.
+    - **Vì sao Credit Card:** (1) khớp quy trình thầy dặn (giảm cột → tương quan → cap outlier + log) và cùng LOẠI dữ liệu với dữ liệu thầy (toàn số, nhiều cột `V`,
+      lớn); (2) không cần encode nên khỏi phình cột; (3) đặc trưng MẠNH: chạy web Single learning ra CV accuracy 99,94% vs baseline 99,83%, F1 lớp gian lận 0,825
+      (Precision 0,875, Recall 0,780), 96 dòng bị gắn cờ (51 nhãn 0 → model tin 1, 45 nhãn 1 → model tin 0). **Nhược điểm phải nói rõ:** mất cân bằng cực lớn (0,17%);
+      bước lọc tương quan sẽ KHÔNG loại cột nào (các cột `V` là PCA nên tương quan ≈ 0 — đúng kỳ vọng, không phải lỗi; dữ liệu thầy KHÔNG phải PCA vì tương quan 0,6–0,76);
+      không tìm thấy bài nào về nhiễu nhãn trên bộ này; lớn nên Single learning (Random Forest) chậm.
+    - **Gỡ One-Hot (đã làm):** `app.py` bỏ `import one_hot_encode_columns` + khối mã hoá, KHÔI PHỤC kiểm tra "cột đặc trưng phải là cột SỐ" (HTTP 400, nêu đúng tên cột chữ);
+      `cap_outliers()` + `log_transform()` lại áp lên `feature_columns`. `workspace-flow.js`: `isClassFeatureUsable()` KHOÁ ô tick của cột chữ (kiểu đoán category/text/email/date)
+      kèm ghi chú "cột chữ, chưa hỗ trợ", nút "Tích tất cả" chỉ tick cột số. `workspace.html`: Guide + mô tả Bước 2 ghi "chỉ cột số". KHÔNG xoá `categorical_encoding.py`
+      và `evaluate_adult_*.py` (mã nghiên cứu, không còn được web gọi).
+    - **Hạn chế để nói với hội đồng:** chưa xử lý được cột chữ/category; hướng phát triển: One-Hot (có chọn ngưỡng gộp), Frequency encoding, hoặc encoding theo từng thuật toán. Số đo đã có để dẫn:
+      Adult 14 cột → 52 cột one-hot ở ngưỡng gộp 1% (27 ở 5%, 20 ở 10%); `education` trùng 1–1 với `education.num` (bỏ được 14 cột con không mất tin); cột chữ chiếm 47,4% tổng importance
+      (Random Forest) so 52,6% của 6 cột số; Distance-based chuẩn hoá z-score nên cột one-hot hiếm cho giá trị tới ~9,95 (ngưỡng 1%) → át cột số; Random Forest ít bị ảnh hưởng nhất, Distance-based nhiều nhất
+      (thứ tự này là suy luận + gợi ý yếu từ 1 lần chạy, CHƯA có thí nghiệm đối chứng riêng cho One-Hot).
+    - **BÀI HỌC QUAN TRỌNG khi viết báo cáo:** bộ Credit Card (và Adult) KHÔNG có đáp án về dòng nhiễu; nhãn `Class` là nhãn thật ghi lại, không phải "đáp án nhiễu". Các chỉ số trên màn hình
+      kết quả web (CV accuracy, Precision/Recall/F1 từng lớp, ma trận đếm) là chất lượng bộ phân loại dự đoán nhãn, KHÔNG phải độ chính xác của việc tìm nhiễu. Muốn chứng minh hiệu quả PHẢI cấy nhiễu có
+      kiểm soát (đổi nhãn các dòng đã biết rồi đo Precision/Recall/F1 tìm lại) — script cấy nhiễu đã có sẵn cho Adult (`evaluate_distance_vs_confident.py`, `evaluate_ensemble_vs_others.py`), CHƯA chạy cho Credit Card.
+      Khi cấy nhiễu vào Credit Card nhớ báo cáo theo cả 2 lớp (đổi 10% nhãn ngẫu nhiên sẽ tạo ~28.000 "gian lận giả", gấp ~57 lần gian lận thật).
+    - **Tài liệu tham khảo (từ phiên đọc báo, CHƯA tự kiểm lại):** Adult có vài bài phát hiện nhiễu nhãn (gồm so với Confident Learning của cleanlab); không thấy bài nào cho Credit Card; cả 3 bài không thấy giảm cột / lọc tương quan;
+      không so thẳng số được (khác thước đo FPR/FNR, "detection accuracy"...). Phiên đó chạy SPARK trên Adult đủ 58 cột (cấy nhiễu ngẫu nhiên, 1 seed): F1 CL 0,49/0,55/0,56, N13 0,44/0,51/0,52, N29 0,40/0,55/0,63 ở nhiễu 10/20/30% →
+      kết luận "N13 thắng CL" ở mục 10 CHỈ ĐÚNG với bộ 6 cột số yếu, đủ cột thì N13 không còn thắng. Script phiên đó chưa nằm trong repo.
+    - **Ghi chú môi trường:** phiên Default chặn `arxiv.org` (proxy 403); để đọc bài báo phải mở phiên mới với môi trường "SPARK - đọc bài báo học thuật" (đã cho phép arxiv.org). Cài thư viện cần `python3 -m pip install --ignore-installed blinker -r requirements.txt`.
+    - **Kiểm chứng:** Playwright `test_no_onehot.js` (Credit Card mẫu 5.000 dòng gồm đủ 492 gian lận: tick đủ 30 cột số, chạy được CẢ 3 phương pháp ra kết quả; Adult: 8 cột chữ bị khoá + ghi chú, 6 cột số tick được,
+      "Tích tất cả" chỉ tick 6 cột số; gọi API với cột chữ → 400 "Cột đặc trưng phải là cột SỐ…"; không lỗi JS).
+    - **Việc tiếp theo đã đề xuất:** thiết kế + chạy thí nghiệm cấy nhiễu trên Credit Card nguyên bộ (5% / 10%, 2 kiểu, báo cáo cả 2 lớp, đo thời gian; Single learning có thể phải giảm số cây); xin thầy file dữ liệu thật;
+      (tuỳ chọn) thí nghiệm đối chứng giảm cột trên Adult.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -1819,6 +1849,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 - [x] Rule liên cột ĐỢT 1: tab "Biểu thức" thay So sánh + Công thức (mục 24).
 - [x] Rule liên cột ĐỢT 2: Nếu–thì chạy chung bộ máy biểu thức (2 ô NẾU/THÌ đầy đủ), `=>`, `<=>`, `có(cột)`, mặc định
       "— Chọn cách xử lý —" + xem trước cho mọi rule liên cột (mục 25).
+- [x] Chốt bộ dữ liệu = Credit Card Fraud (nguyên bộ) + gỡ One-Hot khỏi web — xem mục 35.
+- [ ] Thí nghiệm cấy nhiễu có kiểm soát trên Credit Card nguyên bộ (3 phương pháp, báo cáo cả 2 lớp, đo thời gian) — CHƯA chạy; đây mới là bằng chứng "thuật toán hiệu quả".
 - [ ] Cập nhật lại file này mỗi khi làm xong 1 cụm việc lớn (lần này ghi bù mục 18-23 sau khi
       thấy file thiếu Denoise).
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá
@@ -1840,11 +1872,9 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       Polishing có căn cứ thực nghiệm tốt nhất (kết hợp Filtering+Polishing
       cho accuracy cao nhất, ít mất dữ liệu nhất) và khớp tự nhiên với
       `confident_label` đã có sẵn trong `ClassNoiseFinding`.
-- [x] One-Hot Encoding cho cột CHỮ (category) làm đặc trưng Class Noise — ĐÃ LÀM:
-      `class_noise/categorical_encoding.py` (one-hot kiểu drop-first, gộp giá trị hiếm
-      < 1% thành nhóm "Khac"), nối vào cả `/api/class-noise/detect` lẫn
-      `/api/class-noise/reduce-features`; Guide + mô tả Bước 3 đã ghi "cột chữ được mã
-      hoá tự động". Cột chữ có quá nhiều giá trị khác nhau (vd tên người) vẫn không nên chọn.
+- [x] One-Hot Encoding cho cột CHỮ làm đặc trưng Class Noise — ĐÃ LÀM RỒI ĐÃ GỠ KHỎI WEB (mục 35): user chốt dùng
+      Credit Card (toàn số) nên không cần encode; cột chữ ghi là HẠN CHẾ + hướng phát triển. Module
+      `class_noise/categorical_encoding.py` + các script `evaluate_adult_*` GIỮ LẠI làm mã nghiên cứu, `app.py` KHÔNG import nữa.
 - [ ] (Khuyến nghị, chưa có yêu cầu code cụ thể) Đánh giá định lượng: tính
       precision/recall/F1 của 7 detector + rule liên cột so với
       `noise_ground_truth.csv`/`noise_ground_truth_large.csv` — rủi ro lớn

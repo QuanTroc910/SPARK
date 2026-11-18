@@ -2103,10 +2103,22 @@ function renderClassFeatureList() {
   }
   wrap.innerHTML = candidates
     .map((h) => {
+      // Cột chữ chưa hỗ trợ làm đặc trưng (không mã hoá One-Hot, xem CLAUDE.md mục 35): khoá ô tick + ghi chú,
+      // để người dùng khỏi tick rồi mới bị backend báo lỗi.
+      if (!isClassFeatureUsable(h)) {
+        state.classFeatureColumns.delete(h);
+        return `<label class="switch-row"><input type="checkbox" data-feature="${escapeAttr(h)}" disabled/> <span class="mono">${escapeHtml(h)}</span> <span class="hint-note">cột chữ, chưa hỗ trợ</span></label>`;
+      }
       const checked = state.classFeatureColumns.has(h);
       return `<label class="switch-row"><input type="checkbox" data-feature="${escapeAttr(h)}" ${checked ? "checked" : ""}/> <span class="mono">${escapeHtml(h)}</span></label>`;
     })
     .join("");
+}
+// Cột đặc trưng Class Noise chỉ nhận cột SỐ. Dựa trên kiểu backend đã đoán lúc upload (guessed_dtypes): chữ/nhóm/email/ngày thì không dùng được.
+function isClassFeatureUsable(h) {
+  const cfg = state.columnConfig && state.columnConfig[h];
+  const dtype = cfg ? cfg.dtype : "integer";
+  return !["category", "text", "email", "date"].includes(dtype);
 }
 
 $("class-label-select").addEventListener("change", (e) => {
@@ -2122,7 +2134,7 @@ $("class-label-select").addEventListener("change", (e) => {
 // Nút "Tích tất cả"/"Bỏ tích tất cả" -- tiện cho file nhiều cột (vd Credit
 // Card Fraud 29 cột), đỡ phải bấm từng ô 1 như trước.
 $("class-feature-select-all").addEventListener("click", () => {
-  state.headers.filter((h) => h !== state.classLabelColumn).forEach((h) => state.classFeatureColumns.add(h));
+  state.headers.filter((h) => h !== state.classLabelColumn && isClassFeatureUsable(h)).forEach((h) => state.classFeatureColumns.add(h));
   renderClassFeatureList();
 });
 $("class-feature-select-none").addEventListener("click", () => {

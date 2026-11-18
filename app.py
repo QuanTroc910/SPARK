@@ -72,7 +72,6 @@ from attribute_noise.quick_tools import (
     quick_fix_format_noise,
     quick_trim_whitespace,
 )
-from class_noise.categorical_encoding import one_hot_encode_columns
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
 from class_noise.distance_based import detect_class_noise_distance
@@ -669,11 +668,9 @@ def class_noise_detect_api():
     không có logic detect nào viết thêm ở đây -- logic thật nằm hết ở 3 module
     class_noise/confident_learning.py và class_noise/distance_based.py.
 
-    **MỚI**: feature_columns giờ CHO PHÉP cả cột CHỮ (category), không chỉ cột
-    số như trước -- cột chữ được tự động ONE-HOT ENCODE (drop-first, xem
-    class_noise/categorical_encoding.py) trước khi đưa vào 3 thuật toán.
-    Validate/báo lỗi "cột đặc trưng phải là cột số" đã bị XOÁ, thay bằng
-    bước encode này.
+    feature_columns CHỈ nhận cột SỐ. Cột chữ (category/text) CHƯA được hỗ trợ -- quyết
+    định có chủ đích (xem CLAUDE.md mục 35: chốt dùng Credit Card, toàn số; bỏ phần One-Hot
+    khỏi web, ghi là hạn chế + hướng phát triển). Chọn cột chữ thì báo lỗi nêu đúng tên cột.
 
     Response LUÔN có field "method" ở gốc để frontend biết nên render kiểu
     diagnostics/findings nào (2 phương pháp có hình dạng diagnostics KHÁC
@@ -718,44 +715,29 @@ def class_noise_detect_api():
     if missing_cols:
         return jsonify({"error": f"Cột không tồn tại trong file: {', '.join(missing_cols)}"}), 400
 
-    # MỚI: cột đặc trưng được chọn giờ có thể là cột CHỮ (category) -- tự động
-    # ONE-HOT ENCODE (class_noise/categorical_encoding.py) trước khi đưa vào
-    # 3 thuật toán detect, thay vì từ chối như trước. Lý do chọn one-hot thay
-    # vì Label/Target Encoding, và vì sao dùng kiểu "drop-first": xem docstring
-    # module categorical_encoding.py (tóm tắt: Label Encoding áp đặt thứ tự giả
-    # hại thuật toán tính khoảng cách/đường biên tuyến tính; Target Encoding
-    # rò rỉ chính nhãn đang đi tìm lỗi vào đặc trưng -- không hợp bài toán
-    # phát hiện CLASS NOISE).
-    categorical_feature_columns = [c for c in feature_columns if not _is_mostly_numeric(df[c])]
-    numeric_feature_columns = [c for c in feature_columns if c not in categorical_feature_columns]
+    # Cột đặc trưng CHỈ nhận cột SỐ. Nếu lỡ chọn 1 cột CHỮ, bước lọc "dòng dùng được" của
+    # cả 3 module sẽ ép TOÀN BỘ dòng thành NaN ở đúng cột đó -> không còn dòng nào dùng được
+    # (sklearn báo lỗi tiếng Anh rất khó hiểu). Báo rõ TRƯỚC khi chạy, nêu đúng tên cột để
+    # người dùng biết cần bỏ tick cột nào. (Hỗ trợ cột chữ = hướng phát triển, xem CLAUDE.md mục 35.)
+    non_numeric_cols = [c for c in feature_columns if not _is_mostly_numeric(df[c])]
+    if non_numeric_cols:
+        return jsonify(
+            {
+                "error": (
+                    "Cột đặc trưng phải là cột SỐ. Các cột sau là cột chữ, chưa được hỗ trợ: "
+                    f"{', '.join(non_numeric_cols)}"
+                )
+            }
+        ), 400
 
-    if categorical_feature_columns:
-        encoded_df, encoded_info = one_hot_encode_columns(df, categorical_feature_columns)
-        # feature_columns THẬT SỰ đưa vào 3 thuật toán detect: cột số gốc +
-        # các cột one-hot mới sinh ra (thay cho tên cột chữ gốc, lúc này đã
-        # không còn tồn tại trong encoded_df).
-        detect_feature_columns = numeric_feature_columns + [i.encoded_column for i in encoded_info]
-    else:
-        encoded_df = df
-        detect_feature_columns = numeric_feature_columns  # == feature_columns nguyên vẹn
-
-    # Bước 3 (xem class_noise/feature_selection.py + CLAUDE.md mục 9): LUÔN áp
-    # dụng cap outlier (về biên IQR) + log-transform TRƯỚC khi chạy -- áp dụng
-    # cho CẢ 3 method, không phải tuỳ chọn. CHỈ áp dụng lên cột SỐ GỐC
-    # (numeric_feature_columns) -- cột one-hot (toàn 0/1) KHÔNG cần cap/log:
-    # IQR của cột gần như toàn 1 giá trị sẽ suy biến (tự động bị cap_outliers()
-    # bỏ qua), còn log1p sẽ biến 0/1 "sạch" thành 0/0.693 không cần thiết,
-    # không có lợi gì cho 1 cột vốn đã nhị phân sẵn.
-    if not detect_feature_columns:
-        # Chỉ chọn cột chữ có quá nhiều giá trị khác nhau (vd tên người): các giá trị hiếm bị gộp hết thành 1 nhóm
-        # nên không còn cột đặc trưng nào dùng được -- báo rõ thay vì để thư viện báo lỗi tiếng Anh.
-        return jsonify({"error": "Không có cột đặc trưng nào dùng được: cột chữ đã chọn có quá nhiều giá trị khác nhau "
-                                 "(vd tên người). Hãy chọn thêm cột số hoặc cột nhóm có ít giá trị."}), 400
-    cleaned_df = cap_outliers(encoded_df, numeric_feature_columns)
-    cleaned_df = log_transform(cleaned_df, numeric_feature_columns)
+    # Bước 3 (xem class_noise/feature_selection.py + CLAUDE.md mục 9): LUÔN áp dụng cap outlier
+    # (về biên IQR) + log-transform lên feature_columns TRƯỚC khi chạy -- áp dụng cho CẢ 3 method,
+    # không phải tuỳ chọn (chỉ sửa GIÁ TRỊ, không xoá dòng/cột nên không có rủi ro mất dữ liệu).
+    cleaned_df = cap_outliers(df, feature_columns)
+    cleaned_df = log_transform(cleaned_df, feature_columns)
 
     if method == "distance_based":
-        dist_config = ClassNoiseConfig(label_column=label_column, feature_columns=detect_feature_columns)
+        dist_config = ClassNoiseConfig(label_column=label_column, feature_columns=feature_columns)
         k = int(payload.get("k") or 5)
         try:
             result = detect_class_noise_distance(cleaned_df, dist_config, k=k)
@@ -787,7 +769,7 @@ def class_noise_detect_api():
         )
 
     if method == "ensemble_based":
-        ens_config = ClassNoiseConfig(label_column=label_column, feature_columns=detect_feature_columns)
+        ens_config = ClassNoiseConfig(label_column=label_column, feature_columns=feature_columns)
         cv_folds = int(payload.get("cv_folds") or 5)
         try:
             result = detect_class_noise_ensemble(cleaned_df, ens_config, cv_folds=cv_folds)
@@ -822,7 +804,7 @@ def class_noise_detect_api():
     # method == "single_learning" (hành vi gốc, Confident Learning + Random Forest)
     config = ClassNoiseConfig(
         label_column=label_column,
-        feature_columns=detect_feature_columns,
+        feature_columns=feature_columns,
         n_estimators=int(payload.get("n_estimators") or 300),
         cv_folds=int(payload.get("cv_folds") or 5),
     )

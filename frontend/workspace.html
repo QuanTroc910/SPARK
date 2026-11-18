@@ -495,7 +495,7 @@
             <p>Dùng khi file có một cột nhãn (vd loại khách hàng) và bạn nghi vài dòng bị gán sai nhãn. Có 4 bước:</p>
             <ol class="tx-steps">
               <li><b>File &amp; phương pháp.</b> Tải file lên và chọn thuật toán: Distance-based chạy nhanh nhất, Single learning-based (Random Forest) có thể mất vài phút, Ensemble-based lâu hơn Distance-based nhưng thường chính xác hơn. Bấm "Tải lên &amp; tiếp tục".</li>
-              <li><b>Nhãn &amp; đặc trưng.</b> Chọn cột nhãn, rồi tick các cột dùng để dự đoán nhãn (cột chữ được mã hoá tự động, đừng chọn cột như tên người vì có quá nhiều giá trị). Bấm "Chạy giảm cột tự động" nếu muốn Denoise gợi ý cột nên giữ. Sau đó bấm "Phát hiện Class Noise".</li>
+              <li><b>Nhãn &amp; đặc trưng.</b> Chọn cột nhãn, rồi tick các cột SỐ dùng để dự đoán nhãn (cột chữ chưa được hỗ trợ nên bị khoá). Bấm "Chạy giảm cột tự động" nếu muốn Denoise gợi ý cột nên giữ. Sau đó bấm "Phát hiện Class Noise".</li>
               <li><b>Kết quả.</b> Xem phần độ tin cậy trước. Nếu có cảnh báo đỏ thì danh sách dòng nghi ngờ bên dưới rất khó tin, hãy chọn lại cột đặc trưng.</li>
               <li><b>Xử lý.</b> Chưa có xử lý tự động, hiện bạn dùng danh sách dòng nghi ngờ để tự rà soát.</li>
             </ol>
@@ -864,8 +864,8 @@
         <!-- Nhánh CLASS NOISE -->
         <div id="panel-3-class" hidden>
           <p class="panel-desc" id="panel-3-class-desc">
-            Chọn một cột làm <strong>nhãn</strong> và các cột làm <strong>đặc trưng</strong>.
-            Cột chữ được mã hoá tự động; cột số được cap outlier và biến đổi logarit trước khi chạy.
+            Chọn một cột làm <strong>nhãn</strong> và các cột <strong>số</strong> làm đặc trưng (cột chữ chưa được hỗ trợ).
+            Cột số được cap outlier và biến đổi logarit trước khi chạy.
           </p>
 
           <div class="field field-grow">

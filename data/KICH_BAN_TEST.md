@@ -160,7 +160,7 @@ Chung cho cả 4 tool:
 - [ ] Tìm trong danh sách ("zzzz" → "Không có dòng nào khớp"); phân trang.
 - [ ] Bước 4 (Xử lý): hiện ghi chú "chưa có xử lý"; nút "Quay lại kết quả".
 - [ ] Bấm thanh bước 1 để quay lại, đổi thuật toán, tải lên lại, chạy lại → kết quả đúng thuật toán mới.
-- [ ] Chỉ chọn cột `ho_ten` làm đặc trưng → báo "Không có cột đặc trưng nào dùng được…" (câu tiếng Việt). Chọn `gioi_tinh` (chữ) + `diem_toan` → chạy được (cột chữ tự mã hoá).
+- [ ] Cột chữ (`ho_ten`, `gioi_tinh`...) bị KHOÁ ô tick, có ghi chú "cột chữ, chưa hỗ trợ"; "Tích tất cả" chỉ tick cột số. (One-Hot đã gỡ, xem CLAUDE.md mục 35.) Gọi API với cột chữ → HTTP 400 "Cột đặc trưng phải là cột SỐ…".
 - [ ] Nhãn chỉ có 1 giá trị / cột nhãn toàn ô trống → báo lỗi rõ ràng, không treo.
 - [ ] Chạy Single learning-based khi file lớn: có chữ "có thể mất vài phút"; trang không bị đơ vĩnh viễn.
 
