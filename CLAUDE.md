@@ -1801,6 +1801,38 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Chưa làm:** "mức tin cậy cao" (đánh dấu dòng cả 3 thuật toán cùng gắn cờ), nút xem dữ liệu sau xử lý như Attribute, chọn nhãn tự do cho trường hợp
       nhiều lớp ngoài danh sách nhãn hiện có.
 
+38. **Thí nghiệm cấy nhiễu có kiểm soát trên Credit Card nguyên bộ — ĐÃ CHẠY XONG (chưa commit lúc ghi):**
+    - **Script + dữ liệu:** `evaluate_creditcard_noise_injection.py` (gốc repo) ghi kết quả 30 dòng JSON vào `data/creditcard_noise_experiment_results.jsonl`
+      (mỗi dòng: kịch bản, bộ cột, thuật toán, TP/FP/FN, P/R/F1 tổng và theo chiều đảo, thời gian, chẩn đoán). Chạy lại: `python3 evaluate_creditcard_noise_injection.py
+      --scenarios base:0,A:0.05,A:0.10,B:0.10,B:0.30 --columns all,reduced --methods ensemble,distance,single --single-trees 300 --k 5`.
+    - **Cách làm:** 284.807 dòng × 30 cột đặc trưng (Time, V1–V28, Amount), nhãn Class (0: 284.315, 1: 492). Tiền xử lý y hệt web (cap outlier IQR 1,5 + log1p),
+      bước cap dùng bản VECTOR HOÁ (`fast_cap_outliers`) đã đối chiếu từng ô với `cap_outliers()` gốc ở cột V1, V14: GIỐNG HỆT. LÝ DO: `cap_outliers()` gốc mất 20–85 giây
+      MỖI CỘT trên Credit Card (lặp `.loc` từng ô), tức hơn 20 phút cho 30 cột mỗi lần bấm Phát hiện trên web (bản vector hoá: 6,3 giây). CHƯA vá vào code web.
+      Cấy nhiễu (seed 42, cùng một tập dòng đảo cho cả 3 thuật toán và cả 2 bộ cột): **A** đảo đồng đều p% mọi dòng (5% = 14.240 dòng, 10% = 28.481; gần như toàn "gian lận giả");
+      **B** đảo q% gian lận thật sang 0 và ĐÚNG BẰNG ẤY dòng bình thường sang 1 (10% = 49+49, 30% = 148+148; số nhãn "1" vẫn 492). Bộ cột: đủ 30, và "giảm cột" = xếp hạng
+      Random Forest 300 cây trên nhãn ĐÃ cấy nhiễu của kịch bản đó rồi Elbow (KHÔNG chạy lọc tương quan, vì cột V là PCA nên vốn không loại được cột nào). Tham số như web:
+      Single 300 cây 5-fold, Distance k=5, Ensemble 5-fold. Dòng không bị đảo mà vẫn bị gắn cờ tính là báo nhầm (FP) dù có thể là nhiễu thật sẵn có -> Precision là cận dưới.
+    - **Kết quả F1 (Precision / Recall), đủ 30 cột:**
+      | Kịch bản | Single | Distance | Ensemble |
+      |---|---|---|---|
+      | A 5% | 0,201 (0,120/0,630) | **0,862** (0,831/0,896) | 0,173 (0,099/0,679) |
+      | A 10% | 0,248 (0,156/0,599) | **0,824** (0,796/0,854) | 0,260 (0,163/0,638) |
+      | B 10% | **0,704** (0,614/0,827) | 0,567 (0,421/0,867) | 0,022 (0,011/0,980) |
+      | B 30% | **0,732** (0,760/0,706) | 0,663 (0,609/0,726) | 0,045 (0,023/0,919) |
+    - **Bộ cột giảm (F1):** B 10%: Single 0,570, Distance 0,471, Ensemble 0,024; B 30%: Single 0,699, Distance 0,578, Ensemble 0,051 (8 cột V14, V10, V4, V12, V17, V11, V3, V16).
+      Ở kịch bản A, Elbow chỉ giữ **1 cột (`Time`)** vì nhiễu nhãn chôn tín hiệu thật -> F1 tụt (Distance 0,495/0,475, Single 0,085/0,122, Ensemble 0,115/0,207).
+    - **Thời gian (đủ 30 cột):** Ensemble 5–9 giây; Distance 82–87 giây (8 cột: 15–18 giây); Single 252 giây (sạch), 287–304 giây (B), 652–747 giây (A, nhãn "1" rất nhiều;
+      lần A 5% có thể bị chậm thêm do máy chạy test song song). 8 cột giúp Single nhanh gấp đôi, Distance 5–6 lần.
+    - **Dữ liệu gốc chưa cấy nhiễu (số dòng gắn cờ, đủ 30 cột):** Single 42 (CV accuracy 99,95% > baseline 99,83%), Distance 96 (độ phủ 92,4%), Ensemble 7.599 (ba classifier đều có accuracy
+      DƯỚI baseline: LogisticRegression 97,04%, GaussianNB 99,59%, LinearSVC 97,23%) -> kết quả Ensemble trên bộ này không đáng tin theo đúng quy tắc chẩn đoán đã ghi. Lần chạy web trước ra Single 96 dòng
+      (khác 42): chưa làm rõ (có thể khác bộ cột hoặc số cây).
+    - **Kết luận có căn cứ:** (1) KHÔNG có thuật toán thắng ở mọi kiểu nhiễu: nhiễu đảo đồng đều -> Distance dẫn rất xa; nhiễu sát thực tế (lớp hiếm giữ nguyên) -> Single dẫn, Distance thứ hai,
+      Ensemble gần như vô dụng (Recall 0,92–0,98 nhưng Precision 0,01–0,05). (2) Distance bắt tốt "gian lận giả" (đảo 0 -> 1, Recall 0,94–0,96 ở kịch bản B) nhưng bỏ sót gian lận thật bị ghi 0
+      (Recall 1 -> 0 chỉ 0,49 ở B 30%); Single cân bằng hơn (0,72 và 0,69). (3) Giảm cột không miễn phí: giảm F1 để đổi lấy tốc độ, và Elbow sụp (1 cột) khi nhãn quá bẩn.
+      Phần giải thích "vì sao" (gian lận giả nằm giữa hàng xóm bình thường nên Distance thấy ngay) là suy luận hợp lý, CHƯA có thí nghiệm riêng kiểm chứng.
+    - **Hạn chế khi trích dẫn:** một seed (42), không có khoảng tin cậy; B chỉ 98/296 dòng đảo nên Recall nhảy từng bước ~2 điểm %; nhiễu đảo ngẫu nhiên không phụ thuộc đặc trưng (kiểu nhiễu khác chưa thử);
+      k cố định 5; Precision là cận dưới (nhiễu gốc sẵn có không có đáp án).
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -1905,7 +1937,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 - [x] Rule liên cột ĐỢT 2: Nếu–thì chạy chung bộ máy biểu thức (2 ô NẾU/THÌ đầy đủ), `=>`, `<=>`, `có(cột)`, mặc định
       "— Chọn cách xử lý —" + xem trước cho mọi rule liên cột (mục 25).
 - [x] Chốt bộ dữ liệu = Credit Card Fraud (nguyên bộ) + gỡ One-Hot khỏi web — xem mục 35.
-- [ ] Thí nghiệm cấy nhiễu có kiểm soát trên Credit Card nguyên bộ (3 phương pháp, báo cáo cả 2 lớp, đo thời gian) — CHƯA chạy; đây mới là bằng chứng "thuật toán hiệu quả".
+- [x] Thí nghiệm cấy nhiễu có kiểm soát trên Credit Card nguyên bộ (3 phương pháp, 2 kiểu nhiễu, 2 bộ cột, đo thời gian) — ĐÃ CHẠY, xem mục 38. Còn thiếu: nhiều seed, nhiễu phụ thuộc đặc trưng.
 - [ ] Cập nhật lại file này mỗi khi làm xong 1 cụm việc lớn (lần này ghi bù mục 18-23 sau khi
       thấy file thiếu Denoise).
 - [ ] `evaluate_distance_vs_confident_creditcard.py` chưa chạy xong (quá
