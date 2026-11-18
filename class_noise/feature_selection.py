@@ -5,8 +5,8 @@ Learning, theo đúng quy trình thầy hướng dẫn (3 bước):
   Bước 2 (module này): trong các cột còn lại, loại bớt cột THỪA THÔNG TIN LẪN
     NHAU (tương quan cao giữa CỘT VỚI CỘT, không liên quan gì tới nhãn).
   Bước 3 (module này): trên các cột CUỐI CÙNG sau Bước 1+2 -- (3a) cap outlier
-    về biên IQR/Z-score (TÁI DÙNG detect_outlier() + apply_handling() đã có ở
-    attribute_noise/, không viết lại công thức IQR/Z-score lần 2), (3b) biến
+    về biên IQR/Z-score (TÁI DÙNG detect_outlier() + công thức biên/định dạng số đã có
+    ở attribute_noise/, không viết lại công thức IQR/Z-score lần 2), (3b) biến
     đổi logarit để phân phối đỡ "lệch đuôi dài", cân đối hơn.
 
 Phân biệt quan trọng giữa Bước 1 và Bước 2 (dễ nhầm vì cả 2 đều "giảm cột"):
@@ -22,10 +22,9 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 
-from attribute_noise.attribute_handling import HandlingAction, HandlingChoice, apply_handling
+from attribute_noise.attribute_handling import _format_numeric_for_column, _resolve_cap_bounds
 from attribute_noise.config import ColumnDType, ColumnNoiseConfig, NoiseType
 from attribute_noise.detectors import detect_outlier
-from attribute_noise.pipeline import NoiseFinding
 
 
 @dataclass
@@ -153,9 +152,9 @@ def cap_outliers(
     dữ liệu/đặc trưng tốt thì model càng học tốt).
 
     TÁI DÙNG NGUYÊN VẸN `detect_outlier()` (attribute_noise/detectors.py) để
-    tìm ô outlier + `apply_handling()` (attribute_noise/attribute_handling.py)
-    với action `CAP_TO_RANGE` để cap -- không viết lại công thức IQR/Z-score
-    lần thứ 2, đúng tinh thần "tái dùng" đã áp dụng xuyên suốt dự án.
+    tìm ô outlier + `_resolve_cap_bounds()` / `_format_numeric_for_column()`
+    (attribute_noise/attribute_handling.py) để tính biên và định dạng giá trị cap --
+    đúng các hàm mà `apply_handling()` dùng cho hành động CAP_TO_RANGE.
 
     BỎ QUA cột có IQR/độ lệch chuẩn SUY BIẾN (= 0) -- LỖI THẬT đã gặp khi
     test: `capital.gain`/`capital.loss` của Adult Income có Q1=Q3=0 (đa số
@@ -164,6 +163,12 @@ def cap_outliers(
     xoá sạch 2.712/1.519 giá trị có ý nghĩa thật, làm CV accuracy tụt xuống
     DƯỚI CẢ baseline. Cột nào rơi vào trường hợp này thì GIỮ NGUYÊN, không
     cap gì cả -- an toàn hơn cap sai.
+
+    TỐC ĐỘ (CLAUDE.md mục 38): bản đầu gọi `apply_handling()` rồi lặp `.loc[từng_dòng]`
+    cho mọi ô outlier -- trên Credit Card (284k dòng, hàng chục nghìn ô outlier mỗi cột)
+    mất 20-85 giây MỖI CỘT, hơn 20 phút cho 30 cột mỗi lần bấm Phát hiện. Giờ cap cả
+    cột bằng 1 phép gán vector hoá (6 giây cho 30 cột); kết quả đã đối chiếu từng ô
+    với bản cũ (xem CLAUDE.md mục 38).
     """
     result = df.copy()
     for col in columns:
@@ -181,15 +186,14 @@ def cap_outliers(
             outlier_threshold=outlier_threshold,
         )
         is_outlier = detect_outlier(result[col], cfg)
-        findings = [
-            NoiseFinding(row_index=idx, column=col, noise_type=NoiseType.OUTLIER.value, value=None)
-            for idx in result.index[is_outlier]
-        ]
-        if not findings:
-            continue  # cột này không có outlier -> không cần gọi apply_handling()
+        if not is_outlier.any():
+            continue  # cột này không có outlier
 
-        choice = HandlingChoice(column=col, noise_type=NoiseType.OUTLIER, action=HandlingAction.CAP_TO_RANGE)
-        result, _stats = apply_handling(result, [cfg], findings, [choice])
+        lower, upper = _resolve_cap_bounds(result, col, NoiseType.OUTLIER, cfg)
+        capped = numeric.clip(lower=lower, upper=upper)[is_outlier]
+        capped = capped[capped.notna()]  # ô không ép được thành số thì không đụng tới
+        # Ghi CẢ CỘT một lần (cùng cách định dạng chuỗi như apply_handling: làm tròn 2 chữ số).
+        result.loc[capped.index, col] = [_format_numeric_for_column(v, cfg) for v in capped.to_numpy()]
     return result
 
 

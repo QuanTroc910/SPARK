@@ -1807,7 +1807,11 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       --scenarios base:0,A:0.05,A:0.10,B:0.10,B:0.30 --columns all,reduced --methods ensemble,distance,single --single-trees 300 --k 5`.
     - **Cách làm:** 284.807 dòng × 30 cột đặc trưng (Time, V1–V28, Amount), nhãn Class (0: 284.315, 1: 492). Tiền xử lý y hệt web (cap outlier IQR 1,5 + log1p),
       bước cap dùng bản VECTOR HOÁ (`fast_cap_outliers`) đã đối chiếu từng ô với `cap_outliers()` gốc ở cột V1, V14: GIỐNG HỆT. LÝ DO: `cap_outliers()` gốc mất 20–85 giây
-      MỖI CỘT trên Credit Card (lặp `.loc` từng ô), tức hơn 20 phút cho 30 cột mỗi lần bấm Phát hiện trên web (bản vector hoá: 6,3 giây). CHƯA vá vào code web.
+      MỖI CỘT trên Credit Card (lặp `.loc` từng ô), tức hơn 20 phút cho 30 cột mỗi lần bấm Phát hiện trên web (bản vector hoá: 6,3 giây). **ĐÃ VÁ vào code web (sau mục này):** `class_noise/feature_selection.py::cap_outliers()` giờ cap cả cột bằng một phép gán
+      vector hoá, vẫn tái dùng đúng `detect_outlier()`, `_resolve_cap_bounds()`, `_format_numeric_for_column()` của nhánh Attribute (chỉ thay vòng lặp `.loc` từng ô). Đối chiếu bản mới với bản
+      cũ TỪNG Ô: dữ liệu bẩn tổng hợp (ô rỗng/chữ/`nan`/`inf`/`1e3`, cột hằng, cột zero-inflated, cột < 4 ô số, cả IQR 1,5 và 3, Z-score 3 và 2) = giống hệt; Credit Card thật cột Time, V1, V14,
+      V20, Amount = giống hệt (bản cũ 0,3 / 19,8 / 38,8 / 75,8 / 86,8 giây, bản mới 0,3–0,5 giây); cả 30 cột: 8,1 giây (trước đó hơn 20 phút). Test backend + Playwright Class Noise chạy lại đều đạt.
+      `fast_cap_outliers()` trong script thí nghiệm giờ chỉ còn là bản sao tương đương (giữ nguyên để kết quả mục này tái lập được).
       Cấy nhiễu (seed 42, cùng một tập dòng đảo cho cả 3 thuật toán và cả 2 bộ cột): **A** đảo đồng đều p% mọi dòng (5% = 14.240 dòng, 10% = 28.481; gần như toàn "gian lận giả");
       **B** đảo q% gian lận thật sang 0 và ĐÚNG BẰNG ẤY dòng bình thường sang 1 (10% = 49+49, 30% = 148+148; số nhãn "1" vẫn 492). Bộ cột: đủ 30, và "giảm cột" = xếp hạng
       Random Forest 300 cây trên nhãn ĐÃ cấy nhiễu của kịch bản đó rồi Elbow (KHÔNG chạy lọc tương quan, vì cột V là PCA nên vốn không loại được cột nào). Tham số như web:
