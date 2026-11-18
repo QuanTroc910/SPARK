@@ -695,7 +695,10 @@ def class_noise_detect_api():
     owner_error = _require_file_owner(file_id)
     if owner_error:
         return owner_error
-    df = UPLOADED_FILES.get(file_id)
+    # Cách B (CLAUDE.md mục 37): phát hiện chạy trên BẢN ĐANG LÀM VIỆC nếu người dùng đã xử
+    # lý Class Noise (xoá dòng / đổi nhãn), nếu chưa thì là bản gốc. Muốn chạy lại từ đầu
+    # thì bấm "Về dữ liệu gốc" ở bước Xử lý.
+    df = _peek_working_df(file_id)
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
 
@@ -748,6 +751,7 @@ def class_noise_detect_api():
         return jsonify(
             {
                 "method": "distance_based",
+                "source": _class_source_info(file_id),
                 "diagnostics": {
                     "n_rows_total": diag.n_rows_total,
                     "n_rows_used": diag.n_rows_used,
@@ -780,6 +784,7 @@ def class_noise_detect_api():
         return jsonify(
             {
                 "method": "ensemble_based",
+                "source": _class_source_info(file_id),
                 "diagnostics": {
                     "n_rows_total": diag.n_rows_total,
                     "n_rows_used": diag.n_rows_used,
@@ -820,6 +825,7 @@ def class_noise_detect_api():
     return jsonify(
         {
             "method": "single_learning",
+            "source": _class_source_info(file_id),
             "diagnostics": {
                 "n_rows_total": diag.n_rows_total,
                 "n_rows_used": diag.n_rows_used,
@@ -887,7 +893,7 @@ def class_noise_reduce_features_api():
     owner_error = _require_file_owner(file_id)
     if owner_error:
         return owner_error
-    df = UPLOADED_FILES.get(file_id)
+    df = _peek_working_df(file_id)  # bản đang làm việc nếu đã xử lý (cách B, mục 37)
     if df is None:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
 
@@ -929,6 +935,245 @@ def class_noise_reduce_features_api():
             "after_correlation": after_correlation,
         }
     )
+
+
+# =============================================================================
+# XỬ LÝ CLASS NOISE (Bước "Xử lý" của nhánh Class Noise) -- CLAUDE.md mục 37.
+#
+# Mỗi dòng bị nghi sai nhãn có 3 cách xử lý:
+#   keep       -- giữ nguyên (coi là báo nhầm)
+#   remove_row -- xoá cả dòng (nhóm "Filtering" trong Gupta & Gupta 2019)
+#   relabel    -- đổi nhãn sang `new_label` (nhóm "Polishing"): FE gửi nhãn gợi ý của
+#                 thuật toán hoặc nhãn người dùng tự chọn trong các nhãn ĐÃ CÓ của cột
+#
+# Dùng CHUNG bản "đang làm việc" (WORKING_FILES) + lịch sử hoàn tác (HANDLING_HISTORY)
+# với nhánh Attribute -- file gốc (UPLOADED_FILES) không bao giờ đổi. Từ nay các route
+# /api/class-noise/detect và /reduce-features cũng đọc BẢN ĐANG LÀM VIỆC (cách B: phát
+# hiện lại sau khi xử lý thì chạy trên dữ liệu đã xử lý, giống nhánh Attribute).
+# Chỉ đổi CỘT NHÃN hoặc xoá dòng; các cột đặc trưng KHÔNG bao giờ bị sửa (bước cap
+# outlier + log của lúc detect chạy trên bản sao, không ghi ngược vào file).
+# =============================================================================
+CLASS_NOISE_ACTIONS = ("keep", "remove_row", "relabel")
+
+
+def _class_source_info(file_id: str) -> dict:
+    """Cho FE biết lần phát hiện/giảm cột này chạy trên dữ liệu nào: bản gốc hay bản đã
+    xử lý (và bao nhiêu bước). Dựa vào lịch sử, không phải việc WORKING_FILES có tồn tại
+    hay không (hoàn tác hết các bước thì bản đang làm việc lại giống hệt bản gốc)."""
+    steps = len(HANDLING_HISTORY.get(file_id, []))
+    current = _peek_working_df(file_id)
+    original = UPLOADED_FILES.get(file_id)
+    return {
+        "is_processed": steps > 0,
+        "history_steps": steps,
+        "rows": 0 if current is None else len(current),
+        "original_rows": 0 if original is None else len(original),
+    }
+
+
+def _label_counts(df, label_column: str) -> dict:
+    return {str(k): int(v) for k, v in df[label_column].astype(str).value_counts().items()}
+
+
+def _class_noise_state_payload(file_id: str, label_column: str) -> dict:
+    """Phần trạng thái FE cần sau mỗi lần áp dụng/hoàn tác/về gốc."""
+    current = _peek_working_df(file_id)
+    return {
+        "history": _history_payload(file_id),
+        "source": _class_source_info(file_id),
+        "label_counts": _label_counts(current, label_column) if label_column in current.columns else {},
+    }
+
+
+@app.route("/api/class-noise/apply", methods=["POST"])
+def class_noise_apply_api():
+    """Áp dụng cách xử lý cho các dòng nghi sai nhãn (hoặc CHẠY THỬ).
+
+    Payload: file_id, label_column, dry_run (tuỳ chọn), rows = [{row_number (1-based),
+    action ∈ keep|remove_row|relabel, new_label (bắt buộc với relabel), expected_label
+    (nhãn dòng đó lúc phát hiện, tuỳ chọn -- nếu nhãn hiện tại đã khác thì BỎ QUA dòng đó,
+    tránh sửa nhầm dòng đã bị đổi ở lần xử lý trước)}].
+    new_label phải là một nhãn ĐÃ CÓ trong cột nhãn (không cho gõ tự do: gõ sai chính tả sẽ
+    âm thầm tạo ra một lớp mới).
+
+    dry_run=true: tính đúng như thật trên bản sao, KHÔNG ghi gì (không tạo bản đang làm
+    việc, không ghi lịch sử), chỉ trả tác động để FE hiện "Sẽ xoá N dòng, đổi nhãn M dòng"
+    cho người dùng xác nhận.
+    """
+    payload = request.get_json() or {}
+    owner_error = _require_file_owner(payload.get("file_id"))
+    if owner_error:
+        return owner_error
+    with HANDLING_LOCK:
+        return _class_noise_apply(payload)
+
+
+def _class_noise_apply(payload: dict):
+    file_id = payload.get("file_id")
+    dry_run = _as_bool(payload.get("dry_run"))
+    df = _peek_working_df(file_id) if dry_run else _get_working_df(file_id)
+    if df is None:
+        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+
+    label_column = payload.get("label_column")
+    if not label_column or label_column not in df.columns:
+        return jsonify({"error": f"Cột nhãn không tồn tại trong file: {label_column}"}), 400
+    rows_payload = payload.get("rows")
+    if not isinstance(rows_payload, list) or not rows_payload:
+        return jsonify({"error": "Chưa chọn dòng nào để xử lý."}), 400
+
+    labels = df[label_column].astype(str)
+    valid_labels = {v for v in labels.unique() if v.strip() != ""}
+
+    to_remove: list[int] = []
+    to_relabel: dict[int, str] = {}
+    seen: set[int] = set()
+    skipped_rows: list[int] = []  # số dòng (1-based) bị bỏ qua vì đã xoá / nhãn đã đổi -> FE không đánh dấu "đã xử lý"
+    kept = skipped_missing = skipped_stale = already_that_label = 0
+    for item in rows_payload:
+        try:
+            idx = int(item["row_number"]) - 1
+            action = item["action"]
+        except (KeyError, TypeError, ValueError):
+            return jsonify({"error": "Mỗi dòng phải có row_number và action hợp lệ."}), 400
+        if action not in CLASS_NOISE_ACTIONS:
+            return jsonify({"error": f"Cách xử lý không hợp lệ: {action}"}), 400
+        if idx in seen:
+            return jsonify({"error": f"Dòng {idx + 1} bị chọn hai lần."}), 400
+        seen.add(idx)
+
+        if idx not in df.index:
+            skipped_missing += 1  # dòng đã bị xoá từ lần xử lý trước
+            skipped_rows.append(idx + 1)
+            continue
+        expected = item.get("expected_label")
+        if expected is not None and labels.loc[idx] != str(expected):
+            skipped_stale += 1  # nhãn đã đổi từ lúc phát hiện -> không sửa chồng lên
+            skipped_rows.append(idx + 1)
+            continue
+        if action == "keep":
+            kept += 1
+        elif action == "remove_row":
+            to_remove.append(idx)
+        else:  # relabel
+            new_label = item.get("new_label")
+            if not isinstance(new_label, str) or new_label not in valid_labels:
+                return jsonify(
+                    {"error": f"Nhãn mới «{new_label}» không có trong cột nhãn (các nhãn hiện có: {', '.join(sorted(valid_labels))})."}
+                ), 400
+            if new_label == labels.loc[idx]:
+                already_that_label += 1
+            else:
+                to_relabel[idx] = new_label
+
+    # `df` KHÔNG bị sửa tại chỗ: đổi nhãn làm trên bản copy, xoá dòng bằng drop() (trả object
+    # mới) -> dùng thẳng `df` làm snapshot hoàn tác được (xem HANDLING_HISTORY).
+    new_df = df
+    if to_relabel:
+        new_df = df.copy()
+        relabel_idx = list(to_relabel)
+        new_df.loc[relabel_idx, label_column] = [to_relabel[i] for i in relabel_idx]
+    if to_remove:
+        new_df = new_df.drop(index=to_remove)
+
+    directions: dict[str, int] = {}
+    for i, new_label in to_relabel.items():
+        key = f"{labels.loc[i]}→{new_label}"
+        directions[key] = directions.get(key, 0) + 1
+    removed_by_label: dict[str, int] = {}
+    for i in to_remove:
+        removed_by_label[labels.loc[i]] = removed_by_label.get(labels.loc[i], 0) + 1
+
+    impact = {
+        "rows_before": len(df),
+        "rows_after": len(new_df),
+        "rows_removed": len(to_remove),
+        "labels_changed": len(to_relabel),
+        "relabel_directions": directions,
+        "removed_by_label": removed_by_label,
+        "kept": kept,
+        "skipped_missing": skipped_missing,
+        "skipped_stale": skipped_stale,
+        "skipped_rows": skipped_rows[:5000],
+        "already_that_label": already_that_label,
+        "label_counts_before": _label_counts(df, label_column),
+        "label_counts_after": _label_counts(new_df, label_column),
+    }
+
+    if dry_run:
+        return jsonify({"dry_run": True, **impact})
+
+    # Chỉ ghi lịch sử khi bước này THẬT SỰ đổi dữ liệu (chọn "Giữ nguyên" hay xử lý dòng
+    # đã bị xoá thì không có gì để hoàn tác).
+    if to_remove or to_relabel:
+        _record_history(
+            file_id,
+            {
+                "group_key": "class_noise",
+                "column": label_column,
+                "noise_type": "class_noise",
+                "actions": {
+                    **({"remove_row": len(to_remove)} if to_remove else {}),
+                    **({"relabel": len(to_relabel)} if to_relabel else {}),
+                },
+                "rows_removed": len(to_remove),
+                "cells_changed": len(to_relabel),
+                "relabel_directions": directions,
+                "removed_by_label": removed_by_label,
+                "rows_before": len(df),
+                "rows_after": len(new_df),
+            },
+            snapshot_df=df,
+        )
+    WORKING_FILES[file_id] = new_df
+    return jsonify({"dry_run": False, **impact, **_class_noise_state_payload(file_id, label_column)})
+
+
+@app.route("/api/class-noise/undo", methods=["POST"])
+def class_noise_undo_api():
+    """Lùi 1 bước xử lý Class Noise (cùng cơ chế snapshot với nhánh Attribute)."""
+    payload = request.get_json() or {}
+    owner_error = _require_file_owner(payload.get("file_id"))
+    if owner_error:
+        return owner_error
+    with HANDLING_LOCK:
+        file_id = payload.get("file_id")
+        label_column = payload.get("label_column")
+        if file_id not in UPLOADED_FILES:
+            return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+        history = HANDLING_HISTORY.get(file_id, [])
+        if not history:
+            return jsonify({"error": "Chưa có bước xử lý nào để hoàn tác."}), 409
+        last = history[-1]
+        if last["snapshot"] is None:
+            return jsonify(
+                {
+                    "error": (
+                        "Không hoàn tác được bước này (bảng quá lớn, hoặc đã vượt quá "
+                        f"{MAX_UNDO_STEPS} bước gần nhất). Hãy dùng \"Về dữ liệu gốc\"."
+                    )
+                }
+            ), 409
+        history.pop()
+        WORKING_FILES[file_id] = last["snapshot"]
+        return jsonify(_class_noise_state_payload(file_id, label_column))
+
+
+@app.route("/api/class-noise/reset", methods=["POST"])
+def class_noise_reset_api():
+    """Bỏ mọi bước xử lý Class Noise, quay về đúng file đã upload (luôn dùng được)."""
+    payload = request.get_json() or {}
+    owner_error = _require_file_owner(payload.get("file_id"))
+    if owner_error:
+        return owner_error
+    with HANDLING_LOCK:
+        file_id = payload.get("file_id")
+        label_column = payload.get("label_column")
+        if UPLOADED_FILES.get(file_id) is None:
+            return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+        WORKING_FILES.pop(file_id, None)
+        HANDLING_HISTORY.pop(file_id, None)
+        return jsonify(_class_noise_state_payload(file_id, label_column))
 
 
 @app.route("/api/apply-handling", methods=["POST"])

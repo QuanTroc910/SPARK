@@ -932,6 +932,8 @@
 
           <p class="hint-note" id="class-wait-hint">Có thể mất vài phút tuỳ kích thước file. Đừng tắt tab.</p>
 
+          <p class="status-text" id="class-source-note" hidden></p>
+
           <div class="panel-actions">
             <button class="btn btn-primary" id="class-detect-btn" type="button">Phát hiện Class Noise →</button>
             <span class="status-text" id="class-detect-status"></span>
@@ -1065,13 +1067,73 @@
           </div>
         </div>
 
-        <!-- Nhánh CLASS NOISE: chưa có xử lý (xem roadmap CLAUDE.md) -->
+        <!-- Nhánh CLASS NOISE: xử lý dòng nghi sai nhãn (CLAUDE.md mục 37) -->
         <div id="panel-5-class" hidden>
-          <div class="tx-note"><span class="tx-note-tag">Đang phát triển</span>
-            <p>Chưa có xử lý cho Class Noise. Dùng danh sách dòng nghi ngờ ở bước Kết quả để rà soát tay.</p>
+          <p class="panel-desc">
+            Chọn cách xử lý cho từng dòng nghi sai nhãn (hoặc gán hàng loạt), rồi bấm "Áp dụng". File gốc không bao giờ bị đổi.
+            Mọi thay đổi đều được chạy thử và hỏi lại; hoàn tác được. Chỉ cột nhãn bị đổi, các cột đặc trưng giữ nguyên.
+          </p>
+
+          <div class="history-bar" id="ch-history-bar">
+            <div class="history-bar-top">
+              <strong class="history-bar-title">Lịch sử xử lý</strong>
+              <span class="status-text" id="ch-history-hint"></span>
+              <button class="btn btn-ghost btn-small" id="ch-undo-btn" type="button" disabled>↶ Hoàn tác</button>
+              <button class="btn btn-ghost btn-small" id="ch-reset-btn" type="button" disabled>⟲ Về dữ liệu gốc</button>
+            </div>
+            <div class="handling-confirm" id="ch-reset-confirm" role="alert" hidden></div>
+            <ol class="history-log" id="ch-history-log"></ol>
           </div>
+
+          <p class="status-text" id="ch-summary"></p>
+
+          <div class="chart-card" id="ch-bulk-card">
+            <h3 class="sub-title">Gán cách xử lý hàng loạt</h3>
+            <div class="field-row">
+              <div class="field">
+                <label for="ch-bulk-direction">Hướng (nhãn ghi → gợi ý)</label>
+                <select class="select" id="ch-bulk-direction"></select>
+              </div>
+              <div class="field">
+                <label for="ch-bulk-min-score">Mức đáng ngờ từ</label>
+                <input class="input mono" id="ch-bulk-min-score" type="number" step="any" placeholder="bỏ trống = tất cả" />
+              </div>
+              <div class="field">
+                <label for="ch-bulk-action">Cách xử lý</label>
+                <select class="select" id="ch-bulk-action">
+                  <option value="" selected>— Chọn cách xử lý —</option>
+                  <option value="keep">Giữ nguyên</option>
+                  <option value="remove_row">Xoá dòng</option>
+                  <option value="relabel_suggested">Sửa nhãn theo gợi ý</option>
+                </select>
+              </div>
+              <button class="btn btn-ghost" id="ch-bulk-assign-btn" type="button" disabled>Gán</button>
+            </div>
+            <p class="status-text" id="ch-bulk-info"></p>
+          </div>
+
+          <h3 class="sub-title">Danh sách dòng nghi ngờ (mức đáng ngờ giảm dần)</h3>
+          <div class="toolbar">
+            <input type="search" class="input search-input" id="ch-search" placeholder="Tìm theo số dòng hoặc nhãn…" />
+            <button class="btn btn-ghost btn-small" id="ch-clear-plan-btn" type="button" disabled>Bỏ mọi lựa chọn</button>
+          </div>
+          <div class="table-wrap">
+            <table class="results-table" id="ch-table"></table>
+          </div>
+          <div class="pagination" id="ch-pagination" hidden>
+            <button class="btn btn-ghost btn-small" id="ch-page-prev" type="button">← Trước</button>
+            <span id="ch-page-indicator" class="mono"></span>
+            <button class="btn btn-ghost btn-small" id="ch-page-next" type="button">Sau →</button>
+          </div>
+
+          <div class="handling-confirm" id="ch-confirm" role="alert" hidden></div>
+          <p class="status-text" id="ch-status" aria-live="polite"></p>
+
           <div class="panel-actions">
             <button class="btn btn-ghost" id="class-back-to-results-btn" type="button">← Quay lại kết quả</button>
+            <button class="btn btn-primary" id="ch-apply-btn" type="button" disabled>Áp dụng các dòng đã chọn</button>
+            <button class="btn btn-ghost" id="ch-redetect-btn" type="button">Phát hiện lại trên dữ liệu hiện tại →</button>
+            <button class="btn btn-primary" id="ch-export-btn" type="button">Xuất file CSV ↓</button>
           </div>
         </div>
       </section>

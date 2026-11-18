@@ -4,8 +4,8 @@ Web app phát hiện và xử lý noise trong dataset do người dùng upload (
 Luồng: upload file → chọn "Attribute noise" hoặc "Class noise" → (Attribute) chọn
 từng cột + loại noise áp dụng cho cột đó / (Class) chọn cột nhãn + đặc trưng →
 hệ thống detect → người dùng xem kết quả (Attribute: xử lý replace/remove từng
-ô/dòng lỗi rồi xuất file; Class: xem danh sách dòng nghi ngờ sai nhãn — phần xử
-lý/handling cho Class noise CHƯA làm, xem roadmap cuối file).
+ô/dòng lỗi rồi xuất file; Class: xem danh sách dòng nghi ngờ sai nhãn rồi xử lý
+từng dòng/hàng loạt: giữ / xoá / sửa nhãn, chạy thử + xác nhận + hoàn tác + xuất file — mục 37).
 
 Tên hiển thị trên UI đã đổi từ "SPARK" (tên đặt tạm lúc đầu, không có ý nghĩa gì)
 thành "Dò & Xử Lý Nhiễu Dữ Liệu", rồi thành thương hiệu **"Denoise"** (giao diện mới
@@ -494,7 +494,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     xoá nhầm hàng loạt, cùng bài học mục 13).
   - `workspace-flow.js` (IIFE, copy từ `script.js`, API `window.DenoiseFlow`): trong
     Denoise chỉ nhánh **Class Noise 4 bước** được dùng (File & phương pháp → Nhãn & đặc
-    trưng → Kết quả → Xử lý=placeholder). Phần logic Attribute 5 bước còn nằm trong file
+    trưng → Kết quả → Xử lý, đã làm ở mục 37). Phần logic Attribute 5 bước còn nằm trong file
     nhưng giao diện Denoise không còn mở nó (thay bằng 3 nhóm tool).
   - `workspace.css`: biến CSS bề rộng khung; class dùng chung `.cyd-table*`, `.convert-*`,
     `.ft-*`, `.cf-form*`, `.cf-sum*`, `.cf-method-*`; `@container` cho bảng lỗi theo cột.
@@ -645,8 +645,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       classifier)"/"Tỉ lệ classifier bất đồng" cho ensemble_based — MỚI) —
       tìm kiếm + phân trang 20 dòng/trang, đã
       sắp theo score giảm dần từ backend.
-  - Bước 5 (class): CHỈ có placeholder "đang phát triển" — xử lý/handling
-    cho class noise CHƯA code (xem roadmap cuối file), nút quay lại Bước 4.
+  - Bước 5 (class): bước **Xử lý** đã làm ở mục 37 (`#panel-5-class`, hàm tiền tố `ch*` + object
+    `classHandling` trong `workspace-flow.js`; backend `/api/class-noise/apply|undo|reset`).
 
   11 "family" màu (`NOISE_TYPE_META` trong `script.js`, khớp biến CSS
   `--<family>-text/soft/border` trong `style.css`) dùng chung cho chip/badge/
@@ -1768,6 +1768,39 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       chỉ quét cột số/ngày nên 1.931 ô giả ở 3 cột chữ (Item 636, Payment Method 599, Location 696) không tool nào bắt; đề xuất (CHƯA làm): cho người dùng tự khai danh sách "giá trị coi như thiếu" ở tool Ô trống (không mặc định coi `UNKNOWN` là thiếu vì với dữ liệu khác có thể là nhóm hợp lệ).
     - **Student Admission Records (Kaggle, 157 dòng, tự tạo, có dòng trùng / ô thiếu / tuổi ngoại lai):** user chưa tải về, chưa thử.
 
+37. **Class Noise — bước XỬ LÝ (Bước 4/4 của giao diện Denoise) — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user yêu cầu "cùng làm bước cuối của web là handling", chọn **cách B**: phát hiện lại sau khi xử lý thì chạy trên BẢN ĐÃ XỬ LÝ
+      (giống nhánh Attribute, CLAUDE.md mục 13). Các lựa chọn còn lại do mình đề xuất theo khuyến nghị: 3 cách xử lý + gán hàng loạt theo ngưỡng
+      (user chưa phản hồi riêng, đổi được nếu muốn).
+    - **3 cách xử lý mỗi dòng** (theo phân loại Gupta & Gupta 2019): `keep` (Robust, coi là báo nhầm), `remove_row` (Filtering), `relabel` (Polishing,
+      đổi nhãn sang nhãn gợi ý hoặc nhãn khác ĐÃ CÓ trong cột nhãn). Mặc định ô chọn = "— Chọn cách xử lý —" (bài học mục 13). Nhãn mới KHÔNG cho gõ
+      tự do (gõ sai sẽ âm thầm tạo lớp mới): backend chỉ nhận nhãn đã có trong cột, nếu không báo 400.
+    - **Backend** (`app.py`, khối "XỬ LÝ CLASS NOISE"): `POST /api/class-noise/apply` {file_id, label_column, dry_run, rows:[{row_number, action, new_label?,
+      expected_label?}]}. `expected_label` = nhãn lúc phát hiện: nếu nhãn hiện tại đã khác (đã đổi ở lần trước) hoặc dòng đã bị xoá thì BỎ QUA dòng đó và
+      báo `skipped_rows` (FE không đánh dấu "đã xử lý"). Dòng bị chọn 2 lần → 400. `dry_run=true` KHÔNG tạo bản đang làm việc/lịch sử, chỉ trả tác động
+      (`rows_removed`, `labels_changed`, `relabel_directions` {"0→1": n}, `removed_by_label`, `label_counts_before/after`...). Chạy thật: dùng CHUNG
+      `WORKING_FILES` + `HANDLING_HISTORY` + `HANDLING_LOCK` với nhánh Attribute (entry `group_key: "class_noise"`, snapshot bằng tham chiếu), bước không đổi gì
+      thì không ghi lịch sử. `POST /api/class-noise/undo` và `/reset` (không detect lại, nhẹ hơn route Attribute), xuất file dùng lại `/api/export-working`.
+      Chỉ cột NHÃN bị đổi hoặc xoá dòng; cột đặc trưng không bao giờ bị sửa (cap outlier + log chỉ chạy trên bản sao lúc detect).
+      `/api/class-noise/detect` và `/reduce-features` giờ đọc `_peek_working_df()` (bản đang làm việc nếu có) và trả thêm `source`
+      {is_processed, history_steps, rows, original_rows}. `row_number` vẫn là số dòng của FILE GỐC (index giữ nguyên sau khi xoá).
+    - **Giao diện** (`workspace.html` `#panel-5-class`, `workspace-flow.js` đoạn "BƯỚC XỬ LÝ cho CLASS NOISE", `workspace.css` cuối file): thanh lịch sử
+      (Hoàn tác / Về dữ liệu gốc, id `ch-*`, dùng lại class `history-bar`), khung **Gán hàng loạt** (hướng nhãn ghi → gợi ý + "Mức đáng ngờ từ" + cách xử lý),
+      bảng từng dòng (ô chọn riêng, phân trang 20, tìm kiếm; dòng đã xử lý hiện "✅ Đã …"), nút Áp dụng ghi số dòng đã chọn. Áp dụng = chạy thử → hộp xác nhận
+      (số dòng xoá/đổi nhãn, hướng đổi, phân bố nhãn trước → sau, **cảnh báo lớp hiếm** khi lớp chiếm < 5%: đổi nhãn sang lớp hiếm hoặc xoá dòng lớp hiếm,
+      cảnh báo khi xoá ≥ 20% số dòng) → "Xác nhận và áp dụng" (focus mặc định ở Huỷ). Chỉ chọn "Giữ nguyên" thì không hỏi. Hộp tự đóng khi đổi lựa chọn / rời bước;
+      so chữ ký lựa chọn trước và sau khi chạy thử để không áp dụng lệch. Khoá chạy chồng bằng `classHandling.busy`. Hoàn tác trả đúng các dòng của bước đó về
+      "chưa xử lý" (`classHandling.steps`); nếu danh sách đã cũ (hoàn tác bước từ trước lần phát hiện) thì nhắc bấm "Phát hiện lại". Phát hiện lại → xoá lựa chọn
+      cũ (`chResetForNewFindings`); tải file mới → `chResetAll`. Bước chọn nhãn hiện dòng "Đang chạy trên dữ liệu đã xử lý (N bước)" khi đã có xử lý.
+    - **Bẫy cần nhớ:** `workspace-flow.js` là một IIFE chung, nên hàm/biến của khối này đều có tiền tố `ch`/`classHandling` để không đè tên hàm Attribute
+      (từng gặp ở mục 34).
+    - **Kiểm chứng:** `test_class_handling_api.py` (Flask test client, ~35 kiểm tra đạt toàn bộ: dry_run không ghi gì, nhãn/dòng đổi đúng, file gốc nguyên vẹn, cột đặc trưng
+      không đổi, dòng đã xoá/nhãn đã đổi bị bỏ qua, nhãn không tồn tại/action lạ/chọn 2 lần/thiếu row_number → 400, người khác → 404, undo/reset, xuất file, detect
+      trên bản đã xử lý giữ nguyên số dòng gốc) và Playwright `test_class_handling_ui.js` (~40 kiểm tra trên file mẫu 600 dòng: gán hàng loạt theo hướng + ngưỡng, hộp
+      xác nhận, Huỷ không đổi gì, áp dụng, hoàn tác, xoá, xuất CSV 593 dòng, phát hiện lại ra đúng 593 dòng dùng được, về gốc; không lỗi JS). Hai file test nằm ở thư mục tạm, không trong repo.
+    - **Chưa làm:** "mức tin cậy cao" (đánh dấu dòng cả 3 thuật toán cùng gắn cờ), nút xem dữ liệu sau xử lý như Attribute, chọn nhãn tự do cho trường hợp
+      nhiều lớp ngoài danh sách nhãn hiện có.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -1883,17 +1916,9 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       chứng ở mục 9 mới chạy trên Credit Card Fraud/Adult Income (dữ liệu
       thay thế tạm thầy đồng ý dùng), chưa chạy được trên đúng dữ liệu mục
       tiêu. Cần chạy lại + đối chiếu kết quả khi có file thật.
-- [ ] Class noise — HANDLE: Bước 5 hiện CHỈ có placeholder "đang phát
-      triển". Cần thiết kế: hành động nào hợp lý cho 1 dòng bị gắn cờ sai
-      nhãn (xoá dòng? sửa lại nhãn theo `confident_label` model gợi ý? để
-      người dùng tự sửa tay?) — xem phân loại robust/filtering/polishing
-      trong bài báo "Dealing with Noise Problem in ML Data-sets: A
-      Systematic Review" (Gupta & Gupta, 2019) mà project này dựa theo. Đã
-      so sánh kỹ 3N đại diện mỗi nhóm (Robust: Sabzevari et al. 2015,
-      Filtering: Kubica & Moore 2003, Polishing: Liebchen et al. 2007) —
-      Polishing có căn cứ thực nghiệm tốt nhất (kết hợp Filtering+Polishing
-      cho accuracy cao nhất, ít mất dữ liệu nhất) và khớp tự nhiên với
-      `confident_label` đã có sẵn trong `ClassNoiseFinding`.
+- [x] Class noise — HANDLE (mục 37): 3 cách xử lý (giữ / xoá / sửa nhãn theo gợi ý hoặc sang nhãn khác đã có), gán hàng loạt theo
+      hướng + ngưỡng mức đáng ngờ, chạy thử + hộp xác nhận + cảnh báo lớp hiếm, hoàn tác 5 bước, về dữ liệu gốc, xuất CSV, phát hiện
+      lại trên bản đã xử lý (cách B). Chưa làm: "mức tin cậy cao" (dòng cả 3 thuật toán cùng gắn cờ), xem trước dữ liệu sau xử lý.
 - [x] One-Hot Encoding cho cột CHỮ làm đặc trưng Class Noise — ĐÃ LÀM RỒI ĐÃ GỠ KHỎI WEB (mục 35): user chốt dùng
       Credit Card (toàn số) nên không cần encode; cột chữ ghi là HẠN CHẾ + hướng phát triển. Module
       `class_noise/categorical_encoding.py` + các script `evaluate_adult_*` GIỮ LẠI làm mã nghiên cứu, `app.py` KHÔNG import nữa.

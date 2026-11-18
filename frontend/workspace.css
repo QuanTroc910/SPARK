@@ -1391,3 +1391,13 @@ a.hm-tool:hover { background: #ebebe7; }
   .ft-blanks .ft-coltypes-bar .btn, .ft-blank-manual .ft-coltypes-bar .btn { margin-left: auto; }
 }
 
+
+/* ===== Class Noise · bước Xử lý (CLAUDE.md mục 37) ===== */
+#panel-5-class .history-bar { margin-bottom: 16px; }
+#panel-5-class #ch-summary { margin: 0 0 16px; }
+#panel-5-class #ch-bulk-card .field-row { margin-bottom: 8px; }
+#panel-5-class #ch-confirm { margin: 14px 0 0; }
+#panel-5-class #ch-status { margin: 10px 0 0; min-height: 1.2em; }
+#panel-5-class .ch-row-action { min-width: 240px; max-width: 100%; }
+#panel-5-class.is-busy #ch-table, #panel-5-class.is-busy #ch-bulk-card { pointer-events: none; opacity: 0.7; }
+#panel-5-class .panel-actions { flex-wrap: wrap; gap: 10px; }

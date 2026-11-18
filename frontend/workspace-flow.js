@@ -189,6 +189,7 @@ function goStep(n) {
   if (n !== 5) {
     dismissResetConfirm();
     dismissAllHandlingConfirms();
+    chDismissConfirm(); // hộp xác nhận xử lý Class Noise cũng đóng khi rời bước (số liệu trong hộp có thể cũ)
   }
   // Bước 3/4/5 có 2 khung con (attribute/class) nằm chung trong cùng 1
   // panel -- luôn gọi lại hàm chuyển nhánh mỗi lần VÀO bước đó, bất kể đi
@@ -405,6 +406,7 @@ $("upload-btn").addEventListener("click", async () => {
   state.classFindings = [];
   state.classFindingsPage = 1;
   state.classFindingsFilterText = "";
+  chResetAll(); // file mới -> bỏ lựa chọn/lịch sử xử lý Class Noise của file cũ
   $("class-reduce-result").hidden = true;
   $("class-reduce-result").innerHTML = "";
 
@@ -2066,7 +2068,10 @@ function toggleStep3Direction() {
   $("panel-3-eyebrow").textContent = isClass
     ? `[ Bước 2 / 4 · ${CLASS_METHOD_LABELS[state.classMethod] || "Class Noise"} ]`
     : "[ Bước 2 / 4 ]";
-  if (isClass) renderClassNoiseConfigForm();
+  if (isClass) {
+    renderClassNoiseConfigForm();
+    chRenderSourceNote();
+  }
 }
 
 function renderClassNoiseConfigForm() {
@@ -2308,6 +2313,8 @@ $("class-detect-btn").addEventListener("click", async () => {
   state.classFindingsPage = 1;
   state.classFindingsFilterText = "";
   $("class-findings-search").value = "";
+  chResetForNewFindings(); // danh sách nghi ngờ mới -> lựa chọn xử lý cũ không còn ứng với nó
+  classHandling.source = data.source || null;
 
   unlockStep(4);
   goStep(4); // goStep() tự gọi toggleStep4Direction() -> renderClassResults()
@@ -2592,13 +2599,572 @@ $("class-goto-handling-btn").addEventListener("click", () => {
   goStep(5); // goStep() tự gọi toggleStep5Direction()
 });
 
-// ---- Bước 5: placeholder (xử lý Class Noise chưa làm, xem CLAUDE.md) ----
+// ====== BƯỚC XỬ LÝ cho CLASS NOISE (CLAUDE.md mục 37) ======
+// Mỗi dòng nghi sai nhãn có 3 cách: giữ nguyên / xoá dòng / sửa nhãn (theo gợi ý hoặc sang nhãn
+// khác đã có). Người dùng chọn từng dòng hoặc gán HÀNG LOẠT theo hướng (nhãn ghi → gợi ý) +
+// ngưỡng mức đáng ngờ; bấm Áp dụng thì chạy thử (dry_run), hỏi xác nhận, rồi mới ghi thật.
+// Tiền tố `ch` / `classHandling` để KHÔNG trùng tên hàm của nhánh Attribute trong cùng IIFE.
+const classHandling = {
+  plan: new Map(), // row_number -> { action: "keep" | "remove_row" | "relabel", newLabel }
+  done: new Map(), // row_number -> { action, newLabel }: dòng đã áp dụng (trong lần phát hiện hiện tại)
+  steps: [], // mỗi lần áp dụng có đổi dữ liệu: danh sách row_number (để hoàn tác trả dòng về "chưa xử lý")
+  page: 1,
+  perPage: 20,
+  filterText: "",
+  history: { entries: [], can_undo: false, undo_limit: 5 },
+  source: null, // { is_processed, history_steps, rows, original_rows } từ lần phát hiện cuối
+  busy: false,
+  pendingRows: null, // payload + chữ ký lựa chọn của hộp xác nhận đang mở
+};
+const CH_RARE_SHARE = 0.05; // lớp chiếm dưới 5% số dòng coi là "lớp hiếm" -> cảnh báo riêng
+
+const chNum = (n) => Number(n).toLocaleString("vi-VN");
+
+function chResetAll() {
+  classHandling.history = { entries: [], can_undo: false, undo_limit: 5 };
+  classHandling.source = null;
+  chResetForNewFindings();
+}
+// Phát hiện xong (danh sách nghi ngờ MỚI) -> lựa chọn cũ không còn ứng với danh sách nữa.
+function chResetForNewFindings() {
+  classHandling.plan = new Map();
+  classHandling.done = new Map();
+  classHandling.steps = [];
+  classHandling.page = 1;
+  classHandling.filterText = "";
+  classHandling.pendingRows = null;
+  $("ch-search").value = "";
+  $("ch-bulk-min-score").value = "";
+  $("ch-bulk-action").value = "";
+  chDismissConfirm();
+  setStatusMessage($("ch-status"), "", "");
+  chRenderSourceNote();
+}
+
 function toggleStep5Direction() {
   const isClass = state.direction === "class";
   $("panel-5-attribute").hidden = isClass;
   $("panel-5-class").hidden = !isClass;
+  if (isClass) renderClassHandling();
 }
 $("class-back-to-results-btn").addEventListener("click", () => goStep(4));
+$("ch-redetect-btn").addEventListener("click", () => goStep(3));
+
+// Dòng ghi chú ở bước chọn nhãn & đặc trưng: lần phát hiện kế tiếp sẽ chạy trên dữ liệu nào.
+function chRenderSourceNote() {
+  const el = $("class-source-note");
+  const steps = classHandling.history.entries.length;
+  if (steps === 0) {
+    el.hidden = true;
+    el.textContent = "";
+    return;
+  }
+  el.hidden = false;
+  el.textContent =
+    `Đang chạy trên dữ liệu đã xử lý (${steps} bước). Muốn chạy lại từ file gốc, vào bước Xử lý và bấm "Về dữ liệu gốc".`;
+}
+
+function chClassNames() {
+  return (state.classDiagnostics && state.classDiagnostics.class_names) || [];
+}
+const chDirectionKey = (f) => `${f.recorded_label} → ${f.suggested_label}`;
+function chFindingByRow(rowNumber) {
+  return state.classFindings.find((f) => f.row_number === rowNumber);
+}
+
+// ---- Thanh lịch sử ----
+function chDescribeEntry(entry) {
+  const effects = [];
+  if (entry.rows_removed > 0) effects.push(`xoá ${chNum(entry.rows_removed)} dòng`);
+  if (entry.cells_changed > 0) effects.push(`đổi nhãn ${chNum(entry.cells_changed)} dòng`);
+  const parts = [];
+  Object.entries(entry.relabel_directions || {}).forEach(([k, v]) => parts.push(`${escapeHtml(k)} ×${Number(v)}`));
+  Object.entries(entry.removed_by_label || {}).forEach(([k, v]) => parts.push(`xoá nhãn «${escapeHtml(k)}» ×${Number(v)}`));
+  return `<strong>Nhãn «${escapeHtml(entry.column || "")}»</strong>: ${effects.join(", ")} <span class="history-actions">— ${parts.join("; ")}</span>`;
+}
+function chRenderHistory() {
+  const h = classHandling.history;
+  const list = $("ch-history-log");
+  if (h.entries.length === 0) {
+    list.innerHTML = '<li class="history-log-empty">Chưa có thay đổi nào — dữ liệu đang là bản gốc.</li>';
+  } else {
+    list.innerHTML = h.entries
+      .slice()
+      .reverse()
+      .map((e, i) => {
+        const note = e.undoable ? "" : ' <span class="history-actions">(không hoàn tác được)</span>';
+        return `<li class="history-log-item${i === 0 ? " is-latest" : ""}">${chDescribeEntry(e)}${note}</li>`;
+      })
+      .join("");
+  }
+  $("ch-undo-btn").disabled = !h.can_undo || classHandling.busy;
+  $("ch-reset-btn").disabled = h.entries.length === 0 || classHandling.busy;
+  $("ch-history-hint").textContent =
+    h.entries.length > 0 && !h.can_undo
+      ? `Không hoàn tác thêm được (chỉ nhớ ${h.undo_limit} bước gần nhất, hoặc bảng quá lớn) — dùng "Về dữ liệu gốc".`
+      : `Hoàn tác được ${h.undo_limit} bước gần nhất.`;
+}
+
+// ---- Gán hàng loạt ----
+function chBulkMatches() {
+  const dir = $("ch-bulk-direction").value;
+  const raw = $("ch-bulk-min-score").value.trim();
+  const minScore = raw === "" ? null : Number(raw);
+  return state.classFindings.filter((f) => {
+    if (classHandling.done.has(f.row_number)) return false;
+    if (dir && chDirectionKey(f) !== dir) return false;
+    if (minScore !== null && !Number.isNaN(minScore) && f.score < minScore) return false;
+    return true;
+  });
+}
+function chRenderBulk() {
+  const sel = $("ch-bulk-direction");
+  const previous = sel.value;
+  const pending = state.classFindings.filter((f) => !classHandling.done.has(f.row_number));
+  const counts = new Map();
+  pending.forEach((f) => counts.set(chDirectionKey(f), (counts.get(chDirectionKey(f)) || 0) + 1));
+  sel.innerHTML =
+    `<option value="">Tất cả (${chNum(pending.length)})</option>` +
+    Array.from(counts.entries())
+      .map(([k, n]) => `<option value="${escapeAttr(k)}">${escapeHtml(k)} (${chNum(n)})</option>`)
+      .join("");
+  if (counts.has(previous)) sel.value = previous;
+
+  const scores = state.classFindings.map((f) => f.score);
+  $("ch-bulk-min-score").placeholder = scores.length
+    ? `${Math.min(...scores).toFixed(3)} – ${Math.max(...scores).toFixed(3)}`
+    : "bỏ trống = tất cả";
+  chRenderBulkInfo();
+}
+function chRenderBulkInfo() {
+  const matches = chBulkMatches();
+  const action = $("ch-bulk-action").value;
+  $("ch-bulk-info").textContent = state.classFindings.length
+    ? `Khớp ${chNum(matches.length)} dòng chưa xử lý. Gán chỉ ghi lựa chọn, chưa đổi dữ liệu — bấm "Áp dụng" ở cuối để thực hiện.`
+    : "Chưa có danh sách nghi ngờ. Quay lại bước Kết quả.";
+  $("ch-bulk-assign-btn").disabled = classHandling.busy || !action || matches.length === 0;
+}
+$("ch-bulk-direction").addEventListener("change", chRenderBulkInfo);
+$("ch-bulk-min-score").addEventListener("input", chRenderBulkInfo);
+$("ch-bulk-action").addEventListener("change", chRenderBulkInfo);
+$("ch-bulk-assign-btn").addEventListener("click", () => {
+  if (classHandling.busy) return;
+  const action = $("ch-bulk-action").value;
+  const matches = chBulkMatches();
+  if (!action || matches.length === 0) return;
+  chDismissConfirm();
+  matches.forEach((f) => {
+    if (action === "relabel_suggested") classHandling.plan.set(f.row_number, { action: "relabel", newLabel: f.suggested_label });
+    else classHandling.plan.set(f.row_number, { action, newLabel: null });
+  });
+  const names = { keep: "Giữ nguyên", remove_row: "Xoá dòng", relabel_suggested: "Sửa nhãn theo gợi ý" };
+  setStatusMessage($("ch-status"), `Đã gán «${names[action]}» cho ${chNum(matches.length)} dòng. Chưa áp dụng.`, "ok");
+  chRenderTable();
+  chRenderSummary();
+  chRenderBulkInfo();
+});
+
+// ---- Bảng từng dòng ----
+function chFiltered() {
+  const text = classHandling.filterText.trim().toLowerCase();
+  if (!text) return state.classFindings;
+  return state.classFindings.filter((f) => `${f.row_number} ${f.recorded_label} ${f.suggested_label}`.toLowerCase().includes(text));
+}
+function chRowOptions(f, current) {
+  const val = current ? (current.action === "relabel" ? `relabel:${current.newLabel}` : current.action) : "";
+  const opts = [
+    ["", "— Chọn cách xử lý —"],
+    ["keep", "Giữ nguyên"],
+    ["remove_row", "Xoá dòng"],
+    [`relabel:${f.suggested_label}`, `Sửa thành «${f.suggested_label}» (gợi ý)`],
+  ];
+  chClassNames()
+    .filter((c) => c !== f.recorded_label && c !== f.suggested_label)
+    .forEach((c) => opts.push([`relabel:${c}`, `Sửa thành «${c}»`]));
+  return opts
+    .map(([v, t]) => `<option value="${escapeAttr(v)}"${v === val ? " selected" : ""}>${escapeHtml(t)}</option>`)
+    .join("");
+}
+function chDoneText(d) {
+  if (d.action === "remove_row") return "✅ Đã xoá dòng";
+  if (d.action === "relabel") return `✅ Đã đổi nhãn → «${escapeHtml(d.newLabel)}»`;
+  return "✅ Đã giữ nguyên";
+}
+function chRenderTable() {
+  const all = chFiltered();
+  const totalPages = Math.max(1, Math.ceil(all.length / classHandling.perPage));
+  classHandling.page = Math.min(classHandling.page, totalPages);
+  const start = (classHandling.page - 1) * classHandling.perPage;
+  const pageRows = all.slice(start, start + classHandling.perPage);
+  const labels = CLASS_SCORE_LABELS[state.classResultMethod] || CLASS_SCORE_LABELS.single_learning;
+  const head = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${labels.suggested}</th><th>${labels.score}</th><th>Cách xử lý</th></tr></thead>`;
+  if (!pageRows.length) {
+    $("ch-table").innerHTML = `${head}<tbody><tr><td colspan="5" class="empty-cell">${
+      state.classFindings.length ? "Không có dòng nào khớp." : "Chưa có danh sách nghi ngờ."
+    }</td></tr></tbody>`;
+  } else {
+    $("ch-table").innerHTML =
+      head +
+      "<tbody>" +
+      pageRows
+        .map((f) => {
+          const d = classHandling.done.get(f.row_number);
+          const cell = d
+            ? `<span class="status-text is-ok">${chDoneText(d)}</span>`
+            : `<select class="select ch-row-action" data-row="${f.row_number}" aria-label="Cách xử lý dòng ${f.row_number}">${chRowOptions(f, classHandling.plan.get(f.row_number))}</select>`;
+          return `<tr><td class="mono">${f.row_number}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label)}</td><td class="mono">${f.score.toFixed(4)}</td><td>${cell}</td></tr>`;
+        })
+        .join("") +
+      "</tbody>";
+  }
+  $("ch-pagination").hidden = totalPages <= 1;
+  $("ch-page-indicator").textContent = `Trang ${classHandling.page}/${totalPages}`;
+}
+$("ch-table").addEventListener("change", (e) => {
+  const sel = e.target.closest(".ch-row-action");
+  if (!sel) return;
+  if (classHandling.busy) {
+    chRenderTable(); // đang chờ server: trả ô chọn về giá trị cũ
+    return;
+  }
+  const rowNumber = parseInt(sel.dataset.row, 10);
+  chDismissConfirm();
+  const v = sel.value;
+  if (v === "") classHandling.plan.delete(rowNumber);
+  else if (v.startsWith("relabel:")) classHandling.plan.set(rowNumber, { action: "relabel", newLabel: v.slice("relabel:".length) });
+  else classHandling.plan.set(rowNumber, { action: v, newLabel: null });
+  chRenderSummary();
+});
+$("ch-search").addEventListener(
+  "input",
+  debounce((e) => {
+    classHandling.filterText = e.target.value;
+    classHandling.page = 1;
+    chRenderTable();
+  }, 200)
+);
+$("ch-page-prev").addEventListener("click", () => {
+  if (classHandling.page > 1) {
+    classHandling.page--;
+    chRenderTable();
+  }
+});
+$("ch-page-next").addEventListener("click", () => {
+  classHandling.page++;
+  chRenderTable();
+});
+$("ch-clear-plan-btn").addEventListener("click", () => {
+  if (classHandling.busy) return;
+  chDismissConfirm();
+  classHandling.plan = new Map();
+  chRenderTable();
+  chRenderSummary();
+  chRenderBulkInfo();
+});
+
+// ---- Tóm tắt + nút Áp dụng ----
+function chPlanCounts() {
+  const c = { remove: 0, relabel: 0, keep: 0 };
+  classHandling.plan.forEach((p) => {
+    if (p.action === "remove_row") c.remove++;
+    else if (p.action === "relabel") c.relabel++;
+    else c.keep++;
+  });
+  return c;
+}
+function chRenderSummary() {
+  const total = state.classFindings.length;
+  const handled = classHandling.done.size;
+  const c = chPlanCounts();
+  const chosen = classHandling.plan.size;
+  const parts = [];
+  if (!state.classDiagnostics) {
+    $("ch-summary").textContent = "Chưa có kết quả phát hiện nào. Quay lại bước Kết quả (hoặc Phát hiện) trước.";
+  } else {
+    parts.push(`Danh sách có ${chNum(total)} dòng nghi ngờ` + (handled ? ` (${chNum(handled)} đã xử lý)` : "") + ".");
+    parts.push(
+      chosen
+        ? `Đã chọn: xoá ${chNum(c.remove)} · sửa nhãn ${chNum(c.relabel)} · giữ nguyên ${chNum(c.keep)} (còn ${chNum(total - handled - chosen)} dòng chưa chọn).`
+        : `Chưa chọn cách xử lý cho dòng nào.`
+    );
+    if (classHandling.history.entries.length) {
+      parts.push(`Dữ liệu hiện tại là bản đã xử lý (${classHandling.history.entries.length} bước).`);
+    }
+    $("ch-summary").textContent = parts.join(" ");
+  }
+  $("ch-apply-btn").disabled = classHandling.busy || chosen === 0;
+  $("ch-apply-btn").textContent = chosen ? `Áp dụng ${chNum(chosen)} dòng đã chọn` : "Áp dụng các dòng đã chọn";
+  $("ch-clear-plan-btn").disabled = classHandling.busy || chosen === 0;
+}
+function renderClassHandling() {
+  chDismissConfirm();
+  chRenderHistory();
+  chRenderBulk();
+  chRenderTable();
+  chRenderSummary();
+  chRenderSourceNote();
+}
+
+// ---- Gọi server ----
+async function chRequest(path, body) {
+  const statusEl = $("ch-status");
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_id: state.fileId, label_column: state.classLabelColumn, ...body }),
+    });
+  } catch (err) {
+    setStatusMessage(statusEl, "Không gọi được backend.", "error");
+    return null;
+  }
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (err) {
+    /* giữ null */
+  }
+  if (!response.ok) {
+    setStatusMessage(statusEl, (data && data.error) || "Thao tác thất bại, kiểm tra console/backend log.", "error");
+    return null;
+  }
+  return data;
+}
+// Mọi lệnh làm đổi dữ liệu chạy TUẦN TỰ (giống withHandlingLock của nhánh Attribute).
+async function chWithLock(task) {
+  if (classHandling.busy) return undefined;
+  classHandling.busy = true;
+  $("panel-5-class").classList.add("is-busy");
+  renderClassHandlingButtons();
+  try {
+    return await task();
+  } finally {
+    classHandling.busy = false;
+    $("panel-5-class").classList.remove("is-busy");
+    renderClassHandlingButtons();
+  }
+}
+function renderClassHandlingButtons() {
+  chRenderHistory();
+  chRenderSummary();
+  chRenderBulkInfo();
+}
+
+function chBuildRows() {
+  const rows = [];
+  classHandling.plan.forEach((p, rowNumber) => {
+    const f = chFindingByRow(rowNumber);
+    if (!f) return;
+    const item = { row_number: rowNumber, action: p.action, expected_label: f.recorded_label };
+    if (p.action === "relabel") item.new_label = p.newLabel;
+    rows.push(item);
+  });
+  return rows;
+}
+function chPlanSignature() {
+  return JSON.stringify(Array.from(classHandling.plan.entries()).sort((a, b) => a[0] - b[0]));
+}
+
+function chDismissConfirm() {
+  const box = $("ch-confirm");
+  box.hidden = true;
+  box.innerHTML = "";
+  classHandling.pendingRows = null;
+}
+
+// Bấm "Áp dụng": chạy thử -> hộp xác nhận (nếu có đổi dữ liệu) -> áp dụng thật.
+$("ch-apply-btn").addEventListener("click", async () => {
+  await chWithLock(async () => {
+    chDismissConfirm();
+    const rows = chBuildRows();
+    if (rows.length === 0) return;
+    const hasChange = rows.some((r) => r.action !== "keep");
+    if (!hasChange) {
+      await chCommit(rows); // chỉ "Giữ nguyên": không đổi dữ liệu, khỏi hỏi
+      return;
+    }
+    setStatusMessage($("ch-status"), "Đang chạy thử (chưa đổi gì)…", "");
+    const sig = chPlanSignature();
+    const preview = await chRequest("/api/class-noise/apply", { rows, dry_run: true });
+    if (!preview) return;
+    if (chPlanSignature() !== sig) {
+      setStatusMessage($("ch-status"), "Lựa chọn đã đổi trong lúc chạy thử — bấm Áp dụng lại.", "error");
+      return;
+    }
+    if (preview.rows_removed === 0 && preview.labels_changed === 0) {
+      setStatusMessage(
+        $("ch-status"),
+        `Không có thay đổi nào để ghi (${chNum(preview.skipped_missing)} dòng đã bị xoá, ${chNum(preview.skipped_stale)} dòng nhãn đã đổi từ trước).`,
+        ""
+      );
+      return;
+    }
+    chShowConfirm(preview, rows, sig);
+    setStatusMessage($("ch-status"), "", "");
+  });
+});
+
+function chRareLabels(counts) {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+  return new Set(Object.entries(counts).filter(([, n]) => n / total < CH_RARE_SHARE).map(([k]) => k));
+}
+function chShowConfirm(p, rows, sig) {
+  const rare = chRareLabels(p.label_counts_before);
+  const lines = [];
+  const summary = [];
+  if (p.rows_removed > 0) summary.push(`xoá <strong>${chNum(p.rows_removed)}</strong> dòng (${chNum(p.rows_before)} → ${chNum(p.rows_after)} dòng)`);
+  if (p.labels_changed > 0) summary.push(`đổi nhãn <strong>${chNum(p.labels_changed)}</strong> dòng`);
+  lines.push(`⚠ Sẽ ${summary.join(" và ")}.`);
+  const dirs = Object.entries(p.relabel_directions);
+  if (dirs.length) lines.push("Đổi nhãn theo hướng: " + dirs.map(([k, v]) => `${escapeHtml(k)}: ${chNum(v)} dòng`).join(" · ") + ".");
+  const rem = Object.entries(p.removed_by_label);
+  if (rem.length) lines.push("Xoá theo nhãn đang ghi: " + rem.map(([k, v]) => `«${escapeHtml(k)}»: ${chNum(v)} dòng`).join(" · ") + ".");
+  lines.push(
+    "Phân bố nhãn: " +
+      Object.keys({ ...p.label_counts_before, ...p.label_counts_after })
+        .map((k) => `«${escapeHtml(k)}» ${chNum(p.label_counts_before[k] || 0)} → ${chNum(p.label_counts_after[k] || 0)}`)
+        .join(" · ") +
+      "."
+  );
+  dirs.forEach(([k, v]) => {
+    const target = k.split(" → ")[1];
+    const targetNote = target;
+    if (rare.has(target)) {
+      lines.push(`<strong>Lưu ý lớp hiếm:</strong> đổi ${chNum(v)} dòng sang nhãn «${escapeHtml(targetNote)}» (lớp hiếm, hiện chỉ có ${chNum(p.label_counts_before[target] || 0)} dòng) sẽ tạo thêm mẫu lớp này — nên xem kỹ các dòng đó trước.`);
+    }
+  });
+  rem.forEach(([k, v]) => {
+    if (rare.has(k)) lines.push(`<strong>Lưu ý lớp hiếm:</strong> xoá ${chNum(v)} dòng thuộc nhãn «${escapeHtml(k)}» (chỉ có ${chNum(p.label_counts_before[k] || 0)} dòng) — mất mẫu quý của lớp hiếm.`);
+  });
+  if (p.rows_removed / Math.max(1, p.rows_before) >= 0.2) lines.push("<strong>Xoá từ 20% số dòng trở lên</strong> — hãy chắc chắn trước khi xác nhận.");
+  if (p.skipped_missing + p.skipped_stale > 0) {
+    lines.push(`Bỏ qua ${chNum(p.skipped_missing + p.skipped_stale)} dòng (đã bị xoá hoặc nhãn đã đổi từ trước).`);
+  }
+  lines.push("Bấm «Xác nhận» thì mới thay đổi dữ liệu thật; hoàn tác được.");
+
+  const box = $("ch-confirm");
+  box.innerHTML = `
+    <span class="handling-confirm-text">${lines.join("<br>")}</span>
+    <button type="button" class="btn btn-danger btn-small" id="ch-confirm-yes">Xác nhận và áp dụng</button>
+    <button type="button" class="btn btn-ghost btn-small" id="ch-confirm-no">Huỷ</button>`;
+  box.hidden = false;
+  classHandling.pendingRows = { rows, sig };
+  $("ch-confirm-no").addEventListener("click", () => {
+    chDismissConfirm();
+    setStatusMessage($("ch-status"), "Đã huỷ, dữ liệu chưa đổi.", "");
+  });
+  $("ch-confirm-yes").addEventListener("click", async () => {
+    const pending = classHandling.pendingRows;
+    if (!pending || classHandling.busy) return;
+    await chWithLock(async () => {
+      if (chPlanSignature() !== pending.sig) {
+        chDismissConfirm();
+        setStatusMessage($("ch-status"), "Lựa chọn đã đổi — bấm Áp dụng lại.", "error");
+        return;
+      }
+      chDismissConfirm();
+      await chCommit(pending.rows);
+    });
+  });
+  $("ch-confirm-no").focus(); // focus vào "Huỷ" (lựa chọn an toàn)
+}
+
+async function chCommit(rows) {
+  const prevSteps = classHandling.history.entries.length;
+  setStatusMessage($("ch-status"), "Đang áp dụng…", "");
+  const data = await chRequest("/api/class-noise/apply", { rows, dry_run: false });
+  if (!data) return;
+  classHandling.history = data.history;
+  classHandling.source = data.source;
+  const skipped = new Set(data.skipped_rows || []);
+  const changedRows = [];
+  rows.forEach((r) => {
+    if (skipped.has(r.row_number)) return;
+    classHandling.done.set(r.row_number, { action: r.action, newLabel: r.new_label || null });
+    if (r.action !== "keep") changedRows.push(r.row_number);
+  });
+  if (data.history.entries.length > prevSteps) classHandling.steps.push(changedRows);
+  rows.forEach((r) => classHandling.plan.delete(r.row_number));
+  const effects = [];
+  if (data.rows_removed) effects.push(`xoá ${chNum(data.rows_removed)} dòng`);
+  if (data.labels_changed) effects.push(`đổi nhãn ${chNum(data.labels_changed)} dòng`);
+  if (!effects.length) effects.push("không đổi dữ liệu (chỉ ghi nhận giữ nguyên)");
+  const extra = data.skipped_missing + data.skipped_stale > 0 ? ` Bỏ qua ${chNum(data.skipped_missing + data.skipped_stale)} dòng (đã bị xoá hoặc nhãn đã đổi từ trước).` : "";
+  setStatusMessage($("ch-status"), `✅ Đã áp dụng: ${effects.join(", ")}.${extra} Muốn kiểm tra lại dữ liệu đã xử lý thì bấm «Phát hiện lại».`, "ok");
+  renderClassHandling();
+}
+
+// ---- Hoàn tác / Về dữ liệu gốc ----
+async function chHistoryAction(path, isReset) {
+  await chWithLock(async () => {
+    chDismissConfirm();
+    const prevSteps = classHandling.history.entries.length;
+    setStatusMessage($("ch-status"), "Đang xử lý…", "");
+    const data = await chRequest(path, {});
+    if (!data) return;
+    classHandling.history = data.history;
+    classHandling.source = data.source;
+    let note = "";
+    if (isReset) {
+      // Về gốc: mọi dòng đã sửa/xoá trở lại "chưa xử lý"; dòng chỉ "giữ nguyên" thì vẫn là quyết định của người dùng.
+      Array.from(classHandling.done.entries()).forEach(([rn, d]) => {
+        if (d.action !== "keep") classHandling.done.delete(rn);
+      });
+      classHandling.steps = [];
+    } else if (classHandling.steps.length === prevSteps && prevSteps > 0) {
+      classHandling.steps.pop().forEach((rn) => classHandling.done.delete(rn));
+    } else {
+      note = " Dữ liệu đã đổi so với lúc phát hiện — hãy bấm «Phát hiện lại» để cập nhật danh sách nghi ngờ.";
+    }
+    setStatusMessage($("ch-status"), (isReset ? "✅ Đã quay về dữ liệu gốc." : "✅ Đã hoàn tác 1 bước.") + note, "ok");
+    renderClassHandling();
+  });
+}
+$("ch-undo-btn").addEventListener("click", () => {
+  if (classHandling.busy) return;
+  chHistoryAction("/api/class-noise/undo", false);
+});
+$("ch-reset-btn").addEventListener("click", () => {
+  if (classHandling.busy) return;
+  const box = $("ch-reset-confirm");
+  box.innerHTML = `
+    <span class="handling-confirm-text">⚠ Bỏ toàn bộ <strong>${classHandling.history.entries.length}</strong> bước xử lý và quay về dữ liệu gốc đã upload?</span>
+    <button type="button" class="btn btn-danger btn-small" id="ch-reset-yes">Xác nhận</button>
+    <button type="button" class="btn btn-ghost btn-small" id="ch-reset-no">Huỷ</button>`;
+  box.hidden = false;
+  $("ch-reset-no").addEventListener("click", () => {
+    box.hidden = true;
+    box.innerHTML = "";
+  });
+  $("ch-reset-yes").addEventListener("click", async () => {
+    if (classHandling.busy) return;
+    box.hidden = true;
+    box.innerHTML = "";
+    await chHistoryAction("/api/class-noise/reset", true);
+  });
+  $("ch-reset-no").focus();
+});
+
+// ---- Xuất file CSV (bản đang làm việc hiện tại) ----
+$("ch-export-btn").addEventListener("click", async () => {
+  const btn = $("ch-export-btn");
+  setButtonLoading(btn, true, "Đang xuất file...", "Xuất file CSV ↓");
+  const data = await chRequest("/api/export-working", {});
+  setButtonLoading(btn, false, "Đang xuất file...", "Xuất file CSV ↓");
+  if (!data) return;
+  setStatusMessage($("ch-status"), `✅ File hiện có ${chNum(data.final_row_count)} dòng. Đang tải...`, "ok");
+  const downloadResponse = await fetch(`${API_BASE}/api/download/${data.download_id}`);
+  const blob = await downloadResponse.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "spark_class_cleaned.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+});
 
 // ====== "Cửa" cho workspace.js gọi vào ======
 // presetDirection(dir): chọn sẵn thẻ hướng ở Bước 2 (pill "Class Noise" trên
