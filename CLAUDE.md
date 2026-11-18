@@ -807,6 +807,11 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     dd/mm/yyyy, dòng 5 và 9 có Ngày ra TRƯỚC Ngày vào: mẫu để thử tab "Biểu thức" (`[Ngày ra] >= [Ngày vào]`,
     tự nhận khuôn ngày, ép sai khuôn `%Y-%m-%d` thì báo mọi dòng chưa kiểm được; mục 24).
 
+  - `test_attribute_noise.csv` + `.xlsx` + `test_attribute_noise_ground_truth.csv` (sinh bằng `generate_test_attribute_noise.py`, hạt giống cố định) —
+    file nhân viên 552 dòng × 20 cột chỉ cho ATTRIBUTE NOISE, đủ mọi loại lỗi, CÓ đáp án từng ô (mục 36). Kèm file nhỏ cho Convert / file xấu
+    (`test_semicolon.csv`, `test_tab.txt`, `test_convert_nested.json`, `test_convert_lines.jsonl`, `test_empty.csv`, `test_header_only.csv`, `test_bad.json`).
+  - `kaggle_creditcard_fraud.csv` — bộ dùng cho CLASS NOISE (mục 35).
+
 ## Quyết định thiết kế quan trọng (đã thống nhất)
 
 1. Attribute noise code trước, class noise code sau.
@@ -1688,7 +1693,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Guide viết lại thành hướng dẫn thao tác** (8 mục, mục lục đổi tên mục 01 "Bắt đầu nhanh", mục 07 "Nối tiếp và hoàn tác"): 4 bước làm sạch 1 file, bảng "gặp gì → dùng tool nào", cách dùng từng tool
       theo đúng tên nút / ô trên giao diện, 2 nhịp Phát hiện → Áp dụng, cách viết biểu thức, 4 bước Class Noise, dải nối tiếp + Hoàn tác, FAQ. Đọc ≈ 5 phút.
 
-33. **Bộ dữ liệu test toàn diện + kịch bản thao tác người dùng — ĐÃ XONG (chưa commit lúc ghi):**
+33. **Bộ dữ liệu test toàn diện + kịch bản thao tác người dùng — ĐÃ XONG [file `test_all_noise.*` đã được THAY bằng `test_attribute_noise.*` ở mục 36]:**
     - **Nguồn gốc:** user nhờ tạo 1 file chứa MỌI loại lỗi của sản phẩm (nhiều dòng) và liệt kê mọi trường hợp thao tác để tự test như người dùng thật, xem có lỗi ở đâu không.
     - **File** (trong `data/`): `generate_test_all_noise.py` (hạt giống cố định, chạy lại ra đúng cùng file) sinh `test_all_noise.csv` + `.xlsx` (552 dòng × 26 cột: 400 nhân viên, 100 người có 2 hợp đồng,
       12 người có 3 hợp đồng; 18 dòng trùng hệt, 6 gần trùng, 4 dòng trống hoàn toàn, cột `cot_trong` trống 100%, cột `Hệ số lương` có dấu cách + tiếng Việt, cột `thuong` zero-inflated, `xep_loai` đổi nhãn
@@ -1745,6 +1750,23 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       "Tích tất cả" chỉ tick 6 cột số; gọi API với cột chữ → 400 "Cột đặc trưng phải là cột SỐ…"; không lỗi JS).
     - **Việc tiếp theo đã đề xuất:** thiết kế + chạy thí nghiệm cấy nhiễu trên Credit Card nguyên bộ (5% / 10%, 2 kiểu, báo cáo cả 2 lớp, đo thời gian; Single learning có thể phải giảm số cây); xin thầy file dữ liệu thật;
       (tuỳ chọn) thí nghiệm đối chứng giảm cột trên Adult.
+
+36. **Tách bộ test: file Attribute riêng (chủ đề nhân viên) + Class Noise dùng Credit Card — ĐÃ XONG, ĐÃ KIỂM CHỨNG (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user thấy file `test_all_noise.csv` (mục 33) gượng: đang là dữ liệu NHÂN VIÊN lại có cột điểm toán/lý/hoá + `xep_loai` (do mình chèn để thử Class Noise) và cột bán hàng
+      (`so_luong_ban`, `don_gia`, `thanh_tien`, để thử rule công thức). Chốt: "1 file chứa Attribute Noise để làm được mọi loại lỗi bên Attribute, Class Noise dùng Credit Card".
+    - **Làm gì:** thay bằng `data/generate_test_attribute_noise.py` → `test_attribute_noise.csv/.xlsx` (552 dòng × **20** cột) + `test_attribute_noise_ground_truth.csv` (302 dòng đáp án). Đã BỎ: cột điểm + `xep_loai`
+      (Class Noise), cột bán hàng. THÊM `tong_thu_nhap = luong + thuong` để rule công thức vẫn có (`luong + thuong == tong_thu_nhap`, 8 dòng vi phạm); `luong` bị đổi thành số khác thì tổng được tính lại để không
+      phát sinh vi phạm ngoài ý muốn. 20 cột: id, ma_nv, ho_ten, gioi_tinh, tuoi, ngay_sinh, email, so_dien_thoai, phong_ban, loai_hd, ngay_vao, ngay_ra, luong, thuong, tong_thu_nhap, hoa_hong, diem_dg, `Hệ số lương`, ghi_chu, cot_trong.
+    - **Số kỳ vọng (đã đối chiếu: chạy qua route + tính độc lập bằng pandas, 0 lệch):** dòng trùng xoá 21 (27 nếu bỏ qua hoa/thường + khoảng trắng); cắt khoảng trắng 35 ô (45 nếu gộp lặp); sai định dạng 38 ô / 37 dòng
+      (tuoi 3, luong 5, email 6, so_dien_thoai 6, ngay_sinh 10, ngay_vao 3, diem_dg 3, Hệ số lương 2); 4 dòng trống hoàn toàn + cột `cot_trong` trống 100%; ô trống mẫu 5 cột điền 53 ô; ngoài khoảng 9/4/6/2 (xoá HỢP tuoi+luong 13 dòng → 539);
+      bất thường luong IQR 9 / Z-score 1, `thuong` IQR = 0 → 80 ô + cảnh báo; không nhất quán 14/5/15 (19 ở ngưỡng 0,85); Biểu thức 10/5/7/2/8/9; Phụ thuộc hàm 32 dòng (ho_ten 22 + ngay_sinh 14), sửa về giá trị phổ biến 6 ô, 9 nhóm chưa xác định.
+      Excel ra đúng như CSV. Đoán kiểu cột đúng (số nguyên/số thực/email/SĐT/ngày/nhóm).
+    - `data/KICH_BAN_TEST.md` cập nhật theo file mới; mục 7 Class Noise viết lại theo Credit Card (không còn số kỳ vọng riêng của file test cũ).
+    - **Dirty Cafe Sales (Kaggle) thử trên web:** file người dùng tải về (10.000 dòng × 8 cột, DỮ LIỆU TỰ TẠO, giá trị giả `ERROR`/`UNKNOWN`) KHÔNG demo được hết tool: chỉ Sai định dạng (1.325 ô ở cột số + ngày), Ô trống,
+      Convert có kết quả thật; Xoá trùng / Cắt khoảng trắng / Ngoài khoảng / Không nhất quán đều 0; Giá trị bất thường báo 259 dòng nhưng toàn giá trị 25 (= 5×5, hợp lệ) nên là báo nhầm của IQR trên dữ liệu rời rạc;
+      Phụ thuộc hàm Item→Price báo 9.495 dòng nhưng sau khi bỏ ô `ERROR`/`UNKNOWN`/trống thì 0 vi phạm thật. **LỖ HỔNG phát hiện:** `ERROR`/`UNKNOWN` KHÔNG được coi là "thiếu" (`_is_missing_text` chỉ nhận rỗng, N/A, ?, null...) và Sai định dạng
+      chỉ quét cột số/ngày nên 1.931 ô giả ở 3 cột chữ (Item 636, Payment Method 599, Location 696) không tool nào bắt; đề xuất (CHƯA làm): cho người dùng tự khai danh sách "giá trị coi như thiếu" ở tool Ô trống (không mặc định coi `UNKNOWN` là thiếu vì với dữ liệu khác có thể là nhóm hợp lệ).
+    - **Student Admission Records (Kaggle, 157 dòng, tự tạo, có dòng trùng / ô thiếu / tuổi ngoại lai):** user chưa tải về, chưa thử.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 

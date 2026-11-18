@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Sinh bộ dữ liệu TEST TOÀN DIỆN cho Denoise: một file có đủ mọi loại lỗi mà các tool dò được.
+"""Sinh bộ dữ liệu TEST cho phần ATTRIBUTE NOISE của Denoise: MỘT file nhân viên (chủ đề thống nhất) có đủ mọi loại lỗi
+mà các tool Attribute dò được. (Class Noise dùng bộ Credit Card, không nằm trong file này -- xem CLAUDE.md mục 35-36.)
 
-Chạy:  python3 data/generate_test_all_noise.py
+Chạy:  python3 data/generate_test_attribute_noise.py
 Sinh ra (trong thư mục data/):
-  - test_all_noise.csv / test_all_noise.xlsx : ~530 dòng, 26 cột, đủ lỗi (xem bảng đáp án bên dưới)
-  - test_all_noise_ground_truth.csv           : đáp án -- mỗi ô bị cấy lỗi (dòng, cột, loại lỗi, giá trị gốc, tool nên bắt)
+  - test_attribute_noise.csv / .xlsx          : ~530 dòng, 20 cột, đủ lỗi (xem bảng đáp án bên dưới)
+  - test_attribute_noise_ground_truth.csv     : đáp án -- mỗi ô bị cấy lỗi (dòng, cột, loại lỗi, giá trị gốc, tool nên bắt)
   - test_convert_*.{json,jsonl,csv,txt}       : file nhỏ để thử 3 tool Convert
   - test_empty.csv, test_header_only.csv, test_bad.json : file "xấu" để thử báo lỗi
 
@@ -20,9 +21,8 @@ Bảng lỗi cấy (cột -> lỗi):
   Ngoài khoảng ... tuoi (18-65), luong (3tr-100tr), diem_dg (1-10), Hệ số lương (> 0)
   Bất thường ..... luong (8 giá trị 45-70 triệu), thuong (cột "zero-inflated": 85% bằng 0 -> IQR = 0)
   Không nhất quán  gioi_tinh, phong_ban, loai_hd (khác hoa/thường; vài chỗ gõ sai chính tả)
-  Rule liên cột .. ngay_ra < ngay_vao; thanh_tien != so_luong_ban * don_gia; Thử việc mà lương > 12 triệu;
+  Rule liên cột .. ngay_ra < ngay_vao; tong_thu_nhap != luong + thuong; Thử việc mà lương > 12 triệu;
                    Sales mà thiếu hoa_hong; ma_nv -> ho_ten và ma_nv -> ngay_sinh bị mâu thuẫn
-  Class Noise .... xep_loai (Giỏi/Khá/Trung bình, suy từ diem_toan/diem_ly/diem_hoa) bị đổi nhãn sai ở 45 dòng
 """
 import json
 import unicodedata
@@ -37,9 +37,8 @@ SEED = 20260617
 rng = np.random.default_rng(SEED)
 
 COLS = ["id", "ma_nv", "ho_ten", "gioi_tinh", "tuoi", "ngay_sinh", "email", "so_dien_thoai",
-        "phong_ban", "loai_hd", "ngay_vao", "ngay_ra", "luong", "thuong", "hoa_hong", "diem_dg",
-        "Hệ số lương", "so_luong_ban", "don_gia", "thanh_tien",
-        "diem_toan", "diem_ly", "diem_hoa", "xep_loai", "ghi_chu", "cot_trong"]
+        "phong_ban", "loai_hd", "ngay_vao", "ngay_ra", "luong", "thuong", "tong_thu_nhap", "hoa_hong", "diem_dg",
+        "Hệ số lương", "ghi_chu", "cot_trong"]
 
 SURNAMES = ["Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Vũ", "Võ", "Đặng", "Bùi", "Đỗ"]
 MIDDLES = ["Văn", "Thị", "Minh", "Quốc", "Hồng", "Thanh", "Ngọc", "Đức", "Anh", "Gia"]
@@ -48,7 +47,6 @@ GIVENS = ["An", "Bình", "Châu", "Dũng", "Giang", "Hà", "Hải", "Hiếu", "H
 DEPTS = ["Sales", "HR", "IT", "Marketing", "Finance"]
 NOTES = ["Đã duyệt", "Chờ ký hợp đồng", "Đã duyệt, chờ ký", "Cần bổ sung hồ sơ", "Hoàn thành tốt",
          "Nghỉ phép dài ngày", "Chuyển phòng ban"]
-PRICES = [50000, 75000, 120000, 250000, 480000]
 
 
 def ascii_lower(s: str) -> str:
@@ -95,19 +93,13 @@ for i, e in enumerate(emps):
             luong = r100k(min(max(rng.normal(18e6, 5e6), 10e6), 32e6))
         else:
             luong = r100k(rng.uniform(5e6, 14e6))
-        sl, dg = int(rng.integers(1, 51)), int(rng.choice(PRICES))
-        scores = [round(float(min(max(rng.normal(6.5, 1.6), 0), 10)), 1) for _ in range(3)]
-        mean = sum(scores) / 3
-        xep = "Giỏi" if mean >= 7.2 else ("Khá" if mean >= 5.8 else "Trung bình")
+        thuong = 0 if rng.random() < 0.85 else r100k(rng.uniform(5e5, 9e6))
         rows.append({
             **e, "phong_ban": dept, "loai_hd": loai, "ngay_vao": vao.isoformat(), "ngay_ra": ra.isoformat(),
-            "luong": str(luong),
-            "thuong": "0" if rng.random() < 0.85 else str(r100k(rng.uniform(5e5, 9e6))),
+            "luong": str(luong), "thuong": str(thuong), "tong_thu_nhap": str(luong + thuong),
             "hoa_hong": str(round(float(rng.uniform(1.5, 8.0)), 1)) if dept == "Sales" else "0",
             "diem_dg": str(round(float(rng.uniform(5, 9.5)), 1)),
             "Hệ số lương": str(round(float(rng.uniform(1.0, 5.0)), 1)),
-            "so_luong_ban": str(sl), "don_gia": str(dg), "thanh_tien": str(sl * dg),
-            "diem_toan": str(scores[0]), "diem_ly": str(scores[1]), "diem_hoa": str(scores[2]), "xep_loai": xep,
             "ghi_chu": str(rng.choice(NOTES)), "cot_trong": "",
         })
         emp_of.append(i)
@@ -163,11 +155,11 @@ for r in take("ngay_ra", 10, where=lambda r: (r, "ngay_vao") not in used):
     put(r, "ngay_ra", (vao - timedelta(days=int(rng.integers(10, 300)))).isoformat(), "cross_rule_expression",
         "Cần cấu hình · Rule liên cột · Biểu thức", "ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao")
     reserve(r, "ngay_vao")
-for r in take("thanh_tien", 8):
-    tt = int(df.at[r, "thanh_tien"])
-    put(r, "thanh_tien", str(tt + int(rng.choice([-50000, -1000, 7000, 120000, 999999]))), "cross_rule_expression",
-        "Cần cấu hình · Rule liên cột · Biểu thức", "thanh_tien != so_luong_ban * don_gia")
-    reserve(r, "so_luong_ban", "don_gia")
+for r in take("tong_thu_nhap", 8):
+    tt = int(df.at[r, "tong_thu_nhap"])
+    put(r, "tong_thu_nhap", str(tt + int(rng.choice([-500000, -1000, 7000, 120000, 999999]))), "cross_rule_expression",
+        "Cần cấu hình · Rule liên cột · Biểu thức", "tong_thu_nhap != luong + thuong; biểu thức: luong + thuong = tong_thu_nhap")
+    reserve(r, "luong", "thuong")
 for r in take("luong", 5, where=lambda r: df.at[r, "loai_hd"] == "Thử việc"):
     put(r, "luong", str(r100k(rng.uniform(14e6, 20e6))), "cross_rule_if_then",
         "Cần cấu hình · Rule liên cột · Biểu thức", 'loai_hd = "Thử việc" => luong <= 12000000')
@@ -290,11 +282,13 @@ for kind, k in [("lead", 5), ("trail", 5), ("inner", 5)]:
 for kind, k in [("lead", 6), ("trail", 6), ("inner", 5), ("zw", 4), ("nbsp", 3)]:
     ws("ghi_chu", kind, k)
 
-# --- 2h. Class Noise: đổi nhãn sai ở 45 dòng
-for r in take("xep_loai", 45):
-    old = df.at[r, "xep_loai"]
-    put(r, "xep_loai", str(rng.choice([c for c in ["Giỏi", "Khá", "Trung bình"] if c != old])), "class_noise",
-        "Class Noise", "nhãn đúng (suy từ diem_toan/diem_ly/diem_hoa) là: " + old)
+# --- 2h. Đồng bộ tong_thu_nhap: ô luong bị đổi thành SỐ khác (ngoài khoảng / bất thường / thử việc lương cao) thì tổng tính lại
+#     theo luong mới, để rule "luong + thuong = tong_thu_nhap" CHỈ vi phạm đúng 8 dòng đã cấy ở 2a (không phát sinh vi phạm ngoài ý muốn).
+#     Ô luong bị đổi thành chữ / để trống thì giữ tổng gốc (biểu thức coi là "chưa biết", bỏ qua dòng đó).
+for g in gt:
+    if g["column"] == "luong" and g["noise_type"] in ("out_of_range", "outlier", "cross_rule_if_then"):
+        r = g["_r"]
+        df.at[r, "tong_thu_nhap"] = str(int(float(g["injected_value"])) + int(df.at[r, "thuong"]))
 
 # ------------------------------------------------------------------ 3. dòng trùng + dòng trống hoàn toàn
 touched = {r for r, _ in used}
@@ -336,9 +330,9 @@ for g in gt:
 gt_df = pd.DataFrame(gt)[["row", "column", "noise_type", "original_value", "injected_value", "expected_tool", "note"]]
 gt_df = gt_df.sort_values(["row", "column"], kind="stable").reset_index(drop=True)
 
-final.to_csv(OUT / "test_all_noise.csv", index=False, encoding="utf-8")
-final.to_excel(OUT / "test_all_noise.xlsx", index=False)
-gt_df.to_csv(OUT / "test_all_noise_ground_truth.csv", index=False, encoding="utf-8")
+final.to_csv(OUT / "test_attribute_noise.csv", index=False, encoding="utf-8")
+final.to_excel(OUT / "test_attribute_noise.xlsx", index=False)
+gt_df.to_csv(OUT / "test_attribute_noise_ground_truth.csv", index=False, encoding="utf-8")
 
 # ------------------------------------------------------------------ 4. file nhỏ cho Convert + file "xấu"
 nested = [

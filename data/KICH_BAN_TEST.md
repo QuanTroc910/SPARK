@@ -1,8 +1,9 @@
 # Kịch bản test Denoise — mô phỏng người dùng thật
 
-File dùng chung: **`data/test_all_noise.csv`** (552 dòng × 26 cột, có đủ mọi loại lỗi). Bản Excel y hệt: `test_all_noise.xlsx`.
-Đáp án từng ô bị cấy lỗi: `test_all_noise_ground_truth.csv` (cột `row` = số thứ tự dòng dữ liệu, khớp cột "Dòng" trên giao diện; trong Excel/CSV mở bằng bảng tính thì cộng thêm 1 vì có dòng tiêu đề).
-Sinh lại bất cứ lúc nào: `python3 data/generate_test_all_noise.py` (hạt giống cố định nên ra đúng cùng file).
+File dùng chung cho **Attribute Noise**: **`data/test_attribute_noise.csv`** (552 dòng × 20 cột, chủ đề nhân viên, có đủ mọi loại lỗi của Attribute). Bản Excel y hệt: `test_attribute_noise.xlsx`.
+**Class Noise KHÔNG dùng file này** mà dùng bộ Credit Card (`data/kaggle_creditcard_fraud.csv`, xem mục 7 và CLAUDE.md mục 35-36).
+Đáp án từng ô bị cấy lỗi: `test_attribute_noise_ground_truth.csv` (cột `row` = số thứ tự dòng dữ liệu, khớp cột "Dòng" trên giao diện; trong Excel/CSV mở bằng bảng tính thì cộng thêm 1 vì có dòng tiêu đề).
+Sinh lại bất cứ lúc nào: `python3 data/generate_test_attribute_noise.py` (hạt giống cố định nên ra đúng cùng file).
 
 File phụ: `test_semicolon.csv`, `test_tab.txt` (đổi delimiter), `test_convert_nested.json`, `test_convert_lines.jsonl` (JSON → CSV), `test_empty.csv`, `test_header_only.csv`, `test_bad.json` (file xấu).
 
@@ -23,9 +24,8 @@ File phụ: `test_semicolon.csv`, `test_tab.txt` (đổi delimiter), `test_conve
 | Ngoài khoảng | tuoi (18–65) 9 · luong (3tr–100tr) 4 · diem_dg (1–10) 6 · Hệ số lương (>0) 2 | |
 | Giá trị bất thường | luong: 9 ô (IQR 1.5), 1 ô (Z-score 3) · thuong: cột 85% bằng 0 → IQR = 0 | thuong: **80 ô** + cảnh báo vàng |
 | Không nhất quán | gioi_tinh 14 · loai_hd 5 · phong_ban 15 (ngưỡng 1) / 19 (ngưỡng 0.85, bắt cả "Sale", "Marketting") | |
-| Rule liên cột | `ngay_ra >= ngay_vao` 10 · `thanh_tien == so_luong_ban * don_gia` 8 · Thử việc mà luong > 12tr 5 · Sales thiếu hoa_hong 7 | |
+| Rule liên cột | `ngay_ra >= ngay_vao` 10 · `luong + thuong == tong_thu_nhap` 8 · Thử việc mà luong > 12tr 5 · Sales thiếu hoa_hong 7 | |
 | Phụ thuộc hàm `ma_nv → ho_ten, ngay_sinh` | 32 dòng thuộc 9 nhóm mâu thuẫn (ho_ten) + 6 nhóm (ngay_sinh) | xem mục 5.5 |
-| Class Noise | `xep_loai` bị đổi nhãn sai ở 45 dòng (nhãn đúng suy từ diem_toan, diem_ly, diem_hoa) | |
 
 ---
 
@@ -51,11 +51,11 @@ File phụ: `test_semicolon.csv`, `test_tab.txt` (đổi delimiter), `test_conve
 
 Làm chung cho cả 4 tool:
 - [ ] Bấm **Chạy** khi chưa có file → báo lỗi, không treo.
-- [ ] Kéo thả file vào ô; chọn bằng nút "Chọn file"; xem trước 20 dòng + "552 dòng × 26 cột".
+- [ ] Kéo thả file vào ô; chọn bằng nút "Chọn file"; xem trước 20 dòng + "552 dòng × 20 cột".
 - [ ] Tab **Dán text**: dán `a,b⏎1,x⏎1,x⏎2,y` rồi Chạy; dán rỗng rồi Chạy → báo lỗi.
 - [ ] "Đổi file" trong khung xem trước; sau khi chạy, "Tải file khác" ở dải đen.
 - [ ] Nút **Tải xuống CSV** mở sau khi chạy; mở file tải về kiểm tra đúng nội dung.
-- [ ] File Excel `test_all_noise.xlsx`: ra cùng số liệu như CSV.
+- [ ] File Excel `test_attribute_noise.xlsx`: ra cùng số liệu như CSV.
 - [ ] `test_empty.csv` → báo "File rỗng"; `test_header_only.csv` → chạy được, 0 dòng, không báo lỗi lạ.
 - [ ] Panel "Xong · xử lý tiếp bằng" hiện sau khi chạy; dải đen ghi các bước đã qua.
 
@@ -71,7 +71,7 @@ Làm chung cho cả 4 tool:
 - [ ] Bỏ tick "Xoá ký tự vô hình" → số ô đổi giảm (ký tự zero-width giữ lại).
 
 ### 3.3 Ô trống
-- [ ] Bảng "Ô trống từng cột" liệt kê **26 cột** (mọi cột đều có ô trống vì có 4 dòng trống hoàn toàn), mỗi cột có số ô trống đúng như bảng mục 0.
+- [ ] Bảng "Ô trống từng cột" liệt kê **20 cột** (mọi cột đều có ô trống vì có 4 dòng trống hoàn toàn), mỗi cột có số ô trống đúng như bảng mục 0.
 - [ ] Chạy mặc định (không chọn gì) → chỉ **xoá 4 dòng trống hoàn toàn** (552 → 548).
 - [ ] Tick "Xoá luôn cột trống hoàn toàn" → mất cột `cot_trong`.
 - [ ] Thử từng cách xử lý: `ghi_chu` → Điền tay từng ô; `luong` → trung vị; `tuoi` → trung bình; `gioi_tinh` → giá trị phổ biến nhất; `phong_ban` → Xoá cả dòng; `ho_ten` → Điền từ ô phía trên. Kiểm tra bảng kết quả.
@@ -81,9 +81,9 @@ Làm chung cho cả 4 tool:
 - [ ] Mẫu số: 5 cột (ghi_chu cố định, luong trung vị, tuoi trung bình, gioi_tinh phổ biến, email cố định) → **53 ô** được điền.
 
 ### 3.4 Sai định dạng
-- [ ] Bảng "Kiểu dữ liệu từng cột" đoán đúng: id/tuoi/luong/… số nguyên; email; so_dien_thoai; ngay_sinh/ngay_vao/ngay_ra = Ngày tháng; gioi_tinh/phong_ban/loai_hd/xep_loai/ghi_chu = Nhóm.
+- [ ] Bảng "Kiểu dữ liệu từng cột" đoán đúng: id/tuoi/luong/… số nguyên; email; so_dien_thoai; ngay_sinh/ngay_vao/ngay_ra = Ngày tháng; gioi_tinh/phong_ban/loai_hd/ghi_chu = Nhóm.
 - [ ] "Chỉ báo" → **tìm thấy 38 ô sai**; bảng kiểu cột hiện số ô sai ở 8 cột (tuoi 3, luong 5, email 6, so_dien_thoai 6, ngay_sinh 10, ngay_vao 3, diem_dg 3, Hệ số lương 2).
-- [ ] "Để trống ô sai" → 38 ô; "Xoá cả dòng" → 36 dòng.
+- [ ] "Để trống ô sai" → 38 ô; "Xoá cả dòng" → 37 dòng.
 - [ ] Đổi kiểu `ngay_sinh` sang **Văn bản** rồi chạy lại → còn **28 ô** sai (38 − 10).
 - [ ] Đổi khuôn ngày `ngay_sinh` thành `%d/%m/%Y` → gần như mọi dòng bị coi sai (vì dữ liệu là yyyy-mm-dd) — đúng như mong đợi.
 - [ ] 6 ô `ngay_sinh` dạng `15/03/1990` bị gắn cờ là sai khuôn dù là ngày thật.
@@ -93,7 +93,7 @@ Làm chung cho cả 4 tool:
 - [ ] `test_tab.txt` (tab) → sang `;` ra `ma;ten;gia`.
 - [ ] Delimiter gốc chọn sai (vd chọn tab cho file `;`) → không crash.
 - [ ] **CSV → JSON**: dán `ma;ten⏎007;An` với delimiter `;` → `"ma": "007"` giữ chuỗi. Tick/bỏ "Tự ép kiểu". Chọn Arrays → mảng của mảng. Bỏ "Dòng đầu là header". Bỏ "Thụt lề".
-- [ ] CSV → JSON với `test_all_noise.csv` → 552 object, không treo.
+- [ ] CSV → JSON với `test_attribute_noise.csv` → 552 object, không treo.
 - [ ] **JSON → CSV**: `test_convert_nested.json` → cột `dia_chi.thanh_pho`, `dia_chi.quan`; ô có dấu phẩy / xuống dòng được bọc ngoặc kép. `test_convert_lines.jsonl` (mỗi dòng 1 object) cũng chạy; thử delimiter đầu ra `;`.
 - [ ] `test_bad.json` → báo lỗi cú pháp rõ ràng (kèm số dòng).
 - [ ] Đổi giữa 3 tab Convert: khung xem trước/kết quả được dọn, không lẫn dữ liệu tool trước.
@@ -121,7 +121,7 @@ Chung cho cả 4 tool:
 - [ ] Ngưỡng 0 hoặc âm, để trống ngưỡng → báo lỗi / dùng mặc định.
 
 ### 5.3 Không nhất quán
-- [ ] Danh sách cột chỉ có cột Nhóm (gioi_tinh, phong_ban, loai_hd, xep_loai, ghi_chu).
+- [ ] Danh sách cột chỉ có cột Nhóm (gioi_tinh, phong_ban, loai_hd, ghi_chu).
 - [ ] `gioi_tinh` chuẩn `Nam, Nữ` ngưỡng 1 → **14 ô**; `loai_hd` `Chính thức, Thử việc, Cộng tác viên` → **5 ô**; `phong_ban` `Sales, HR, IT, Marketing, Finance` ngưỡng 1 → **15 ô**, hạ ngưỡng 0.85 → **19 ô** (thêm "Sale", "Marketting").
 - [ ] Bỏ trống danh sách chuẩn → báo lỗi; ngưỡng 0.2 → báo lỗi (phải 0.5–1).
 - [ ] Áp dụng "Tự chuẩn hoá" → các biến thể về đúng giá trị chuẩn.
@@ -131,7 +131,7 @@ Chung cho cả 4 tool:
 - [ ] `loai_hd = "Thử việc" => luong <= 12000000` → **5**.
 - [ ] `phong_ban = Sales => có(hoa_hong)` (chữ trần, không nháy) → **7**.
 - [ ] `[Hệ số lương] > 0` (tên cột có dấu cách) → **2**.
-- [ ] `thanh_tien == so_luong_ban * don_gia` → **8**.
+- [ ] `luong + thuong == tong_thu_nhap` → **8**.
 - [ ] `tuoi >= 18 và tuoi <= 65` → **9**.
 - [ ] Ghép bằng nút: bấm chip `tuoi`, nút `>=`, gõ 18, nút `và`, … ra đúng như gõ tay. Bấm chip `phong_ban` → hiện hàng chip giá trị (Sales, IT…) bấm chèn kèm dấu nháy.
 - [ ] Gõ dở `tuoi >=` → dòng đỏ báo thiếu vế; `phong_ban = Salse` → báo lỗi gợi ý «Sales»; `khong_co_cot > 1` → báo không có cột; bấm Phát hiện khi biểu thức sai → báo lỗi, không treo.
@@ -151,18 +151,21 @@ Chung cho cả 4 tool:
 - [ ] Chuyển tab / chuyển nhóm giữa chừng (khi đang có kết quả) rồi quay lại: không lẫn kết quả.
 - [ ] Tải lại trang (F5) giữa chừng: chuỗi bước mất (bình thường), không lỗi.
 
-## 7. Class Noise (4 bước)
-- [ ] Bước 1: 3 thẻ thuật toán (không còn nhãn N13/CL/N29); chưa chọn file → nút "Tải lên & tiếp tục" mờ; chọn file `test_all_noise.csv` + chọn **Ensemble-based** → tải lên.
-- [ ] Bước 2: chọn nhãn `xep_loai`; bấm "Phát hiện" khi chưa tick đặc trưng → báo "chọn ít nhất 1 cột".
-- [ ] "Chạy giảm cột tự động" → ra biểu đồ, tự tick 3 cột (diem_toan, diem_ly, diem_hoa); vẫn bỏ/tick thêm tay được; "Tích tất cả / Bỏ tích tất cả".
+## 7. Class Noise (4 bước) — dùng bộ Credit Card
+Dữ liệu: `data/kaggle_creditcard_fraud.csv` (284.807 dòng × 31 cột; nhãn `Class`; 30 cột số, không có cột chữ). Bộ này không có đáp án nhiễu: chỉ số trên màn hình
+(CV accuracy, Precision/Recall/F1 từng lớp, ma trận đếm) là chất lượng bộ PHÂN LOẠI, không phải độ chính xác của việc tìm nhiễu (xem CLAUDE.md mục 35).
+Muốn thử nhanh có thể dùng mẫu nhỏ (vd 5.000 dòng gồm đủ 492 dòng gian lận).
+- [ ] Bước 1: 3 thẻ thuật toán; chưa chọn file → nút "Tải lên & tiếp tục" mờ; chọn file → hiện bảng xem trước 100 dòng + "N dòng × 31 cột" + nút "↺ Đổi file"; chọn **Distance-based** → tải lên.
+- [ ] Bước 2: chọn nhãn `Class`; bấm "Phát hiện" khi chưa tick đặc trưng → báo "chọn ít nhất 1 cột".
+- [ ] "Tích tất cả" → tick đủ 30 cột số, không cột nào bị khoá; "Bỏ tích tất cả" bỏ hết. "Chạy giảm cột tự động" → ra biểu đồ và tự tick một số cột `V` (không kỳ vọng số cụ thể); bước lọc tương quan gần như không loại cột nào (các cột `V` là PCA).
 - [ ] Tham số hiện đúng theo thuật toán: Ensemble (số fold), Distance (k), Single (số cây, số fold).
-- [ ] Bước 3 (Kết quả): Ensemble → 4 thẻ + bảng accuracy từng classifier; Distance-based → 4 thẻ, ẩn bảng precision/ma trận; Single learning → 5 thẻ + bảng precision/recall + ma trận. Kỳ vọng (tham khảo): Distance k=5 gắn cờ ~73 dòng, trúng ~39/45; Ensemble ~124 dòng, trúng ~40/45; Single ~38 dòng, trúng ~27/45.
+- [ ] Bước 3 (Kết quả): Ensemble → 4 thẻ + bảng accuracy từng classifier; Distance-based → 4 thẻ, ẩn bảng precision/ma trận; Single learning → 5 thẻ + bảng precision/recall + ma trận. Tham khảo (một lần chạy Single learning trên nguyên bộ): CV accuracy 99,94% vs baseline 99,83%; F1 lớp gian lận 0,825; 96 dòng bị gắn cờ.
 - [ ] Tìm trong danh sách ("zzzz" → "Không có dòng nào khớp"); phân trang.
 - [ ] Bước 4 (Xử lý): hiện ghi chú "chưa có xử lý"; nút "Quay lại kết quả".
 - [ ] Bấm thanh bước 1 để quay lại, đổi thuật toán, tải lên lại, chạy lại → kết quả đúng thuật toán mới.
-- [ ] Cột chữ (`ho_ten`, `gioi_tinh`...) bị KHOÁ ô tick, có ghi chú "cột chữ, chưa hỗ trợ"; "Tích tất cả" chỉ tick cột số. (One-Hot đã gỡ, xem CLAUDE.md mục 35.) Gọi API với cột chữ → HTTP 400 "Cột đặc trưng phải là cột SỐ…".
+- [ ] Tải `test_attribute_noise.csv` lên (có cột chữ): cột chữ (`ho_ten`, `gioi_tinh`...) bị KHOÁ ô tick + ghi chú "cột chữ, chưa hỗ trợ"; "Tích tất cả" chỉ tick cột số. Gọi API với cột chữ → HTTP 400 "Cột đặc trưng phải là cột SỐ…".
 - [ ] Nhãn chỉ có 1 giá trị / cột nhãn toàn ô trống → báo lỗi rõ ràng, không treo.
-- [ ] Chạy Single learning-based khi file lớn: có chữ "có thể mất vài phút"; trang không bị đơ vĩnh viễn.
+- [ ] Chạy Single learning-based trên nguyên bộ Credit Card: có chữ "có thể mất vài phút"; trang không bị đơ vĩnh viễn.
 
 ## 8. Trường hợp biên / "phá" thử
 - [ ] File sai đuôi (vd `.png`, `.pdf`) kéo vào ô → từ chối hoặc báo lỗi rõ.
