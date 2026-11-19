@@ -2636,6 +2636,7 @@ function chResetForNewFindings() {
   $("ch-search").value = "";
   $("ch-bulk-min-score").value = "";
   $("ch-bulk-action").value = "";
+  $("ch-bulk-direction").value = ""; // danh sách mới -> bỏ lọc hướng cũ
   chDismissConfirm();
   setStatusMessage($("ch-status"), "", "");
   chRenderSourceNote();
@@ -2648,7 +2649,6 @@ function toggleStep5Direction() {
   if (isClass) renderClassHandling();
 }
 $("class-back-to-results-btn").addEventListener("click", () => goStep(4));
-$("ch-redetect-btn").addEventListener("click", () => goStep(3));
 
 // Dòng ghi chú ở bước chọn nhãn & đặc trưng: lần phát hiện kế tiếp sẽ chạy trên dữ liệu nào.
 function chRenderSourceNote() {
@@ -2661,7 +2661,7 @@ function chRenderSourceNote() {
   }
   el.hidden = false;
   el.textContent =
-    `Đang chạy trên dữ liệu đã xử lý (${steps} bước). Muốn chạy lại từ file gốc, vào bước Xử lý và bấm "Về dữ liệu gốc".`;
+    `Đang chạy trên dữ liệu đã xử lý (${steps} bước). Muốn dùng file gốc: bước Xử lý → Về dữ liệu gốc.`;
 }
 
 function chClassNames() {
@@ -2686,7 +2686,7 @@ function chRenderHistory() {
   const h = classHandling.history;
   const list = $("ch-history-log");
   if (h.entries.length === 0) {
-    list.innerHTML = '<li class="history-log-empty">Chưa có thay đổi nào — dữ liệu đang là bản gốc.</li>';
+    list.innerHTML = '<li class="history-log-empty">Chưa có thay đổi nào.</li>';
   } else {
     list.innerHTML = h.entries
       .slice()
@@ -2701,51 +2701,93 @@ function chRenderHistory() {
   $("ch-reset-btn").disabled = h.entries.length === 0 || classHandling.busy;
   $("ch-history-hint").textContent =
     h.entries.length > 0 && !h.can_undo
-      ? `Không hoàn tác thêm được (chỉ nhớ ${h.undo_limit} bước gần nhất, hoặc bảng quá lớn) — dùng "Về dữ liệu gốc".`
-      : `Hoàn tác được ${h.undo_limit} bước gần nhất.`;
+      ? `Hết bước để hoàn tác (nhớ ${h.undo_limit} bước gần nhất).`
+      : `Hoàn tác tối đa ${h.undo_limit} bước.`;
 }
 
 // ---- Gán hàng loạt ----
 function chBulkMatches() {
   const dir = $("ch-bulk-direction").value;
-  const raw = $("ch-bulk-min-score").value.trim();
-  const minScore = raw === "" ? null : Number(raw);
+  const minScore = chMinScoreValue();
   return state.classFindings.filter((f) => {
     if (classHandling.done.has(f.row_number)) return false;
     if (dir && chDirectionKey(f) !== dir) return false;
-    if (minScore !== null && !Number.isNaN(minScore) && f.score < minScore) return false;
+    if (minScore !== null && f.score < minScore) return false;
     return true;
   });
+}
+// Khoảng mức đáng ngờ THẬT của danh sách (làm tròn ra 3 số lẻ để bao trọn). null nếu chưa có danh sách.
+function chScoreRange() {
+  const scores = state.classFindings.map((f) => f.score).filter((s) => Number.isFinite(s));
+  if (!scores.length) return null;
+  return { min: Math.floor(Math.min(...scores) * 1000) / 1000, max: Math.ceil(Math.max(...scores) * 1000) / 1000 };
+}
+// Giá trị ô "Mức đáng ngờ từ" đã kẹp vào khoảng cho phép; null = bỏ trống (lấy tất cả).
+function chMinScoreValue() {
+  const raw = $("ch-bulk-min-score").value.trim();
+  const range = chScoreRange();
+  if (raw === "" || !range) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(range.max, Math.max(range.min, n));
 }
 function chRenderBulk() {
   const sel = $("ch-bulk-direction");
   const previous = sel.value;
-  const pending = state.classFindings.filter((f) => !classHandling.done.has(f.row_number));
+  // Số trong ngoặc = số dòng của hướng đó trong cả danh sách, đúng bằng số dòng bảng bên dưới hiện khi chọn hướng này.
   const counts = new Map();
-  pending.forEach((f) => counts.set(chDirectionKey(f), (counts.get(chDirectionKey(f)) || 0) + 1));
+  state.classFindings.forEach((f) => counts.set(chDirectionKey(f), (counts.get(chDirectionKey(f)) || 0) + 1));
   sel.innerHTML =
-    `<option value="">Tất cả (${chNum(pending.length)})</option>` +
+    `<option value="">Tất cả (${chNum(state.classFindings.length)})</option>` +
     Array.from(counts.entries())
       .map(([k, n]) => `<option value="${escapeAttr(k)}">${escapeHtml(k)} (${chNum(n)})</option>`)
       .join("");
   if (counts.has(previous)) sel.value = previous;
 
-  const scores = state.classFindings.map((f) => f.score);
-  $("ch-bulk-min-score").placeholder = scores.length
-    ? `${Math.min(...scores).toFixed(3)} – ${Math.max(...scores).toFixed(3)}`
-    : "bỏ trống = tất cả";
+  const input = $("ch-bulk-min-score");
+  const range = chScoreRange();
+  if (range) {
+    input.min = String(range.min);
+    input.max = String(range.max);
+    input.placeholder = `${range.min.toFixed(3)} – ${range.max.toFixed(3)}`;
+  } else {
+    input.removeAttribute("min");
+    input.removeAttribute("max");
+    input.placeholder = "tất cả";
+  }
   chRenderBulkInfo();
 }
 function chRenderBulkInfo() {
   const matches = chBulkMatches();
   const action = $("ch-bulk-action").value;
   $("ch-bulk-info").textContent = state.classFindings.length
-    ? `Khớp ${chNum(matches.length)} dòng chưa xử lý. Gán chỉ ghi lựa chọn, chưa đổi dữ liệu — bấm "Áp dụng" ở cuối để thực hiện.`
-    : "Chưa có danh sách nghi ngờ. Quay lại bước Kết quả.";
+    ? `Khớp ${chNum(matches.length)} dòng chưa xử lý. Bấm Áp dụng ở cuối trang để thực hiện.`
+    : "Chưa có danh sách nghi ngờ.";
   $("ch-bulk-assign-btn").disabled = classHandling.busy || !action || matches.length === 0;
 }
-$("ch-bulk-direction").addEventListener("change", chRenderBulkInfo);
-$("ch-bulk-min-score").addEventListener("input", chRenderBulkInfo);
+// Đổi hướng -> bảng bên dưới chỉ hiện các dòng của hướng đó, về trang 1.
+$("ch-bulk-direction").addEventListener("change", () => {
+  classHandling.page = 1;
+  chRenderTable();
+  chRenderBulkInfo();
+});
+// Ô "Mức đáng ngờ từ" chỉ nhận số trong khoảng [nhỏ nhất, lớn nhất] của danh sách:
+// chặn gõ e / + / - ; gõ quá lớn thì kẹp ngay về mức lớn nhất; rời ô hoặc Enter thì kẹp luôn cả phía nhỏ.
+$("ch-bulk-min-score").addEventListener("keydown", (e) => {
+  if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+});
+$("ch-bulk-min-score").addEventListener("input", () => {
+  const range = chScoreRange();
+  const input = $("ch-bulk-min-score");
+  if (range && input.value !== "" && Number(input.value) > range.max) input.value = String(range.max);
+  chRenderBulkInfo();
+});
+$("ch-bulk-min-score").addEventListener("change", () => {
+  const input = $("ch-bulk-min-score");
+  const clamped = chMinScoreValue();
+  input.value = clamped === null ? "" : String(Number(clamped.toFixed(3)));
+  chRenderBulkInfo();
+});
 $("ch-bulk-action").addEventListener("change", chRenderBulkInfo);
 $("ch-bulk-assign-btn").addEventListener("click", () => {
   if (classHandling.busy) return;
@@ -2758,17 +2800,21 @@ $("ch-bulk-assign-btn").addEventListener("click", () => {
     else classHandling.plan.set(f.row_number, { action, newLabel: null });
   });
   const names = { keep: "Giữ nguyên", remove_row: "Xoá dòng", relabel_suggested: "Sửa nhãn theo gợi ý" };
-  setStatusMessage($("ch-status"), `Đã gán «${names[action]}» cho ${chNum(matches.length)} dòng. Chưa áp dụng.`, "ok");
+  setStatusMessage($("ch-status"), `Đã gán «${names[action]}» cho ${chNum(matches.length)} dòng (chưa áp dụng).`, "ok");
   chRenderTable();
   chRenderSummary();
   chRenderBulkInfo();
 });
 
 // ---- Bảng từng dòng ----
+// Bảng hiện các dòng của hướng đang chọn ở khung "Gán hàng loạt" (nếu có) và khớp ô tìm kiếm.
 function chFiltered() {
+  const dir = $("ch-bulk-direction").value;
   const text = classHandling.filterText.trim().toLowerCase();
-  if (!text) return state.classFindings;
-  return state.classFindings.filter((f) => `${f.row_number} ${f.recorded_label} ${f.suggested_label}`.toLowerCase().includes(text));
+  return state.classFindings.filter((f) => {
+    if (dir && chDirectionKey(f) !== dir) return false;
+    return !text || `${f.row_number} ${f.recorded_label} ${f.suggested_label}`.toLowerCase().includes(text);
+  });
 }
 function chRowOptions(f, current) {
   const val = current ? (current.action === "relabel" ? `relabel:${current.newLabel}` : current.action) : "";
@@ -2797,9 +2843,11 @@ function chRenderTable() {
   const start = (classHandling.page - 1) * classHandling.perPage;
   const pageRows = all.slice(start, start + classHandling.perPage);
   const labels = CLASS_SCORE_LABELS[state.classResultMethod] || CLASS_SCORE_LABELS.single_learning;
-  const head = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${labels.suggested}</th><th>${labels.score}</th><th>Cách xử lý</th></tr></thead>`;
+  // STT = số thứ tự trong danh sách đang hiện (đếm tiếp qua các trang); "Dòng" = số dòng trong file.
+  const head = `<thead><tr><th>STT</th><th>Dòng</th><th>Nhãn ghi</th><th>${labels.suggested}</th><th>${labels.score}</th><th>Cách xử lý</th></tr></thead>`;
+  $("ch-list-title").textContent = state.classFindings.length ? `Dòng nghi ngờ (${chNum(all.length)})` : "Dòng nghi ngờ";
   if (!pageRows.length) {
-    $("ch-table").innerHTML = `${head}<tbody><tr><td colspan="5" class="empty-cell">${
+    $("ch-table").innerHTML = `${head}<tbody><tr><td colspan="6" class="empty-cell">${
       state.classFindings.length ? "Không có dòng nào khớp." : "Chưa có danh sách nghi ngờ."
     }</td></tr></tbody>`;
   } else {
@@ -2807,12 +2855,12 @@ function chRenderTable() {
       head +
       "<tbody>" +
       pageRows
-        .map((f) => {
+        .map((f, i) => {
           const d = classHandling.done.get(f.row_number);
           const cell = d
             ? `<span class="status-text is-ok">${chDoneText(d)}</span>`
             : `<select class="select ch-row-action" data-row="${f.row_number}" aria-label="Cách xử lý dòng ${f.row_number}">${chRowOptions(f, classHandling.plan.get(f.row_number))}</select>`;
-          return `<tr><td class="mono">${f.row_number}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label)}</td><td class="mono">${f.score.toFixed(4)}</td><td>${cell}</td></tr>`;
+          return `<tr><td class="mono">${start + i + 1}</td><td class="mono">${f.row_number}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label)}</td><td class="mono">${f.score.toFixed(4)}</td><td>${cell}</td></tr>`;
         })
         .join("") +
       "</tbody>";
@@ -2879,17 +2927,14 @@ function chRenderSummary() {
   const chosen = classHandling.plan.size;
   const parts = [];
   if (!state.classDiagnostics) {
-    $("ch-summary").textContent = "Chưa có kết quả phát hiện nào. Quay lại bước Kết quả (hoặc Phát hiện) trước.";
+    $("ch-summary").textContent = "Chưa có kết quả phát hiện. Quay lại bước Kết quả.";
   } else {
-    parts.push(`Danh sách có ${chNum(total)} dòng nghi ngờ` + (handled ? ` (${chNum(handled)} đã xử lý)` : "") + ".");
+    parts.push(`${chNum(total)} dòng nghi ngờ` + (handled ? `, ${chNum(handled)} đã xử lý` : "") + ".");
     parts.push(
       chosen
-        ? `Đã chọn: xoá ${chNum(c.remove)} · sửa nhãn ${chNum(c.relabel)} · giữ nguyên ${chNum(c.keep)} (còn ${chNum(total - handled - chosen)} dòng chưa chọn).`
-        : `Chưa chọn cách xử lý cho dòng nào.`
+        ? `Đã chọn: xoá ${chNum(c.remove)} · sửa nhãn ${chNum(c.relabel)} · giữ nguyên ${chNum(c.keep)} · còn ${chNum(total - handled - chosen)} chưa chọn.`
+        : `Chưa chọn dòng nào.`
     );
-    if (classHandling.history.entries.length) {
-      parts.push(`Dữ liệu hiện tại là bản đã xử lý (${classHandling.history.entries.length} bước).`);
-    }
     $("ch-summary").textContent = parts.join(" ");
   }
   $("ch-apply-btn").disabled = classHandling.busy || chosen === 0;
@@ -3031,17 +3076,17 @@ function chShowConfirm(p, rows, sig) {
     const target = k.split(" → ")[1];
     const targetNote = target;
     if (rare.has(target)) {
-      lines.push(`<strong>Lưu ý lớp hiếm:</strong> đổi ${chNum(v)} dòng sang nhãn «${escapeHtml(targetNote)}» (lớp hiếm, hiện chỉ có ${chNum(p.label_counts_before[target] || 0)} dòng) sẽ tạo thêm mẫu lớp này — nên xem kỹ các dòng đó trước.`);
+      lines.push(`<strong>Lớp hiếm:</strong> đổi ${chNum(v)} dòng sang «${escapeHtml(targetNote)}» (lớp này chỉ có ${chNum(p.label_counts_before[target] || 0)} dòng), nên xem kỹ các dòng đó.`);
     }
   });
   rem.forEach(([k, v]) => {
-    if (rare.has(k)) lines.push(`<strong>Lưu ý lớp hiếm:</strong> xoá ${chNum(v)} dòng thuộc nhãn «${escapeHtml(k)}» (chỉ có ${chNum(p.label_counts_before[k] || 0)} dòng) — mất mẫu quý của lớp hiếm.`);
+    if (rare.has(k)) lines.push(`<strong>Lớp hiếm:</strong> xoá ${chNum(v)} dòng nhãn «${escapeHtml(k)}» (lớp này chỉ có ${chNum(p.label_counts_before[k] || 0)} dòng).`);
   });
-  if (p.rows_removed / Math.max(1, p.rows_before) >= 0.2) lines.push("<strong>Xoá từ 20% số dòng trở lên</strong> — hãy chắc chắn trước khi xác nhận.");
+  if (p.rows_removed / Math.max(1, p.rows_before) >= 0.2) lines.push("<strong>Xoá từ 20% số dòng trở lên</strong>, hãy chắc chắn.");
   if (p.skipped_missing + p.skipped_stale > 0) {
-    lines.push(`Bỏ qua ${chNum(p.skipped_missing + p.skipped_stale)} dòng (đã bị xoá hoặc nhãn đã đổi từ trước).`);
+    lines.push(`Bỏ qua ${chNum(p.skipped_missing + p.skipped_stale)} dòng (đã xoá hoặc đã đổi nhãn).`);
   }
-  lines.push("Bấm «Xác nhận» thì mới thay đổi dữ liệu thật; hoàn tác được.");
+  lines.push("Chỉ khi bấm «Xác nhận» dữ liệu mới đổi.");
 
   const box = $("ch-confirm");
   box.innerHTML = `
@@ -3090,8 +3135,8 @@ async function chCommit(rows) {
   if (data.rows_removed) effects.push(`xoá ${chNum(data.rows_removed)} dòng`);
   if (data.labels_changed) effects.push(`đổi nhãn ${chNum(data.labels_changed)} dòng`);
   if (!effects.length) effects.push("không đổi dữ liệu (chỉ ghi nhận giữ nguyên)");
-  const extra = data.skipped_missing + data.skipped_stale > 0 ? ` Bỏ qua ${chNum(data.skipped_missing + data.skipped_stale)} dòng (đã bị xoá hoặc nhãn đã đổi từ trước).` : "";
-  setStatusMessage($("ch-status"), `✅ Đã áp dụng: ${effects.join(", ")}.${extra} Muốn kiểm tra lại dữ liệu đã xử lý thì bấm «Phát hiện lại».`, "ok");
+  const extra = data.skipped_missing + data.skipped_stale > 0 ? ` Bỏ qua ${chNum(data.skipped_missing + data.skipped_stale)} dòng (đã xoá hoặc đã đổi nhãn).` : "";
+  setStatusMessage($("ch-status"), `✅ Đã áp dụng: ${effects.join(", ")}.${extra}`, "ok");
   renderClassHandling();
 }
 
@@ -3115,7 +3160,7 @@ async function chHistoryAction(path, isReset) {
     } else if (classHandling.steps.length === prevSteps && prevSteps > 0) {
       classHandling.steps.pop().forEach((rn) => classHandling.done.delete(rn));
     } else {
-      note = " Dữ liệu đã đổi so với lúc phát hiện — hãy bấm «Phát hiện lại» để cập nhật danh sách nghi ngờ.";
+      note = " Danh sách nghi ngờ đã cũ, hãy chạy lại phát hiện ở bước Nhãn & đặc trưng.";
     }
     setStatusMessage($("ch-status"), (isReset ? "✅ Đã quay về dữ liệu gốc." : "✅ Đã hoàn tác 1 bước.") + note, "ok");
     renderClassHandling();
@@ -3178,6 +3223,15 @@ window.DenoiseFlow = {
     if (card) card.click();
   },
   currentStep() { return state.currentStep; },
+  // Nhận dữ liệu CSV từ chuỗi xử lý của 3 nhóm tool (nút "Class Noise" ở "Xong · xử lý tiếp bằng"): dựng thành File
+  // rồi coi như người dùng vừa chọn file đó ở bước 1 (có bảng xem trước, chờ chọn phương pháp + Tải lên).
+  loadCsvText(text, name) {
+    const file = new File([text], name, { type: "text/csv" });
+    fileInput.value = "";
+    goStep(1);
+    handleFileSelected(file);
+    setStatusMessage($("upload-status"), "Đã nhận dữ liệu vừa xử lý. Chọn phương pháp rồi bấm Tải lên.", "ok");
+  },
 };
 
 // ====== Khởi động ======

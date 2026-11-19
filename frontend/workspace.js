@@ -1105,6 +1105,8 @@ const CONTINUE_GROUPS = [
     { icon: "□", tool: "blanks" },
     { icon: "@", tool: "format-noise" },
   ] },
+  // Không phải tool trong chuỗi: bấm là chuyển kết quả hiện tại sang Class Noise (bước 1, như vừa chọn file đó). Chỉ nhận CSV.
+  { key: "class-noise", label: "Class Noise", special: true, items: [] },
 ];
 function renderContinuePanel(g) {
   const panel = $(TOOLSEC[g].cont);
@@ -1114,10 +1116,14 @@ function renderContinuePanel(g) {
   panel.hidden = false;
   list.innerHTML = "";
   pills.innerHTML = CONTINUE_GROUPS.map((gr) =>
-    `<button type="button" class="continue-pill" data-category="${gr.key}"${isJson && gr.key !== "convert" ? " disabled" : ""}>${gr.label}</button>`
+    `<button type="button" class="continue-pill" data-category="${gr.key}"${isJson && gr.key !== "convert" ? " disabled" : ""}${gr.special ? ' title="Dùng kết quả này làm file cho Class Noise"' : ""}>${gr.label}</button>`
   ).join("");
   pills.querySelectorAll(".continue-pill").forEach((pill) => {
     pill.addEventListener("click", () => {
+      if (pill.dataset.category === "class-noise") {
+        sendPipeToClassNoise();
+        return;
+      }
       const reopen = pill.classList.contains("is-active");
       pills.querySelectorAll(".continue-pill").forEach((b) => b.classList.toggle("is-active", b === pill && !reopen));
       if (reopen) { list.innerHTML = ""; return; }
@@ -1135,6 +1141,16 @@ function renderContinuePanel(g) {
       });
     });
   });
+}
+// Chuyển kết quả hiện tại (CSV) sang Class Noise: mở khối Class Noise rồi nạp text như một file vừa chọn ở bước 1
+// (workspace-flow.js: DenoiseFlow.loadCsvText). Người dùng chọn phương pháp rồi bấm "Tải lên" như thường.
+function sendPipeToClassNoise() {
+  const p = state.pipe;
+  if (!p.currentText || p.currentKind !== "csv") return;
+  const base = (p.originalLabel || "").replace(/\.(csv|txt|xlsx|xls)$/i, "");
+  const name = (base && base !== "văn bản dán tay" ? base : "du-lieu") + "_da-xu-ly.csv";
+  switchSection("class-noise");
+  if (window.DenoiseFlow && window.DenoiseFlow.loadCsvText) window.DenoiseFlow.loadCsvText(p.currentText, name);
 }
 // Mang kết quả hiện tại sang tool đích (có thể ở nhóm khác).
 function startChain(g, tool) {

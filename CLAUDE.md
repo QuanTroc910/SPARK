@@ -1860,8 +1860,25 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       Nội dung ngắn: nên làm sạch ô trống / sai định dạng / dòng trùng / giá trị bất thường trước vì chúng làm cột đặc trưng sai → tìm nhãn sai kém tin cậy. Hai link `data-section="free-tools"` («Tự động») và
       `data-section="config"` («Cần cấu hình») dùng bộ chuyển khối sẵn có (`switchSection`), không cần JS mới. CSS ở `workspace.css` (`#section-class-noise .cn-attr-note`).
     - **Vì sao chữ dặn "tải file kết quả về rồi tải lên ở đây":** các tool Tự động / Cần cấu hình chạy stateless qua dải nối tiếp (`state.pipe`), KHÔNG chia sẻ `file_id` với Class Noise (Class Noise dùng `/api/upload`);
-      muốn nối thẳng phải làm thêm nút "Xử lý tiếp bằng Class Noise" (chưa làm).
+      muốn nối thẳng phải làm thêm nút "Xử lý tiếp bằng Class Noise" [ĐÃ LÀM ở mục 42].
     - **Kiểm chứng:** Playwright (khung hiện khi vào Class Noise, đúng vị trí, nền đúng, 2 link chuyển đúng khối, quay lại vẫn thấy, nút Tải lên + 3 thẻ phương pháp không đổi, màn 390px không tràn ngang, không lỗi JS) + xem ảnh chụp.
+
+41. **Class Noise bước Xử lý: bỏ nút "Phát hiện lại", STT, lọc bảng theo hướng, ô mức đáng ngờ bị kẹp khoảng, rút gọn chữ — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user hỏi ý kiến về nút "Phát hiện lại trên dữ liệu hiện tại →" (chỉ gọi `goStep(3)`, vẫn phải bấm Phát hiện ở bước 2), mình đồng ý nên bỏ; user bảo "code bỏ phần đấy đi" + 3 việc kèm theo + "có nhiều chữ quá".
+    - **Bỏ nút** `#ch-redetect-btn` (HTML + listener). Phát hiện lại trên bản đã xử lý VẪN dùng được: "← Quay lại kết quả" hoặc bấm thanh bước 2 → Phát hiện (server vẫn đọc `_peek_working_df`); dòng ghi chú ở bước chọn nhãn vẫn báo "Đang chạy trên dữ liệu đã xử lý (N bước)".
+    - **STT:** bảng `#ch-table` có cột "STT" (số thứ tự trong danh sách đang hiện, đếm tiếp qua các trang) trước cột "Dòng" (số dòng trong file). Bảng ở bước Kết quả (`#class-findings-table`) CHƯA thêm STT.
+    - **Lọc bảng theo hướng:** `chFiltered()` lọc theo ô "Hướng đổi nhãn" của khung Gán hàng loạt (+ ô tìm kiếm); đổi hướng thì về trang 1; tiêu đề `#ch-list-title` ghi "Dòng nghi ngờ (N)". Số trong ngoặc của từng hướng nay đếm CẢ dòng đã xử lý (= số dòng bảng hiện), trước đây chỉ đếm dòng chưa xử lý. Ô "Mức đáng ngờ từ" KHÔNG lọc bảng, chỉ giới hạn nhóm dòng được Gán.
+    - **Ô "Mức đáng ngờ từ":** `chScoreRange()` lấy khoảng điểm thật của danh sách (làm tròn ra 3 số lẻ) → đặt `min`/`max`/`placeholder`; chặn gõ `e + -`; gõ quá lớn kẹp ngay về max, rời ô/Enter kẹp cả phía nhỏ về min; bỏ trống = tất cả; `chMinScoreValue()` luôn trả giá trị đã kẹp nên số dòng "Khớp N" luôn đúng khoảng.
+    - **Rút gọn chữ:** mô tả đầu bước còn 1 câu, tóm tắt "N dòng nghi ngờ. Chưa chọn dòng nào.", bỏ câu giải thích dài ở lịch sử / khung gán / hộp xác nhận / thông báo sau Áp dụng (bỏ mọi chỗ nhắc nút «Phát hiện lại»).
+    - **Kiểm chứng:** Playwright `test_ch_filters.js` (2 bộ: 12 dòng nghi ngờ và 203 dòng / 6 trang: không còn nút, 3 nút cuối, STT liên tục kể cả trang 2 bắt đầu từ 21, mỗi hướng bảng đúng 106 / 97 dòng, ô mức kẹp đúng min/max, mũi tên spinner, không lỗi JS) + chạy lại `test_class_handling_ui.js` (~45 kiểm tra, sửa 3 câu theo chữ mới) = đạt.
+
+42. **Nút «Class Noise» ở "Xong · xử lý tiếp bằng": chuyển kết quả của chuỗi tool sang Class Noise — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user chụp dải 3 nút (Cần cấu hình / Convert / Tự động) và muốn thêm Class Noise bên phải "Tự động" để xử lý xong có thể đưa dữ liệu sang Class Noise.
+    - **Cách làm:** `workspace.js`: `CONTINUE_GROUPS` thêm mục `{key:"class-noise", special:true}` (hiện ở CẢ 3 nhóm vì dải dùng chung); bấm thì gọi `sendPipeToClassNoise()` (không mở danh sách tool): `switchSection("class-noise")` + `DenoiseFlow.loadCsvText(state.pipe.currentText, "<tên gốc>_da-xu-ly.csv")`.
+      `workspace-flow.js`: `loadCsvText()` dựng `File` từ chuỗi CSV, `goStep(1)` rồi gọi đúng `handleFileSelected()` như vừa chọn file (có bảng xem trước, đọc bằng `/api/noise-tools/inspect`); người dùng chọn phương pháp + Tải lên như thường nên đi qua `/api/upload` bình thường (không thêm route backend).
+      Dữ liệu JSON (sau CSV → JSON) thì nút bị khoá như các nhóm khác. Khung lưu ý đầu Class Noise (mục 40) đổi chữ: chỉ cách bấm «Class Noise» thay vì "tải về rồi tải lên".
+    - **Giới hạn:** file Class Noise sinh ra là BẢN SAO tại thời điểm bấm (xử lý tiếp bằng tool khác sau đó không tự cập nhật sang Class Noise); nếu Class Noise đang có file cũ ở các bước sau thì chỉ khi Tải lên file mới nó mới đổi.
+    - **Kiểm chứng:** Playwright `test_to_class_noise.js`: Xoá dòng trùng 2030 → 2000 dòng, 4 nút đúng thứ tự, bấm Class Noise → bước 1 hiện "class_dup_da-xu-ly.csv · 2000 dòng × 4 cột", Tải lên + phát hiện Distance-based chạy trên đúng 2.000 dòng, sau Convert CSV → JSON nút bị khoá, không lỗi JS.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 

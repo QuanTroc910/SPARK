@@ -504,7 +504,7 @@
           <section class="tx-section" id="guide-07">
             <h2 class="tx-h2"><span>07</span>Nối tiếp và hoàn tác</h2>
             <ul class="tx-list">
-              <li>Chạy xong, kết quả trở thành đầu vào cho tool kế tiếp. Bấm một mục trong "Xong · xử lý tiếp bằng" để chuyển tool mà không phải tải file lại.</li>
+              <li>Chạy xong, kết quả trở thành đầu vào cho tool kế tiếp. Bấm một mục trong "Xong · xử lý tiếp bằng" để chuyển tool mà không phải tải file lại; bấm "Class Noise" để đưa kết quả sang tìm nhãn sai.</li>
               <li>Dải đen phía trên ghi các bước đã qua, kèm 3 nút: "Tải file khác", "Hoàn tác bước cuối" (lùi tối đa 5 bước) và "Bắt đầu lại từ gốc".</li>
               <li>File gốc không bị đụng tới. "Tải xuống CSV" luôn lấy kết quả mới nhất.</li>
             </ul>
@@ -751,7 +751,7 @@
           <strong>Lưu ý:</strong> nên xử lý lỗi thuộc tính (Attribute noise) trước khi chạy Class Noise.
           Ô trống, sai định dạng, dòng trùng hay giá trị bất thường làm cột đặc trưng bị sai, khiến việc tìm nhãn sai kém tin cậy.
           Làm sạch bằng <a href="#" data-section="free-tools">Tự động</a> và <a href="#" data-section="config">Cần cấu hình</a>,
-          tải file kết quả về rồi tải lên ở đây.
+          rồi bấm «Class Noise» ở mục «Xong · xử lý tiếp bằng» để chuyển dữ liệu sang đây.
         </div>
         <div class="convert-grid">
           <section class="convert-panel ft-panel">
@@ -1079,10 +1079,7 @@
 
         <!-- Nhánh CLASS NOISE: xử lý dòng nghi sai nhãn (CLAUDE.md mục 37) -->
         <div id="panel-5-class" hidden>
-          <p class="panel-desc">
-            Chọn cách xử lý cho từng dòng nghi sai nhãn (hoặc gán hàng loạt), rồi bấm "Áp dụng". File gốc không bao giờ bị đổi.
-            Mọi thay đổi đều được chạy thử và hỏi lại; hoàn tác được. Chỉ cột nhãn bị đổi, các cột đặc trưng giữ nguyên.
-          </p>
+          <p class="panel-desc">Chọn cách xử lý cho từng dòng nghi sai nhãn, hoặc gán hàng loạt, rồi bấm Áp dụng. File gốc không bị đổi.</p>
 
           <div class="history-bar" id="ch-history-bar">
             <div class="history-bar-top">
@@ -1098,15 +1095,16 @@
           <p class="status-text" id="ch-summary"></p>
 
           <div class="chart-card" id="ch-bulk-card">
-            <h3 class="sub-title">Gán cách xử lý hàng loạt</h3>
+            <h3 class="sub-title">Gán hàng loạt</h3>
             <div class="field-row">
               <div class="field">
-                <label for="ch-bulk-direction">Hướng (nhãn ghi → gợi ý)</label>
+                <label for="ch-bulk-direction">Hướng đổi nhãn</label>
                 <select class="select" id="ch-bulk-direction"></select>
               </div>
               <div class="field">
                 <label for="ch-bulk-min-score">Mức đáng ngờ từ</label>
-                <input class="input mono" id="ch-bulk-min-score" type="number" step="any" placeholder="bỏ trống = tất cả" />
+                <!-- min / max / placeholder do workspace-flow.js đặt theo khoảng mức đáng ngờ thật của danh sách (chỉ nhận số trong khoảng đó) -->
+                <input class="input mono" id="ch-bulk-min-score" type="number" step="0.01" inputmode="decimal" placeholder="tất cả" />
               </div>
               <div class="field">
                 <label for="ch-bulk-action">Cách xử lý</label>
@@ -1122,9 +1120,9 @@
             <p class="status-text" id="ch-bulk-info"></p>
           </div>
 
-          <h3 class="sub-title">Danh sách dòng nghi ngờ (mức đáng ngờ giảm dần)</h3>
+          <h3 class="sub-title" id="ch-list-title">Dòng nghi ngờ</h3>
           <div class="toolbar">
-            <input type="search" class="input search-input" id="ch-search" placeholder="Tìm theo số dòng hoặc nhãn…" />
+            <input type="search" class="input search-input" id="ch-search" placeholder="Tìm dòng hoặc nhãn…" />
             <button class="btn btn-ghost btn-small" id="ch-clear-plan-btn" type="button" disabled>Bỏ mọi lựa chọn</button>
           </div>
           <div class="table-wrap">
@@ -1142,7 +1140,6 @@
           <div class="panel-actions">
             <button class="btn btn-ghost" id="class-back-to-results-btn" type="button">← Quay lại kết quả</button>
             <button class="btn btn-primary" id="ch-apply-btn" type="button" disabled>Áp dụng các dòng đã chọn</button>
-            <button class="btn btn-ghost" id="ch-redetect-btn" type="button">Phát hiện lại trên dữ liệu hiện tại →</button>
             <button class="btn btn-primary" id="ch-export-btn" type="button">Xuất file CSV ↓</button>
           </div>
         </div>
