@@ -1138,7 +1138,6 @@ a.hm-tool:hover { background: #ebebe7; }
 }
 #section-class-noise .history-log { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; }
 #section-class-noise .handling-confirm { border-radius: 0; }
-#section-class-noise .status-text.is-ok { color: var(--signal); }
 
 /* ----- Hồ sơ tài khoản ----- */
 .pf-hero { padding-bottom: 40px; border-bottom: 1px solid #111; margin-bottom: 36px; }
@@ -1236,7 +1235,7 @@ a.hm-tool:hover { background: #ebebe7; }
 .cf-expr-warn.is-bad { color: #ae3a3a; background: #fbeaea; border-left: 3px solid #ae3a3a; font-weight: 600; }
 .status-text.is-warn { color: #7a4f00; font-weight: 600; }
 /* Xem trước tác động của cách xử lý (Phụ thuộc hàm): khung xanh nhạt; cách xoá cả nhóm hiện đỏ để thấy nguy cơ xoá nhầm dòng đúng. */
-.cf-action-preview { margin: 0; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; color: var(--signal-dark); background: var(--signal-soft); border-left: 3px solid var(--signal); }
+.cf-action-preview { margin: 0; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; color: var(--warn-text); background: var(--warn-soft); border-left: 3px solid var(--warn-line); } /* xem trước "Sẽ xoá / sửa N": báo trước = vàng (không dùng cobalt) */
 .cf-action-preview.is-risk { color: #ae3a3a; background: #fbeaea; border-left-color: #ae3a3a; font-weight: 600; }
 .cf-stale-note { margin: 0; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; font-weight: 600; color: #7a4f00; background: #fff4d6; border-left: 3px solid #e0a100; }
 /* Dòng báo kết quả kiểm tra biểu thức khi đang gõ (xanh = hợp lệ, đỏ = lỗi, xám = đang kiểm tra / không tự kiểm tra); mờ đi khi bạn đang gõ tiếp. */
@@ -1275,7 +1274,7 @@ a.hm-tool:hover { background: #ebebe7; }
 .cf-method-remove { height: 40px; padding: 0 14px; }
 /* Cảnh báo IQR suy biến (cột đa số cùng 1 giá trị): khung vàng luôn hiện; dòng đỏ chỉ hiện khi chọn cách xử lý có đổi dữ liệu. */
 .cf-sum-warn { grid-column: 1 / -1; font-size: 12px; line-height: 1.5; color: #7a4f00; background: #fff4d6; border-left: 3px solid #e0a100; padding: 7px 10px; }
-.cf-sum-risk { grid-column: 1 / -1; font-size: 12px; line-height: 1.5; font-weight: 600; color: #ae3a3a; background: #fbeaea; padding: 7px 10px; }
+.cf-sum-risk { grid-column: 1 / -1; font-size: 12px; line-height: 1.5; font-weight: 600; color: #ae3a3a; background: #fbeaea; border-left: 3px solid #ae3a3a; padding: 7px 10px; }
 .cf-sum-methods { grid-column: 1 / -1; font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.02em; color: var(--ink-dim); }
 @media (max-width: 900px) {
   .cf-method-row, .cf-method-row.has-remove { grid-template-columns: 1fr; }
@@ -1409,3 +1408,31 @@ a.hm-tool:hover { background: #ebebe7; }
 #panel-5-class .ch-row-action { min-width: 240px; max-width: 100%; }
 #panel-5-class.is-busy #ch-table, #panel-5-class.is-busy #ch-bulk-card { pointer-events: none; opacity: 0.7; }
 #panel-5-class .panel-actions { flex-wrap: wrap; gap: 10px; }
+
+/* ===== Thông báo trạng thái dùng chung (✅ Đã áp dụng…, lỗi, cảnh báo) =====
+   Trước đây "thành công" lấy màu nhấn cobalt (--signal) nên trông như link / chữ trang trí, còn lỗi thì chữ đỏ trơn.
+   Nay cả 3 loại cùng một kiểu "thanh màu" như dòng kiểm tra biểu thức (.cf-live) và ghi chú vàng (.cf-stale-note):
+   xanh lá = xong, đỏ = lỗi, vàng = cảnh báo. Nền nhạt + vạch trái 3px, vuông góc đúng phong cách Denoise. */
+:root {
+  --ok-text: #1d6b3a; --ok-soft: #e6f4ea; --ok-line: #2e9d57;
+  --bad-text: #ae3a3a; --bad-soft: #fbeaea; --bad-line: #ae3a3a;
+  --warn-text: #7a4f00; --warn-soft: #fff4d6; --warn-line: #e0a100;
+}
+.status-text.is-ok, .status-text.is-error, .status-text.is-warn {
+  display: block; padding: 7px 10px; border-left: 3px solid; border-radius: 0;
+  font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 12.5px; line-height: 1.5; font-weight: 600; letter-spacing: 0;
+  word-break: break-word;
+}
+.status-text.is-ok { color: var(--ok-text); background: var(--ok-soft); border-left-color: var(--ok-line); }
+.status-text.is-error { color: var(--bad-text); background: var(--bad-soft); border-left-color: var(--bad-line); }
+.status-text.is-warn { color: var(--warn-text); background: var(--warn-soft); border-left-color: var(--warn-line); }
+.status-text.is-ok:empty, .status-text.is-error:empty, .status-text.is-warn:empty { display: none; }
+/* Trong ô bảng (vd "✅ Đã đổi nhãn" từng dòng) chỉ đổi màu chữ, không dựng cả thanh cho mỗi dòng. */
+td .status-text.is-ok, td .status-text.is-error, td .status-text.is-warn {
+  display: inline; padding: 0; border: 0; background: none; font-size: inherit;
+}
+/* Lỗi nhập liệu (.form-error) và hộp xác nhận xoá cùng kiểu thanh đỏ. */
+.form-error { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 12.5px; line-height: 1.5; font-weight: 600; color: var(--bad-text); background: var(--bad-soft); border: 0; border-left: 3px solid var(--bad-line); border-radius: 0; padding: 7px 10px; }
+.handling-confirm { border: 0; border-left: 3px solid var(--bad-line); border-radius: 0; background: var(--bad-soft); }
+/* Cảnh báo chất lượng của Class Noise (độ phủ thấp, mô hình học yếu): vàng như mọi cảnh báo khác. */
+#class-warning-card { background: var(--warn-soft); color: var(--warn-text); border: 0; border-left: 3px solid var(--warn-line); border-radius: 0; }

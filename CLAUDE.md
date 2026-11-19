@@ -1880,6 +1880,14 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Giới hạn:** file Class Noise sinh ra là BẢN SAO tại thời điểm bấm (xử lý tiếp bằng tool khác sau đó không tự cập nhật sang Class Noise); nếu Class Noise đang có file cũ ở các bước sau thì chỉ khi Tải lên file mới nó mới đổi.
     - **Kiểm chứng:** Playwright `test_to_class_noise.js`: Xoá dòng trùng 2030 → 2000 dòng, 4 nút đúng thứ tự, bấm Class Noise → bước 1 hiện "class_dup_da-xu-ly.csv · 2000 dòng × 4 cột", Tải lên + phát hiện Distance-based chạy trên đúng 2.000 dòng, sau Convert CSV → JSON nút bị khoá, không lỗi JS.
 
+43. **Thông báo trạng thái dùng chung đổi màu cho hợp Denoise — ĐÃ XONG, ĐÃ XEM ẢNH CHỤP (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user chụp "✅ Đã áp dụng: xoá 3.738 dòng." chữ xanh cobalt (là `--signal` của Denoise, trông như link) và nhờ kiểm tra MỌI thông báo kiểu đó để đổi màu cho hợp web.
+    - **Cách làm** (cuối `workspace.css`, không đụng logic JS): token `--ok-*` (xanh lá), `--bad-*` (đỏ), `--warn-*` (vàng) cùng bộ màu với `.cf-live` / `.cf-stale-note` sẵn có. `.status-text.is-ok / is-error / is-warn` thành "thanh màu" (nền nhạt + vạch trái 3px, vuông góc); trong ô bảng (`td`) chỉ đổi màu chữ.
+      `.form-error` và `.handling-confirm` (hộp xác nhận xoá) cùng kiểu thanh đỏ; `#class-warning-card` (cảnh báo độ phủ thấp / mô hình học yếu của Class Noise) đổi từ chữ đỏ inline sang thanh vàng (bỏ `color:var(--danger)` inline ở 3 chỗ trong `workspace-flow.js`). Đã xoá rule ép `#section-class-noise .status-text.is-ok { color: var(--signal) }`.
+    - **Quy ước giữ cho nhất quán:** xong = xanh lá, lỗi = đỏ, cảnh báo = vàng; màu cobalt (`--signal`) chỉ dùng cho nhấn thương hiệu / nút / link, KHÔNG dùng cho thông báo kết quả. Giao diện cũ (`style.css`) không đụng.
+    - **Bổ sung sau khi user hỏi "cả bên attribute noise nữa":** chụp Cần cấu hình (Giá trị bất thường: cảnh báo IQR = 0, xem trước, hộp xác nhận). Các thanh vàng / đỏ / xanh lá sẵn có (`.cf-live`, `.cf-stale-note`, `.cf-confirm`, `.cf-sum-warn`) đã đúng tông; sửa 3 chỗ còn lệch:
+      `.cf-action-preview` ("Sẽ xoá N dòng… vì chọn…") từ thanh cobalt → vàng (báo trước = vàng, đỏ khi ≥ 20% số dòng như cũ); `.cf-sum-risk` thêm vạch đỏ bên trái cho khớp; nút «Xác nhận xoá và áp dụng» (`#cf-confirm-yes`) từ `btn-accent` cobalt → `btn-danger` đỏ (giống hộp xác nhận của Class Noise).
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có

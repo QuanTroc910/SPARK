@@ -2377,7 +2377,7 @@ function renderClassResultsDistance(diag) {
   const warnCard = $("class-warning-card");
   if (isLowCoverage) {
     warnCard.hidden = false;
-    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
+    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px;">
       ⚠️ Chỉ ${coveragePct.toFixed(1)}% số dòng có láng giềng lẫn nhau, nên phần lớn dòng chưa kết luận được.
       Thử tăng k hoặc chọn lại cột đặc trưng.</p>`;
   } else {
@@ -2437,7 +2437,7 @@ function renderClassResultsEnsemble(diag) {
   const warnCard = $("class-warning-card");
   if (isWeak) {
     warnCard.hidden = false;
-    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
+    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px;">
       ⚠️ Cả 3 classifier chỉ nhỉnh hơn baseline ${(bestDiff * 100).toFixed(2)} điểm %, nên danh sách bên dưới rất khó tin.
       Thử chọn lại cột đặc trưng.</p>`;
   } else {
@@ -2507,7 +2507,7 @@ function renderClassResultsSingleLearning(diag) {
   const warnCard = $("class-warning-card");
   if (isWeak) {
     warnCard.hidden = false;
-    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px; color:var(--danger);">
+    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px;">
       ⚠️ CV accuracy chỉ chênh baseline ${(diffPct * 100).toFixed(2)} điểm % (${ceilingPct.toFixed(1)}% mức trần),
       nên danh sách bên dưới rất khó tin. Thử chọn lại cột đặc trưng.</p>`;
   } else {
