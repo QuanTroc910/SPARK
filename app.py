@@ -473,8 +473,12 @@ def upload_file():
     file_id = str(uuid.uuid4())
     save_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
     file.save(save_path)
-
-    df = load_data(str(save_path))  # hàm có sẵn trong attribute_noise/pipeline.py
+    try:
+        df = load_data(str(save_path))  # hàm có sẵn trong attribute_noise/pipeline.py
+    finally:
+        # Đọc xong là xoá tệp trên đĩa (giống _read_df_for_noise_tool): bảng chỉ còn nằm trong bộ nhớ,
+        # đúng như trang Guide/Privacy mô tả ("không ghi ra đĩa", "khởi động lại server là file biến mất").
+        save_path.unlink(missing_ok=True)
     UPLOADED_FILES[file_id] = df
     FILE_OWNERS[file_id] = session["user_id"]
 
