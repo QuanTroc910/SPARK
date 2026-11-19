@@ -7,6 +7,8 @@ Sinh lại bất cứ lúc nào: `python3 data/generate_test_attribute_noise.py`
 
 File phụ: `test_semicolon.csv`, `test_tab.txt` (đổi delimiter), `test_convert_nested.json`, `test_convert_lines.jsonl` (JSON → CSV), `test_empty.csv`, `test_header_only.csv`, `test_bad.json` (file xấu).
 
+**Bộ DEMO lớn hơn (1997 dòng, dùng khi bảo vệ) và số kỳ vọng từng tool:** xem `data/DEMO_ATTRIBUTE_2000.md`.
+
 **Cách dùng:** chạy `python3 app.py`, mở `http://localhost:5000`, làm lần lượt từng mục, đánh dấu ô vuông. Số liệu "kỳ vọng" dưới đây đã được đối chiếu với tính độc lập bằng pandas (0 lệch). Nếu giao diện ra số khác thì ghi lại: đó là lỗi.
 
 > Cột "Dòng" trong bảng kết quả bắt đầu từ 1 (dòng dữ liệu đầu tiên). Chữ trên giao diện nhiều chỗ viết HOA bằng CSS, không phải lỗi.

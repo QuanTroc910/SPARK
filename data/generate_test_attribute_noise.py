@@ -2,10 +2,12 @@
 """Sinh bộ dữ liệu TEST cho phần ATTRIBUTE NOISE của Denoise: MỘT file nhân viên (chủ đề thống nhất) có đủ mọi loại lỗi
 mà các tool Attribute dò được. (Class Noise dùng bộ Credit Card, không nằm trong file này -- xem CLAUDE.md mục 35-36.)
 
-Chạy:  python3 data/generate_test_attribute_noise.py
+Chạy:  python3 data/generate_test_attribute_noise.py                      (bộ test 552 dòng)
+       SCALE=3.62 OUT_NAME=demo_attribute_noise_2000 python3 data/generate_test_attribute_noise.py  (bộ DEMO 1997 dòng)
+SCALE nhân số lượng MỌI loại lỗi và số nhân viên (SCALE=1 ra đúng bộ test cũ); OUT_NAME là tên file ra.
 Sinh ra (trong thư mục data/):
-  - test_attribute_noise.csv / .xlsx          : ~530 dòng, 20 cột, đủ lỗi (xem bảng đáp án bên dưới)
-  - test_attribute_noise_ground_truth.csv     : đáp án -- mỗi ô bị cấy lỗi (dòng, cột, loại lỗi, giá trị gốc, tool nên bắt)
+  - <OUT_NAME>.csv / .xlsx                    : 20 cột, đủ lỗi (xem bảng đáp án bên dưới); SCALE=1 -> 552 dòng, SCALE=3.62 -> 1997 dòng
+  - <OUT_NAME>_ground_truth.csv               : đáp án -- mỗi ô bị cấy lỗi (dòng, cột, loại lỗi, giá trị gốc, tool nên bắt)
   - test_convert_*.{json,jsonl,csv,txt}       : file nhỏ để thử 3 tool Convert
   - test_empty.csv, test_header_only.csv, test_bad.json : file "xấu" để thử báo lỗi
 
@@ -25,6 +27,7 @@ Bảng lỗi cấy (cột -> lỗi):
                    Sales mà thiếu hoa_hong; ma_nv -> ho_ten và ma_nv -> ngay_sinh bị mâu thuẫn
 """
 import json
+import os
 import unicodedata
 from datetime import date, timedelta
 from pathlib import Path
@@ -35,6 +38,21 @@ import pandas as pd
 OUT = Path(__file__).resolve().parent
 SEED = 20260617
 rng = np.random.default_rng(SEED)
+SCALE = float(os.environ.get("SCALE", "1"))
+OUT_NAME = os.environ.get("OUT_NAME", "test_attribute_noise")
+
+
+def sc(x: int) -> int:
+    """Số lượng sau khi nhân SCALE (SCALE=1 giữ nguyên x, nên bộ test cũ không đổi)."""
+    return max(1, int(round(x * SCALE)))
+
+
+def cyc(vals: list, k: int | None = None) -> list:
+    """Kéo dài danh sách giá trị lỗi mẫu cho đủ số lượng cần (lặp vòng); SCALE=1 giữ nguyên danh sách."""
+    k = sc(len(vals)) if k is None else k
+    return [vals[i % len(vals)] for i in range(k)]
+
+
 
 COLS = ["id", "ma_nv", "ho_ten", "gioi_tinh", "tuoi", "ngay_sinh", "email", "so_dien_thoai",
         "phong_ban", "loai_hd", "ngay_vao", "ngay_ra", "luong", "thuong", "tong_thu_nhap", "hoa_hong", "diem_dg",
@@ -59,7 +77,7 @@ def r100k(x: float) -> int:
 
 
 # ------------------------------------------------------------------ 1. dữ liệu SẠCH
-N_EMP, N_SECOND, N_THIRD = 400, 100, 12
+N_EMP, N_SECOND, N_THIRD = sc(400), sc(100), sc(12)
 emps, used_names = [], set()
 for i in range(N_EMP):
     while True:
@@ -140,6 +158,12 @@ def take(col, k, pool=None, where=None):
     return [int(x) for x in rng.choice(cand, k, replace=False)]
 
 
+def ztake(values, col, pool=None, where=None):
+    """Cặp (giá trị lỗi mẫu, dòng) cho đủ số lượng đã nhân SCALE."""
+    values = cyc(values)
+    return zip(values, take(col, len(values), pool, where))
+
+
 not_probation = lambda r: df.at[r, "loai_hd"] != "Thử việc"
 BLANK_TOK = ["", "NA", "N/A", "null", "-", "?", "none", "--"]
 
@@ -150,22 +174,22 @@ def blanks(col, k, pool=None, where=None, tool="Free Tools · Ô trống", note=
 
 
 # --- 2a. Rule liên cột (làm TRƯỚC để giữ chỗ các ô liên quan)
-for r in take("ngay_ra", 10, where=lambda r: (r, "ngay_vao") not in used):
+for r in take("ngay_ra", sc(10), where=lambda r: (r, "ngay_vao") not in used):
     vao = date.fromisoformat(df.at[r, "ngay_vao"])
     put(r, "ngay_ra", (vao - timedelta(days=int(rng.integers(10, 300)))).isoformat(), "cross_rule_expression",
         "Cần cấu hình · Rule liên cột · Biểu thức", "ngay_ra < ngay_vao; biểu thức: ngay_ra >= ngay_vao")
     reserve(r, "ngay_vao")
-for r in take("tong_thu_nhap", 8):
+for r in take("tong_thu_nhap", sc(8)):
     tt = int(df.at[r, "tong_thu_nhap"])
     put(r, "tong_thu_nhap", str(tt + int(rng.choice([-500000, -1000, 7000, 120000, 999999]))), "cross_rule_expression",
         "Cần cấu hình · Rule liên cột · Biểu thức", "tong_thu_nhap != luong + thuong; biểu thức: luong + thuong = tong_thu_nhap")
     reserve(r, "luong", "thuong")
-for r in take("luong", 5, where=lambda r: df.at[r, "loai_hd"] == "Thử việc"):
+for r in take("luong", sc(5), where=lambda r: df.at[r, "loai_hd"] == "Thử việc"):
     put(r, "luong", str(r100k(rng.uniform(14e6, 20e6))), "cross_rule_if_then",
         "Cần cấu hình · Rule liên cột · Biểu thức", 'loai_hd = "Thử việc" => luong <= 12000000')
     reserve(r, "loai_hd")
-for j, r in enumerate(take("hoa_hong", 7, where=lambda r: df.at[r, "phong_ban"] == "Sales")):
-    put(r, "hoa_hong", ["", "NA", "-", "", "?", "", "null"][j], "cross_rule_if_then",
+for j, r in enumerate(take("hoa_hong", sc(7), where=lambda r: df.at[r, "phong_ban"] == "Sales")):
+    put(r, "hoa_hong", ["", "NA", "-", "", "?", "", "null"][j % 7], "cross_rule_if_then",
         "Cần cấu hình · Rule liên cột · Biểu thức (cũng là ô trống)", 'phong_ban = "Sales" => có(hoa_hong)')
     reserve(r, "phong_ban")
 
@@ -178,42 +202,42 @@ def wrong_name(r):
 def wrong_birth(r):
     y = int(df.at[r, "ngay_sinh"][:4]) + int(rng.choice([-3, -2, 2, 3]))
     return f"{y}{df.at[r, 'ngay_sinh'][4:]}"
-tri = [int(x) for x in rng.choice(LAST_OF_TRIPLE, 6, replace=False)]
-dbl = [int(x) for x in rng.choice(SECOND_OF_DOUBLE, 5, replace=False)]
-for r in tri[:4] + dbl[:3]:
+tri = [int(x) for x in rng.choice(LAST_OF_TRIPLE, sc(6), replace=False)]
+dbl = [int(x) for x in rng.choice(SECOND_OF_DOUBLE, sc(5), replace=False)]
+for r in tri[:sc(4)] + dbl[:sc(3)]:
     put(r, "ho_ten", wrong_name(r), "functional_dependency", "Cần cấu hình · Rule liên cột · Phụ thuộc hàm",
         "ma_nv -> ho_ten: " + ("nhóm 3 dòng, 1 dòng sai (xác định được, sửa về giá trị phổ biến)" if r in tri else "nhóm 2 dòng, hai tên khác nhau (hoà, chưa xác định được dòng nào sai)"))
-for r in tri[4:] + dbl[3:]:
+for r in tri[sc(4):] + dbl[sc(3):]:
     put(r, "ngay_sinh", wrong_birth(r), "functional_dependency", "Cần cấu hình · Rule liên cột · Phụ thuộc hàm",
         "ma_nv -> ngay_sinh: " + ("nhóm 3 dòng, 1 dòng sai (xác định được)" if r in tri else "nhóm 2 dòng, hoà (chưa xác định được)"))
 for r in tri + dbl:
     reserve(r, "ma_nv")
-pair_src = [int(x) for x in rng.choice(SINGLE, 4, replace=False)]
-for a, b in [(pair_src[0], pair_src[1]), (pair_src[2], pair_src[3])]:
+pair_src = [int(x) for x in rng.choice(SINGLE, 2 * sc(2), replace=False)]
+for a, b in zip(pair_src[0::2], pair_src[1::2]):
     reserve(a, "ma_nv", "ho_ten", "ngay_sinh")
     reserve(b, "ho_ten", "ngay_sinh")
     put(b, "ma_nv", df.at[a, "ma_nv"], "functional_dependency", "Cần cấu hình · Rule liên cột · Phụ thuộc hàm",
         f"ma_nv trùng với một NGƯỜI KHÁC (nhân viên ở dòng gốc khác): Denoise nên kết luận nghi sai cột ma_nv")
 
 # --- 2c. Ô trống
-blanks("ho_ten", 5, SINGLE)
-blanks("gioi_tinh", 6)
-blanks("tuoi", 4)
-blanks("email", 7)
-blanks("so_dien_thoai", 6)
-blanks("phong_ban", 5, where=lambda r: df.at[r, "phong_ban"] != "Sales")
-blanks("luong", 6, where=not_probation)
-blanks("diem_dg", 4)
-blanks("ngay_sinh", 4, SINGLE)
-blanks("ngay_vao", 3, where=lambda r: (r, "ngay_ra") not in used)
-blanks("ngay_ra", 3)
-blanks("Hệ số lương", 3)
-for j, r in enumerate(take("ghi_chu", 30)):
+blanks("ho_ten", sc(5), SINGLE)
+blanks("gioi_tinh", sc(6))
+blanks("tuoi", sc(4))
+blanks("email", sc(7))
+blanks("so_dien_thoai", sc(6))
+blanks("phong_ban", sc(5), where=lambda r: df.at[r, "phong_ban"] != "Sales")
+blanks("luong", sc(6), where=not_probation)
+blanks("diem_dg", sc(4))
+blanks("ngay_sinh", sc(4), SINGLE)
+blanks("ngay_vao", sc(3), where=lambda r: (r, "ngay_ra") not in used)
+blanks("ngay_ra", sc(3))
+blanks("Hệ số lương", sc(3))
+for j, r in enumerate(take("ghi_chu", sc(30))):
     put(r, "ghi_chu", ["", "-", "NA"][j % 3], "missing_value", "Free Tools · Ô trống", "dùng để thử 'giá trị cố định' cho cột chữ")
 
 # --- 2d. Sai định dạng
 def fmt(col, values, pool=None, where=None, note=""):
-    for v, r in zip(values, take(col, len(values), pool, where)):
+    for v, r in ztake(values, col, pool, where):
         put(r, col, v, "format_noise", "Free Tools · Sai định dạng", note)
 
 
@@ -222,7 +246,7 @@ fmt("luong", ["12.5tr", "mười triệu", "12,500,000đ", "15 triệu", "abc"],
 fmt("email", ["nguyenvana.congty.vn", "an@", "an@@congty.vn", "tran thi@congty.vn", "@congty.vn", "lan.le@congty"])
 fmt("so_dien_thoai", ["09123", "0912-345-678", "+84912345678", "091234567A", "912345678", "0912 345 678"])
 fmt("ngay_sinh", ["1990-02-30", "1985-13-10", "không rõ", "abc"], SINGLE, note="ngày không tồn tại / không phải ngày")
-for r in take("ngay_sinh", 6, SINGLE):
+for r in take("ngay_sinh", sc(6), SINGLE):
     y, m, d = df.at[r, "ngay_sinh"].split("-")
     put(r, "ngay_sinh", f"{d}/{m}/{y}", "format_noise", "Free Tools · Sai định dạng",
         "ngày đúng nhưng khác khuôn dd/mm/yyyy (so với khuôn chuẩn yyyy-mm-dd)")
@@ -231,23 +255,23 @@ fmt("diem_dg", ["tám", "7/10", "8,5"])
 fmt("Hệ số lương", ["hai", "3,5"])
 
 # --- 2e. Ngoài khoảng / bất thường
-for v, r in zip(["210", "150", "-5", "0", "7", "999"], take("tuoi", 6)):
+for v, r in ztake(["210", "150", "-5", "0", "7", "999"], "tuoi"):
     put(r, "tuoi", v, "out_of_range", "Cần cấu hình · Ngoài khoảng", "khoảng gợi ý 18-65")
-for v, r in zip(["78", "82", "91"], take("tuoi", 3)):
+for v, r in ztake(["78", "82", "91"], "tuoi"):
     put(r, "tuoi", v, "out_of_range", "Cần cấu hình · Ngoài khoảng (18-65) / Giá trị bất thường", "cao bất thường nhưng có thể là thật")
-for v, r in zip(["-3000000", "-1500000", "1000", "900000000"], take("luong", 4, where=not_probation)):
+for v, r in ztake(["-3000000", "-1500000", "1000", "900000000"], "luong", where=not_probation):
     put(r, "luong", v, "out_of_range", "Cần cấu hình · Ngoài khoảng", "khoảng gợi ý 3.000.000-100.000.000")
-for v, r in zip(["11", "12.5", "0", "-1", "99", "15"], take("diem_dg", 6)):
+for v, r in ztake(["11", "12.5", "0", "-1", "99", "15"], "diem_dg"):
     put(r, "diem_dg", v, "out_of_range", "Cần cấu hình · Ngoài khoảng", "khoảng gợi ý 1-10")
-for v, r in zip(["-1", "0"], take("Hệ số lương", 2)):
+for v, r in ztake(["-1", "0"], "Hệ số lương"):
     put(r, "Hệ số lương", v, "out_of_range", "Cần cấu hình · Ngoài khoảng / Biểu thức [Hệ số lương] > 0", "")
-for v, r in zip([45e6, 48e6, 52e6, 55e6, 58e6, 61e6, 66e6, 70e6], take("luong", 8, where=not_probation)):
+for v, r in ztake([45e6, 48e6, 52e6, 55e6, 58e6, 61e6, 66e6, 70e6], "luong", where=not_probation):
     put(r, "luong", str(int(v)), "outlier", "Cần cấu hình · Giá trị bất thường", "trong khoảng 3tr-100tr nhưng lệch hẳn phần còn lại")
 
 # --- 2f. Không nhất quán (khác hoa/thường hoặc gõ sai nhẹ)
 def variants(col, mapping, where_for=None):
     for new, k in mapping:
-        for r in take(col, k, where=(where_for(new) if where_for else None)):
+        for r in take(col, sc(k), where=(where_for(new) if where_for else None)):
             put(r, col, new, "inconsistent_category", "Cần cấu hình · Không nhất quán")
 
 
@@ -268,7 +292,7 @@ for r in [g["_r"] for g in gt if g["column"] == "phong_ban" and g["noise_type"] 
 
 # --- 2g. Khoảng trắng thừa
 def ws(col, kind, k, pool=None):
-    for r in take(col, k, pool, where=lambda r: df.at[r, col] not in BLANK_TOK):
+    for r in take(col, sc(k), pool, where=lambda r: df.at[r, col] not in BLANK_TOK):
         v = df.at[r, col]
         new = {"lead": "  " + v, "trail": v + "   ", "inner": v.replace(" ", "    ", 1),
                "zw": v[:3] + "​" + v[3:], "nbsp": v.replace(" ", " ", 1)}[kind]
@@ -294,16 +318,16 @@ for g in gt:
 touched = {r for r, _ in used}
 fd_emps = {emp_of[r] for r in tri + dbl + pair_src}      # không nhân bản dòng của nhóm Phụ thuộc hàm (sẽ làm lệch phép đếm đa số)
 clean_rows = [r for r in ALL if r not in touched and emp_of[r] not in fd_emps]
-dup_src = [int(x) for x in rng.choice(clean_rows, 24, replace=False)]
+dup_src = [int(x) for x in rng.choice(clean_rows, sc(24), replace=False)]
 extra = []        # (dòng mới, ghi chú gt)
-for r in dup_src[:18]:
+for r in dup_src[:sc(18)]:
     extra.append((df.loc[r].copy(), "duplicate_row", r, "trùng hệt dòng gốc"))
-for r in dup_src[18:]:
+for r in dup_src[sc(18):]:
     row = df.loc[r].copy()
     row["email"] = row["email"].upper()
     row["ghi_chu"] = row["ghi_chu"] + " "
     extra.append((row, "near_duplicate_row", r, "gần trùng: email viết HOA + ghi_chu thừa 1 dấu cách (chỉ bắt khi bật 'bỏ qua hoa/thường' và 'bỏ qua khoảng trắng')"))
-for _ in range(4):
+for _ in range(sc(4)):
     extra.append((pd.Series({c: "" for c in COLS}), "empty_row", None, "dòng trống hoàn toàn (mọi cột đều trống)"))
 
 df_all = pd.concat([df] + [pd.DataFrame([e[0]]) for e in extra], ignore_index=True)
@@ -330,9 +354,9 @@ for g in gt:
 gt_df = pd.DataFrame(gt)[["row", "column", "noise_type", "original_value", "injected_value", "expected_tool", "note"]]
 gt_df = gt_df.sort_values(["row", "column"], kind="stable").reset_index(drop=True)
 
-final.to_csv(OUT / "test_attribute_noise.csv", index=False, encoding="utf-8")
-final.to_excel(OUT / "test_attribute_noise.xlsx", index=False)
-gt_df.to_csv(OUT / "test_attribute_noise_ground_truth.csv", index=False, encoding="utf-8")
+final.to_csv(OUT / f"{OUT_NAME}.csv", index=False, encoding="utf-8")
+final.to_excel(OUT / f"{OUT_NAME}.xlsx", index=False)
+gt_df.to_csv(OUT / f"{OUT_NAME}_ground_truth.csv", index=False, encoding="utf-8")
 
 # ------------------------------------------------------------------ 4. file nhỏ cho Convert + file "xấu"
 nested = [

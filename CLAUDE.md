@@ -810,6 +810,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
   - `test_attribute_noise.csv` + `.xlsx` + `test_attribute_noise_ground_truth.csv` (sinh bằng `generate_test_attribute_noise.py`, hạt giống cố định) —
     file nhân viên 552 dòng × 20 cột chỉ cho ATTRIBUTE NOISE, đủ mọi loại lỗi, CÓ đáp án từng ô (mục 36). Kèm file nhỏ cho Convert / file xấu
     (`test_semicolon.csv`, `test_tab.txt`, `test_convert_nested.json`, `test_convert_lines.jsonl`, `test_empty.csv`, `test_header_only.csv`, `test_bad.json`).
+  - `demo_attribute_noise_2000.csv` + `.xlsx` + `demo_attribute_noise_2000_ground_truth.csv` — bộ DEMO để chạy lúc bảo vệ và trích vào báo cáo: nhân viên, 1997 dòng × 20 cột, đủ mọi loại lỗi
+    Attribute, có đáp án từng ô (mục 39). Tài liệu số kỳ vọng + kịch bản demo: `data/DEMO_ATTRIBUTE_2000.md`.
   - `kaggle_creditcard_fraud.csv` — bộ dùng cho CLASS NOISE (mục 35).
 
 ## Quyết định thiết kế quan trọng (đã thống nhất)
@@ -1836,6 +1838,21 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       Phần giải thích "vì sao" (gian lận giả nằm giữa hàng xóm bình thường nên Distance thấy ngay) là suy luận hợp lý, CHƯA có thí nghiệm riêng kiểm chứng.
     - **Hạn chế khi trích dẫn:** một seed (42), không có khoảng tin cậy; B chỉ 98/296 dòng đảo nên Recall nhảy từng bước ~2 điểm %; nhiễu đảo ngẫu nhiên không phụ thuộc đặc trưng (kiểu nhiễu khác chưa thử);
       k cố định 5; Precision là cận dưới (nhiễu gốc sẵn có không có đáp án).
+
+39. **Bộ DEMO Attribute Noise 1997 dòng cho buổi bảo vệ + báo cáo — ĐÃ XONG, ĐÃ KIỂM CHỨNG (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user nhờ "tạo bộ dữ liệu nhân viên tầm 2000 dòng chứa đủ tất cả các lỗi của phần attribute noise (phần Product) để chạy lúc bảo vệ và viết vào báo cáo".
+    - **Cách làm:** KHÔNG viết script mới mà nâng `data/generate_test_attribute_noise.py` (mục 36) bằng hệ số `SCALE` (biến môi trường) + `OUT_NAME`: `sc(x)` nhân số lượng mọi loại lỗi và số nhân viên,
+      `cyc()`/`ztake()` lặp vòng các giá trị lỗi mẫu cho đủ số lượng. `SCALE=1` (mặc định) ra ĐÚNG từng ô bộ test 552 dòng cũ (đã so csv + đáp án bằng `git diff`: giống hệt). `SCALE=3.62
+      OUT_NAME=demo_attribute_noise_2000` ra 1997 dòng × 20 cột, 1087 dòng đáp án (65 trùng hệt + 22 gần trùng, 14 dòng trống hoàn toàn, 138 sai định dạng, 311 ô trống cấy, 141 khoảng trắng, 76 ngoài khoảng,
+      29 bất thường, 135 không nhất quán, 115 vi phạm biểu thức, 47 ô phụ thuộc hàm). Cùng hạt giống nên chạy lại ra đúng cùng file.
+    - **Kiểm chứng:** mỗi tool chạy qua ĐÚNG route của web (Flask test client) rồi so với (a) phép tính độc lập bằng pandas, (b) đáp án cấy sẵn: 35 phép đo trên file gốc + chạy lại trên dữ liệu NỐI TIẾP
+      (xoá trùng → cắt khoảng trắng → xoá dòng trống): tất cả khớp 100%. Bản Excel ra cùng số với CSV. Playwright trên giao diện thật: xoá trùng 78, cắt khoảng trắng 127, sai định dạng 138, biểu thức 36 dòng.
+      Số chính (file gốc): trùng 78 (100 khi bỏ qua hoa/thường), khoảng trắng 127 (163 khi gộp), sai định dạng 138 ô/132 dòng, ô trống 602 + 14 dòng trống + cột `cot_trong`; ngoài khoảng 33/14/22/7;
+      bất thường luong IQR 32 và Z-score 3 (Z-score bị chính giá trị cực đoan kéo phình độ lệch chuẩn), thuong IQR 306 + cảnh báo; không nhất quán 50/18/53 (phong_ban 67 ở ngưỡng 0,85); biểu thức 36/29/18/25/7;
+      phụ thuộc hàm 116 dòng (78 + 52). Chạy nối tiếp: chỉ khác thuong IQR (295) và số dòng sau mỗi bước (1997 → 1919 → 1918).
+    - **Bài học khi demo:** các tool NỐI TIẾP nhau nên số thay đổi (14 dòng trống giống nhau bị "Xoá dòng trùng" xoá 13 trước, "Ô trống" chỉ còn xoá 1) — tài liệu ghi cả hai bộ số, trước mỗi tool nên bấm "Bắt đầu lại từ gốc".
+    - **Lưu ý kỹ thuật:** tool "Không nhất quán" cần người dùng khai danh sách giá trị chuẩn (`valid_categories`), không tự đoán; không khai thì trả 0 ô.
+    - **Tài liệu:** `data/DEMO_ATTRIBUTE_2000.md` (bảng lỗi cấy, số kỳ vọng từng tool + cấu hình nhập, số khi nối tiếp, kịch bản demo ≈ 10–12 phút, đoạn gợi ý ghi vào báo cáo + hạn chế).
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
