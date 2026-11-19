@@ -1854,6 +1854,15 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Lưu ý kỹ thuật:** tool "Không nhất quán" cần người dùng khai danh sách giá trị chuẩn (`valid_categories`), không tự đoán; không khai thì trả 0 ô.
     - **Tài liệu:** `data/DEMO_ATTRIBUTE_2000.md` (bảng lỗi cấy, số kỳ vọng từng tool + cấu hình nhập, số khi nối tiếp, kịch bản demo ≈ 10–12 phút, đoạn gợi ý ghi vào báo cáo + hạn chế).
 
+40. **Class Noise: khung lưu ý "nên xử lý Attribute noise trước" — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user yêu cầu "khi bấm vào Class Noise thì có chỗ lưu ý là nên xử lý attribute trước khi chạy class noise".
+    - **Làm gì:** `workspace.html` thêm khối `#class-attr-note` (class `.cn-attr-note`, nền vàng nhạt + vạch vàng, cùng tông `.cf-stale-note`) ở đầu Bước 1 của `#section-class-noise`, ngay dưới `panel-desc`, trên 2 khung 01/02.
+      Nội dung ngắn: nên làm sạch ô trống / sai định dạng / dòng trùng / giá trị bất thường trước vì chúng làm cột đặc trưng sai → tìm nhãn sai kém tin cậy. Hai link `data-section="free-tools"` («Tự động») và
+      `data-section="config"` («Cần cấu hình») dùng bộ chuyển khối sẵn có (`switchSection`), không cần JS mới. CSS ở `workspace.css` (`#section-class-noise .cn-attr-note`).
+    - **Vì sao chữ dặn "tải file kết quả về rồi tải lên ở đây":** các tool Tự động / Cần cấu hình chạy stateless qua dải nối tiếp (`state.pipe`), KHÔNG chia sẻ `file_id` với Class Noise (Class Noise dùng `/api/upload`);
+      muốn nối thẳng phải làm thêm nút "Xử lý tiếp bằng Class Noise" (chưa làm).
+    - **Kiểm chứng:** Playwright (khung hiện khi vào Class Noise, đúng vị trí, nền đúng, 2 link chuyển đúng khối, quay lại vẫn thấy, nút Tải lên + 3 thẻ phương pháp không đổi, màn 390px không tràn ngang, không lỗi JS) + xem ảnh chụp.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có

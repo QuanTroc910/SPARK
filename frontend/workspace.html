@@ -743,6 +743,16 @@
         <p class="eyebrow">[ Bước 1 / 4 ]</p>
         <h2 class="panel-title">Tải dữ liệu &amp; chọn phương pháp</h2>
         <p class="panel-desc">CSV hoặc Excel có một cột nhãn. Chọn thuật toán rồi bấm Tải lên.</p>
+        <!-- Lưu ý khi vào Class Noise: nên làm sạch lỗi THUỘC TÍNH trước. Ô trống / sai định dạng làm dòng bị loại
+             khỏi phép tính, giá trị bất thường làm các cột đặc trưng sai -> việc tìm nhãn sai kém tin cậy.
+             2 link dùng data-section nên workspace.js tự chuyển khối (switchSection). Hai tool đó tải file kết quả
+             về chứ không nối thẳng sang Class Noise, nên chữ dặn "tải về rồi tải lên ở đây". -->
+        <div class="cn-attr-note" id="class-attr-note" role="note">
+          <strong>Lưu ý:</strong> nên xử lý lỗi thuộc tính (Attribute noise) trước khi chạy Class Noise.
+          Ô trống, sai định dạng, dòng trùng hay giá trị bất thường làm cột đặc trưng bị sai, khiến việc tìm nhãn sai kém tin cậy.
+          Làm sạch bằng <a href="#" data-section="free-tools">Tự động</a> và <a href="#" data-section="config">Cần cấu hình</a>,
+          tải file kết quả về rồi tải lên ở đây.
+        </div>
         <div class="convert-grid">
           <section class="convert-panel ft-panel">
             <div class="ft-panel-head"><span class="ft-eyebrow-tag">01 · File của bạn</span></div>
