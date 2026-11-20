@@ -1888,6 +1888,11 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Bổ sung sau khi user hỏi "cả bên attribute noise nữa":** chụp Cần cấu hình (Giá trị bất thường: cảnh báo IQR = 0, xem trước, hộp xác nhận). Các thanh vàng / đỏ / xanh lá sẵn có (`.cf-live`, `.cf-stale-note`, `.cf-confirm`, `.cf-sum-warn`) đã đúng tông; sửa 3 chỗ còn lệch:
       `.cf-action-preview` ("Sẽ xoá N dòng… vì chọn…") từ thanh cobalt → vàng (báo trước = vàng, đỏ khi ≥ 20% số dòng như cũ); `.cf-sum-risk` thêm vạch đỏ bên trái cho khớp; nút «Xác nhận xoá và áp dụng» (`#cf-confirm-yes`) từ `btn-accent` cobalt → `btn-danger` đỏ (giống hộp xác nhận của Class Noise).
 
+44. **`/api/upload` xoá tệp trên đĩa ngay sau khi đọc — ĐÃ XONG, ĐÃ TEST:**
+    - **Nguồn gốc:** khi viết mục 3.4.1 khoá luận phát hiện `/api/upload` (luồng Class Noise) ghi tệp vào `uploads/<file_id>_<tên>` rồi KHÔNG BAO GIỜ xoá, trái với trang Guide ("Chỉ trong bộ nhớ server lúc đang xử lý, không ghi ra đĩa") và Privacy ("Khởi động lại server là file biến mất"). User chọn sửa code thay vì ghi hạn chế vào bài.
+    - **Cách làm:** `app.py::upload_file()` bọc `load_data(save_path)` trong `try/finally: save_path.unlink(missing_ok=True)` — giống `_read_df_for_noise_tool()` của các tool. Bảng chỉ còn trong `UPLOADED_FILES` (RAM); thư mục `uploads/` vẫn được tạo vì các tool dùng làm chỗ lưu tạm.
+    - **Kiểm chứng:** Flask test client: đăng ký + đăng nhập → `/api/upload` (200, 3 dòng) → không còn tệp mới trong `uploads/` → `/api/class-noise/detect` (distance_based) 200 → `/api/class-noise/apply` xoá 1 dòng 200 → `/api/export-working` 200; tệp rỗng vẫn lỗi 500 như trước nhưng tệp cũng đã bị xoá. Máy đã chạy bản cũ thì tự xoá các tệp cũ còn trong `uploads/`.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
