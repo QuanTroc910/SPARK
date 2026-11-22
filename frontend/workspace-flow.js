@@ -158,6 +158,8 @@ const state = {
   // sau khi đã có kết quả cũ (chưa detect lại), renderClassResults() phải
   // render theo đúng method CỦA KẾT QUẢ đang có, không phải lựa chọn hiện tại.
   classResultMethod: null,
+  // Báo cáo bước chuẩn bị chung (cột bị bỏ, dòng gộp/mâu thuẫn...) của lần phát hiện đang hiện.
+  classPreprocess: null,
   classFindings: [],
   classFindingsPage: 1,
   classFindingsPerPage: 20,
@@ -407,8 +409,7 @@ $("upload-btn").addEventListener("click", async () => {
   state.classFindingsPage = 1;
   state.classFindingsFilterText = "";
   chResetAll(); // file mới -> bỏ lựa chọn/lịch sử xử lý Class Noise của file cũ
-  $("class-reduce-result").hidden = true;
-  $("class-reduce-result").innerHTML = "";
+  state.classPreprocess = null;
 
   setStatusMessage($("upload-status"), `Đã tải lên: ${data.row_count} dòng, ${data.columns.length} cột.`, "ok");
   // Không còn bước "Hướng xử lý": hướng luôn là Class Noise, sang thẳng bước
@@ -2056,6 +2057,7 @@ const CLASS_METHOD_LABELS = {
   distance_based: "Distance-based (Mutual k-NN)",
   single_learning: "Single learning-based (Confident Learning + Random Forest)",
   ensemble_based: "Ensemble-based",
+  combined: "Bộ kết hợp (thử nghiệm)",
 };
 
 function toggleStep3Direction() {
@@ -2095,6 +2097,7 @@ function renderClassNoiseConfigForm() {
   $("class-params-single").hidden = state.classMethod !== "single_learning";
   $("class-params-distance").hidden = state.classMethod !== "distance_based";
   $("class-params-ensemble").hidden = state.classMethod !== "ensemble_based";
+  $("class-params-combined").hidden = state.classMethod !== "combined";
   $("class-wait-hint").hidden = state.classMethod === "distance_based";
 }
 
@@ -2130,10 +2133,6 @@ $("class-label-select").addEventListener("change", (e) => {
   state.classLabelColumn = e.target.value;
   state.classFeatureColumns.delete(e.target.value); // nhãn không được trùng đặc trưng
   renderClassFeatureList();
-  // Đổi nhãn thì kết quả "Giảm cột tự động" cũ (tính theo nhãn CŨ) không còn
-  // đúng nữa -- ẩn đi, tránh hiểu nhầm là kết quả ứng với nhãn đang chọn.
-  $("class-reduce-result").hidden = true;
-  $("class-reduce-result").innerHTML = "";
 });
 
 // Nút "Tích tất cả"/"Bỏ tích tất cả" -- tiện cho file nhiều cột (vd Credit
@@ -2154,93 +2153,16 @@ $("class-feature-list").addEventListener("change", (e) => {
   else state.classFeatureColumns.delete(h);
 });
 
-// Biểu đồ cột ngang cho kết quả "Giảm cột tự động" -- tái dùng ĐÚNG pattern
-// .chart-row/.chart-bar-fill của renderNoiseTypeChart() ở Bước 4, không viết
-// cơ chế vẽ mới. Dùng 1 MÀU DUY NHẤT (--signal) nhưng 3 MỨC ĐỘ ĐẬM khác nhau
-// để thể hiện cột đó "đi được bao xa" qua pipeline 2 bước -- đậm nhất (1.0) =
-// qua được cả 2 bước (giữ lại thật sự); vừa (0.5) = qua Bước 1 nhưng bị loại
-// ở Bước 2 (thừa thông tin với cột khác); nhạt nhất (0.18) = bị loại ngay
-// Bước 1 (ít liên quan tới nhãn).
-function renderFeatureReductionChart(ranked, afterImportance, afterCorrelation) {
-  const wrap = $("class-reduce-result");
-  wrap.hidden = false;
-  const maxImportance = ranked[0]?.importance || 1;
-
-  const summary = `
-    <p class="hint-note">
-      <strong>${ranked.length}</strong> cột gốc → <strong>${afterImportance.length}</strong> cột (theo độ liên quan)
-      → <strong>${afterCorrelation.length}</strong> cột (lọc tương quan). Đã tự tick ${afterCorrelation.length} cột này bên dưới.
-    </p>`;
-
-  const rows = ranked
-    .map((r) => {
-      const pct = Math.max(4, Math.round((r.importance / maxImportance) * 100));
-      let opacity = 0.18;
-      if (afterCorrelation.includes(r.column)) opacity = 1;
-      else if (afterImportance.includes(r.column)) opacity = 0.5;
-      return `
-        <div class="chart-row">
-          <span class="chart-label mono">${escapeHtml(r.column)}</span>
-          <span class="chart-bar-track"><span class="chart-bar-fill" style="width:${pct}%; background: var(--signal); opacity: ${opacity};"></span></span>
-          <span class="chart-count">${(r.importance * 100).toFixed(1)}%</span>
-        </div>`;
-    })
-    .join("");
-
-  wrap.innerHTML = `${summary}<div class="chart-card">${rows}</div>`;
+// Lựa chọn "Giảm số cột" / "Không giảm số cột" (mặc định KHÔNG giảm). Việc giảm theo nhãn chạy ở backend
+// trong cùng lần bấm "Phát hiện" (class_noise/preprocess.py), nên ở đây chỉ hiện lời nhắc khi chọn "Giảm".
+function classReduceChosen() {
+  const checked = document.querySelector('input[name="class-reduce"]:checked');
+  return !!checked && checked.value === "yes";
 }
-
-$("class-reduce-btn").addEventListener("click", async () => {
-  const btn = $("class-reduce-btn");
-  const statusEl = $("class-reduce-status");
-
-  if (!state.classLabelColumn) {
-    alert("Hãy chọn cột nhãn trước.");
-    return;
-  }
-
-  setButtonLoading(btn, true, "Đang chạy...", "🪄 Chạy giảm cột tự động");
-  statusEl.textContent = "Đang xếp hạng cột, có thể mất chút thời gian…";
-
-  let response;
-  try {
-    response = await fetch(`${API_BASE}/api/class-noise/reduce-features`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        file_id: state.fileId,
-        label_column: state.classLabelColumn,
-        n_estimators: parseInt($("class-n-estimators").value, 10) || 300,
-      }),
-    });
-  } catch (err) {
-    alert("Không gọi được backend.");
-    setButtonLoading(btn, false, "Đang chạy...", "🪄 Chạy giảm cột tự động");
-    statusEl.textContent = "";
-    return;
-  }
-  setButtonLoading(btn, false, "Đang chạy...", "🪄 Chạy giảm cột tự động");
-  statusEl.textContent = "";
-
-  if (!response.ok) {
-    let message = "Giảm cột thất bại, kiểm tra console/backend log.";
-    try {
-      const errorData = await response.json();
-      if (errorData.error) message = errorData.error;
-    } catch (parseErr) {
-      /* giữ message mặc định */
-    }
-    alert(message);
-    return;
-  }
-
-  const data = await response.json();
-
-  // Tự tick lại danh sách feature theo đúng kết quả Bước 2 -- người dùng vẫn
-  // sửa tay thêm được sau đó, không bị khoá cứng theo kết quả tự động này.
-  state.classFeatureColumns = new Set(data.after_correlation);
-  renderClassFeatureList();
-  renderFeatureReductionChart(data.ranked, data.after_importance, data.after_correlation);
+document.querySelectorAll('input[name="class-reduce"]').forEach((radio) => {
+  radio.addEventListener("change", () => {
+    $("class-reduce-hint").hidden = !classReduceChosen();
+  });
 });
 
 $("class-detect-btn").addEventListener("click", async () => {
@@ -2268,11 +2190,15 @@ $("class-detect-btn").addEventListener("click", async () => {
     label_column: state.classLabelColumn,
     feature_columns: featureColumns,
     method: state.classMethod,
+    reduce_columns: classReduceChosen(),
   };
   if (state.classMethod === "distance_based") {
-    requestBody.k = parseInt($("class-k-neighbors").value, 10) || 5;
+    // Ô k để trống = tự chọn k theo độ phủ (backend nhận null).
+    requestBody.k = parseInt($("class-k-neighbors").value, 10) || null;
   } else if (state.classMethod === "ensemble_based") {
     requestBody.cv_folds = parseInt($("class-ensemble-cv-folds").value, 10) || 5;
+  } else if (state.classMethod === "combined") {
+    requestBody.alpha = parseFloat($("class-combined-alpha").value) || 0;
   } else {
     requestBody.n_estimators = parseInt($("class-n-estimators").value, 10) || 300;
     requestBody.cv_folds = parseInt($("class-cv-folds").value, 10) || 5;
@@ -2309,6 +2235,7 @@ $("class-detect-btn").addEventListener("click", async () => {
   const data = await response.json();
   state.classDiagnostics = data.diagnostics;
   state.classResultMethod = data.method;
+  state.classPreprocess = data.preprocess || null;
   state.classFindings = data.findings;
   state.classFindingsPage = 1;
   state.classFindingsFilterText = "";
@@ -2330,7 +2257,7 @@ function toggleStep4Direction() {
 
 // Dispatch theo method CỦA KẾT QUẢ đang có (classResultMethod, không phải
 // classMethod đang chọn ở Bước 2 -- 2 cái có thể lệch nhau nếu người dùng đổi
-// lựa chọn sau khi đã detect xong) -- 2 phương pháp có hình dạng diagnostics
+// lựa chọn sau khi đã detect xong) -- các phương pháp có hình dạng diagnostics
 // KHÁC NHAU hẳn (distance-based không train model nên không có cv_accuracy/
 // per_class_report/confusion_matrix), nên không gộp chung 1 hàm render được.
 function renderClassResults() {
@@ -2340,10 +2267,139 @@ function renderClassResults() {
     renderClassResultsDistance(diag);
   } else if (state.classResultMethod === "ensemble_based") {
     renderClassResultsEnsemble(diag);
+  } else if (state.classResultMethod === "combined") {
+    renderClassResultsCombined(diag);
   } else {
     renderClassResultsSingleLearning(diag);
   }
+  renderClassPreprocess();
   renderClassFindingsTable();
+}
+
+// ---- Tiện ích dùng chung cho các kiểu kết quả ----
+const CLASS_METHOD_SHORT = {
+  single_learning: "Confident Learning",
+  distance_based: "Mutual k-NN",
+  ensemble_based: "Ensemble",
+};
+const classNum = (n) => Number(n).toLocaleString("vi-VN");
+const classPct = (x, digits = 1) => `${(x * 100).toFixed(digits)}%`;
+
+// Màu thẻ chỉ số theo nhận xét độ tin cậy của backend (diag.quality, dựa trên MỨC VƯỢT MỐC):
+// none (không hơn đoán bừa) -> đỏ; low (hơn rất ít) -> vàng; ok -> xanh.
+function classQualityClass(q) {
+  if (!q) return "";
+  return q.level === "none" ? "stat-crimson" : q.level === "low" ? "stat-amber" : "stat-teal";
+}
+function classQualityWarning(q) {
+  return q && q.level !== "ok" ? { level: q.level === "none" ? "bad" : "warn", text: q.message } : null;
+}
+// Khung cảnh báo chung: đỏ nếu có cảnh báo mức "bad", vàng nếu chỉ có "warn", ẩn nếu rỗng.
+function setClassWarnings(items) {
+  const list = items.filter(Boolean);
+  const card = $("class-warning-card");
+  if (!list.length) {
+    card.hidden = true;
+    card.innerHTML = "";
+    card.classList.remove("is-bad");
+    return;
+  }
+  card.hidden = false;
+  card.classList.toggle("is-bad", list.some((i) => i.level === "bad"));
+  card.innerHTML = list.map((i) => `<p class="class-warn-line">⚠️ ${escapeHtml(i.text)}</p>`).join("");
+}
+
+// ---- Báo cáo bước chuẩn bị chung (cột nào bị bỏ vì luật gì, dòng bị loại/gộp, nhóm dòng mâu thuẫn) ----
+const PREPROCESS_REASONS = {
+  all_blank: "Toàn ô trống",
+  not_numeric: "Cột chữ",
+  mostly_blank: "Quá nhiều ô trống",
+  constant: "Cột hằng",
+  identifier: "Giống mã định danh",
+  correlated: "Trùng thông tin với cột khác",
+  label_reduction: "Ít liên quan tới nhãn",
+};
+function renderClassPreprocess() {
+  const card = $("class-preprocess-card");
+  const pp = state.classPreprocess;
+  if (!pp) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const dropped = pp.dropped_columns || [];
+  const kept = pp.kept_columns || [];
+
+  const lines = [
+    `<strong>${classNum(pp.n_rows_input)}</strong> dòng → <strong>${classNum(pp.n_rows_final)}</strong> dòng đưa vào thuật toán · ` +
+      `<strong>${kept.length}</strong> cột giữ lại, <strong>${dropped.length}</strong> cột bị bỏ`,
+  ];
+  if (pp.n_rows_blank_label) lines.push(`${classNum(pp.n_rows_blank_label)} dòng bị bỏ vì nhãn trống`);
+  if (pp.n_rows_blank_feature) lines.push(`${classNum(pp.n_rows_blank_feature)} dòng bị bỏ vì còn ô trống ở các cột đã giữ`);
+  if (pp.n_rows_merged_away) {
+    lines.push(
+      `${classNum(pp.n_rows_merged_away)} dòng trùng đặc trưng và cùng nhãn được gộp vào ${classNum(pp.n_duplicate_groups_merged)} dòng đại diện ` +
+        "(dòng đại diện bị gắn cờ thì cả nhóm đều bị gắn cờ)"
+    );
+  }
+  if (pp.n_conflict_groups) {
+    lines.push(
+      `<strong>${classNum(pp.n_conflict_groups)}</strong> nhóm dòng cùng đặc trưng nhưng khác nhãn (${classNum(pp.n_conflict_rows)} dòng, giữ nguyên để thuật toán xét)`
+    );
+  }
+
+  const droppedTable = dropped.length
+    ? `<div class="table-wrap"><table class="results-table">
+        <thead><tr><th>Cột bị bỏ</th><th>Luật</th><th>Chi tiết</th></tr></thead>
+        <tbody>${dropped
+          .map(
+            (d) =>
+              `<tr><td class="mono">${escapeHtml(d.column)}</td><td>${escapeHtml(PREPROCESS_REASONS[d.reason] || d.reason)}</td><td>${escapeHtml(d.detail)}</td></tr>`
+          )
+          .join("")}</tbody></table></div>`
+    : "";
+
+  const groups = pp.conflict_groups || [];
+  const conflictList = groups.length
+    ? `<details class="class-conflict-details"><summary>Xem các nhóm mâu thuẫn (${groups.length}${pp.conflict_groups_total > groups.length ? ` đầu tiên trong ${classNum(pp.conflict_groups_total)}` : ""})</summary>
+        <ul>${groups
+          .map((g) => {
+            const rows = g.rows.slice(0, 8).join(", ") + (g.rows.length > 8 ? `, … (${g.rows.length} dòng)` : "");
+            const labels = Object.entries(g.labels)
+              .map(([k, v]) => `«${escapeHtml(k)}» ×${v}`)
+              .join(", ");
+            return `<li>Dòng ${escapeHtml(rows)}: nhãn ${labels}</li>`;
+          })
+          .join("")}</ul></details>`
+    : "";
+
+  let reduction = "";
+  const lr = pp.label_reduction;
+  if (lr && lr.ranking && lr.ranking.length) {
+    const maxImportance = lr.ranking[0].importance || 1;
+    const bars = lr.ranking
+      .map((r) => {
+        const width = Math.max(4, Math.round((r.importance / maxImportance) * 100));
+        const keep = lr.kept.includes(r.column);
+        return `<div class="chart-row">
+          <span class="chart-label mono">${escapeHtml(r.column)}</span>
+          <span class="chart-bar-track"><span class="chart-bar-fill" style="width:${width}%; background: var(--signal); opacity: ${keep ? 1 : 0.25};"></span></span>
+          <span class="chart-count">${(r.importance * 100).toFixed(1)}%</span>
+        </div>`;
+      })
+      .join("");
+    reduction = `<h4 class="sub-title">Giảm số cột theo nhãn: giữ ${lr.kept.length} / ${lr.ranking.length} cột</h4>${bars}`;
+  }
+
+  const warns = (pp.warnings || []).map((w) => `<p class="hint-note">⚠️ ${escapeHtml(w)}</p>`).join("");
+
+  card.innerHTML = `
+    <h3 class="sub-title">Bước chuẩn bị dữ liệu (dùng chung cho mọi phương pháp)</h3>
+    ${lines.map((l) => `<p class="class-prep-line">${l}</p>`).join("")}
+    ${droppedTable}
+    ${conflictList}
+    ${reduction}
+    ${warns}`;
 }
 
 // ---- Distance-based (Mutual k-NN): không train model -> không có
@@ -2353,166 +2409,144 @@ function renderClassResults() {
 function renderClassResultsDistance(diag) {
   const coveragePct = diag.n_rows_used > 0 ? (diag.n_rows_with_mutual_neighbors / diag.n_rows_used) * 100 : 0;
   const isLowCoverage = coveragePct < 50;
+  const kSub = diag.k_mode === "auto" ? "tự chọn theo độ phủ" : "bạn chọn";
 
   $("class-stats-grid").innerHTML = `
     <div class="stat-card">
-      <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
-      <span class="stat-label">Dòng dùng được / ${diag.n_rows_total.toLocaleString("vi-VN")} tổng</span>
+      <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
+      <span class="stat-label">Dòng dùng được / ${classNum(diag.n_rows_total)} tổng</span>
     </div>
     <div class="stat-card">
       <span class="stat-value mono">${diag.k}</span>
       <span class="stat-label">Số láng giềng (k)</span>
+      <span class="stat-sub mono">${kSub}</span>
     </div>
     <div class="stat-card ${isLowCoverage ? "stat-crimson" : "stat-teal"}">
       <span class="stat-value mono">${coveragePct.toFixed(1)}%</span>
       <span class="stat-label">Dòng có láng giềng lẫn nhau</span>
-      <span class="stat-sub mono">${diag.n_rows_with_mutual_neighbors.toLocaleString("vi-VN")} / ${diag.n_rows_used.toLocaleString("vi-VN")} dòng</span>
+      <span class="stat-sub mono">${classNum(diag.n_rows_with_mutual_neighbors)} / ${classNum(diag.n_rows_used)} dòng</span>
     </div>
     <div class="stat-card stat-amber">
-      <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
+      <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
       <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
     </div>
   `;
 
-  const warnCard = $("class-warning-card");
-  if (isLowCoverage) {
-    warnCard.hidden = false;
-    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px;">
-      ⚠️ Chỉ ${coveragePct.toFixed(1)}% số dòng có láng giềng lẫn nhau, nên phần lớn dòng chưa kết luận được.
-      Thử tăng k hoặc chọn lại cột đặc trưng.</p>`;
-  } else {
-    warnCard.hidden = true;
-  }
+  setClassWarnings([
+    isLowCoverage
+      ? {
+          level: "warn",
+          text: `Chỉ ${coveragePct.toFixed(1)}% số dòng có láng giềng lẫn nhau, nên phần lớn dòng chưa kết luận được. Thử tăng k hoặc chọn lại cột đặc trưng.`,
+        }
+      : null,
+    ...(diag.warnings || []).map((w) => ({ level: "warn", text: w })),
+  ]);
 
   // Distance-based không có bảng precision/recall hay ma trận đếm (không
-  // train model nào để tính) -- ẩn hẳn 2 khối đó, chỉ Single learning-based
-  // mới hiện.
+  // train model nào để tính) -- ẩn hẳn 2 khối đó.
   $("class-report-card").hidden = true;
   $("class-confusion-card").hidden = true;
 }
 
 // ---- Ensemble-based (N29 -- LogisticRegression + GaussianNB + LinearSVC
 // biểu quyết): không có 1 cv_accuracy duy nhất (3 model riêng biệt), thay
-// bằng accuracy RIÊNG của từng classifier (per_classifier_accuracy) --
-// PHẢI xem cả 3 trước khi tin findings, giống hệt lý do cv_accuracy bên
-// Single learning-based. Không có ma trận đếm (không có 1 "model" duy nhất
-// để tính ma trận nhãn-ghi-vs-dự-đoán theo đúng nghĩa). ----
+// bằng accuracy + MỨC VƯỢT MỐC RIÊNG của từng classifier -- PHẢI xem cả 3
+// trước khi tin findings, giống hệt lý do cv_accuracy bên Single learning. ----
 function renderClassResultsEnsemble(diag) {
   $("class-report-card").hidden = false;
   $("class-confusion-card").hidden = true;
-  $("class-report-title").textContent = "Accuracy từng classifier (so với nhãn ghi)";
+  $("class-report-title").textContent = "Từng classifier so với nhãn ghi";
 
   const baseline = diag.majority_baseline_accuracy;
   const entries = diag.classifier_names.map((name) => ({
     name,
     acc: diag.per_classifier_accuracy[name],
-    diff: diag.per_classifier_accuracy[name] - baseline,
+    excess: diag.per_classifier_excess ? diag.per_classifier_excess[name] : null,
   }));
-  const bestDiff = Math.max(...entries.map((e) => e.diff));
-  // "Yếu" = ngay cả classifier TỐT NHẤT trong 3 cái cũng chỉ nhỉnh hơn
-  // baseline rất ít (<=2 điểm %) -- không classifier nào học được gì đáng
-  // kể từ feature_columns.
-  const isWeak = bestDiff <= 0.02;
+  const q = diag.quality;
 
   $("class-stats-grid").innerHTML = `
     <div class="stat-card">
-      <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
-      <span class="stat-label">Dòng dùng được / ${diag.n_rows_total.toLocaleString("vi-VN")} tổng</span>
+      <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
+      <span class="stat-label">Dòng dùng được / ${classNum(diag.n_rows_total)} tổng</span>
     </div>
     <div class="stat-card">
       <span class="stat-value mono">${diag.classifier_names.length}</span>
       <span class="stat-label">Số classifier biểu quyết</span>
     </div>
-    <div class="stat-card ${isWeak ? "stat-crimson" : "stat-teal"}">
-      <span class="stat-value mono">${(baseline * 100).toFixed(2)}%</span>
+    <div class="stat-card">
+      <span class="stat-value mono">${classPct(baseline, 2)}</span>
       <span class="stat-label">Baseline (đoán bừa lớp đa số)</span>
-      <span class="stat-sub mono">Tốt nhất: ${bestDiff > 0 ? "+" : ""}${(bestDiff * 100).toFixed(2)} điểm %</span>
+    </div>
+    <div class="stat-card ${classQualityClass(q)}">
+      <span class="stat-value mono">${q ? classPct(q.excess) : "—"}</span>
+      <span class="stat-label">Mức vượt mốc (classifier tốt nhất)</span>
     </div>
     <div class="stat-card stat-amber">
-      <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
+      <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
       <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
     </div>
   `;
-
-  const warnCard = $("class-warning-card");
-  if (isWeak) {
-    warnCard.hidden = false;
-    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px;">
-      ⚠️ Cả 3 classifier chỉ nhỉnh hơn baseline ${(bestDiff * 100).toFixed(2)} điểm %, nên danh sách bên dưới rất khó tin.
-      Thử chọn lại cột đặc trưng.</p>`;
-  } else {
-    warnCard.hidden = true;
-  }
+  setClassWarnings([classQualityWarning(q)]);
 
   $("class-report-table").innerHTML = `
-    <thead><tr><th>Classifier</th><th>Accuracy</th><th>Chênh lệch baseline</th></tr></thead>
+    <thead><tr><th>Classifier</th><th>Accuracy</th><th>Mức vượt mốc</th></tr></thead>
     <tbody>${entries
-      .map((e) => {
-        const sign = e.diff >= 0 ? "+" : "";
-        return `<tr><td>${escapeHtml(e.name)}</td><td class="mono">${(e.acc * 100).toFixed(2)}%</td><td class="mono">${sign}${(e.diff * 100).toFixed(2)} điểm %</td></tr>`;
-      })
+      .map(
+        (e) =>
+          `<tr><td>${escapeHtml(e.name)}</td><td class="mono">${classPct(e.acc, 2)}</td><td class="mono">${e.excess === null || e.excess === undefined ? "—" : classPct(e.excess)}</td></tr>`
+      )
       .join("")}</tbody>`;
 }
 
-// ---- Single learning-based (Confident Learning + Random Forest): giữ
-// nguyên logic gốc, đầy đủ cv_accuracy/baseline/per_class_report/
-// confusion_matrix để chẩn đoán độ tin cậy trước khi tin findings. ----
+// ---- Single learning-based (Confident Learning + Random Forest): đầy đủ
+// cv_accuracy/baseline/mức vượt mốc/MCC/PR-AUC/ước lượng nhãn sai và bảng
+// precision/recall/confusion matrix để chẩn đoán độ tin cậy trước khi tin findings.
+// Mức vượt mốc = (CV accuracy - baseline) / (1 - baseline); cảnh báo theo mức này (diag.quality). ----
 function renderClassResultsSingleLearning(diag) {
   $("class-report-card").hidden = false;
   $("class-confusion-card").hidden = false;
   $("class-report-title").textContent = "Precision / Recall / F1 từng lớp";
   $("class-confusion-title").textContent = "Ma trận đếm (hàng = nhãn ghi, cột = nhãn model tự tin)";
-
-  const diffPct = diag.cv_accuracy - diag.majority_baseline_accuracy;
-
-  // "Trần" tối đa CÓ THỂ đạt được = 100% - baseline (accuracy không thể vượt
-  // quá 100%) -- % trần cho biết model đã khai thác được bao nhiêu phần của
-  // mức cải thiện tối đa lý thuyết, tránh bị đánh lừa bởi chênh lệch thô khi
-  // baseline đã gần 100% (xem giải thích đầy đủ đã trao đổi với người dùng).
-  const maxPossibleGap = 1 - diag.majority_baseline_accuracy;
-  const ceilingPct = maxPossibleGap > 0 ? (diffPct / maxPossibleGap) * 100 : 0;
-  const diffSign = diffPct > 0 ? "+" : "";
-
-  // "Yếu" = CẢ 2 điều kiện cùng đúng: điểm % thô nhỏ (<=2) VÀ tỉ lệ so với
-  // trần cũng nhỏ (<30%). Chỉ xét điểm % thô (như trước đây) sẽ bị "bẫy
-  // trần hẹp": baseline càng gần 100% (vd Credit Card Fraud 99.83%) thì dù
-  // model học RẤT TỐT, điểm % thô tối đa có thể đạt cũng chỉ còn vài phần
-  // trăm, khiến bị báo "yếu" oan dù % trần thực tế rất cao.
-  const isWeak = diffPct <= 0.02 && ceilingPct < 30;
+  const q = diag.quality;
 
   $("class-stats-grid").innerHTML = `
     <div class="stat-card">
-      <span class="stat-value mono">${diag.n_rows_used.toLocaleString("vi-VN")}</span>
-      <span class="stat-label">Dòng dùng được / ${diag.n_rows_total.toLocaleString("vi-VN")} tổng</span>
+      <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
+      <span class="stat-label">Dòng dùng được / ${classNum(diag.n_rows_total)} tổng</span>
     </div>
-    <div class="stat-card ${isWeak ? "stat-crimson" : ""}">
-      <span class="stat-value mono">${(diag.cv_accuracy * 100).toFixed(2)}%</span>
+    <div class="stat-card">
+      <span class="stat-value mono">${classPct(diag.cv_accuracy, 2)}</span>
       <span class="stat-label">CV accuracy</span>
     </div>
-    <div class="stat-card ${isWeak ? "stat-crimson" : ""}">
-      <span class="stat-value mono">${(diag.majority_baseline_accuracy * 100).toFixed(2)}%</span>
+    <div class="stat-card">
+      <span class="stat-value mono">${classPct(diag.majority_baseline_accuracy, 2)}</span>
       <span class="stat-label">Baseline (đoán bừa lớp đa số)</span>
     </div>
-    <div class="stat-card ${isWeak ? "stat-crimson" : "stat-teal"}">
-      <span class="stat-value mono">${diffSign}${(diffPct * 100).toFixed(2)}</span>
-      <span class="stat-label">Chênh lệch (điểm %)</span>
-      <span class="stat-sub mono">${diffSign}${ceilingPct.toFixed(1)}% mức trần tối đa</span>
+    <div class="stat-card ${classQualityClass(q)}">
+      <span class="stat-value mono">${q ? classPct(q.excess) : "—"}</span>
+      <span class="stat-label">Mức vượt mốc</span>
+      <span class="stat-sub mono">(CV − baseline) / (1 − baseline)</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.mcc === null ? "—" : diag.mcc.toFixed(3)}</span>
+      <span class="stat-label">MCC</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.pr_auc_macro === null ? "—" : diag.pr_auc_macro.toFixed(3)}</span>
+      <span class="stat-label">PR-AUC (trung bình các lớp)</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value mono">${diag.estimated_noise_rate === null ? "—" : classPct(diag.estimated_noise_rate)}</span>
+      <span class="stat-label">Ước lượng tỉ lệ nhãn sai</span>
+      <span class="stat-sub mono">≈ ${classNum(diag.estimated_label_errors)} dòng</span>
     </div>
     <div class="stat-card stat-amber">
-      <span class="stat-value mono">${state.classFindings.length.toLocaleString("vi-VN")}</span>
+      <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
       <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
     </div>
   `;
-
-  const warnCard = $("class-warning-card");
-  if (isWeak) {
-    warnCard.hidden = false;
-    warnCard.innerHTML = `<p style="margin:0; font-size:13.5px;">
-      ⚠️ CV accuracy chỉ chênh baseline ${(diffPct * 100).toFixed(2)} điểm % (${ceilingPct.toFixed(1)}% mức trần),
-      nên danh sách bên dưới rất khó tin. Thử chọn lại cột đặc trưng.</p>`;
-  } else {
-    warnCard.hidden = true;
-  }
+  setClassWarnings([classQualityWarning(q), ...(diag.warnings || []).map((w) => ({ level: "warn", text: w }))]);
 
   $("class-report-table").innerHTML = `
     <thead><tr><th>Lớp</th><th>Precision</th><th>Recall</th><th>F1</th><th>n</th></tr></thead>
@@ -2531,6 +2565,62 @@ function renderClassResultsSingleLearning(diag) {
       .join("")}</tbody>`;
 }
 
+// ---- Bộ kết hợp: chạy cả 3 phương pháp (class_noise/combined.py). Chẩn đoán = bảng từng phương pháp
+// (bật/tắt, mức vượt mốc, trọng số, số dòng tự gắn cờ, lý do) vì đó chính là bằng chứng "vì sao danh sách này". ----
+function renderClassResultsCombined(diag) {
+  $("class-report-card").hidden = false;
+  $("class-confusion-card").hidden = true;
+  $("class-report-title").textContent = "Các phương pháp thành phần";
+  const q = diag.quality;
+  const kMethod = CLASS_METHOD_SHORT[diag.k_method] || diag.k_method || "—";
+  const modeText = diag.alpha > 0 ? "pha trộn" : "công tắc";
+
+  $("class-stats-grid").innerHTML = `
+    <div class="stat-card">
+      <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
+      <span class="stat-label">Dòng dùng được / ${classNum(diag.n_rows_total)} tổng</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value mono">${classNum(diag.k)}</span>
+      <span class="stat-label">Số dòng trả về (K)</span>
+      <span class="stat-sub mono">theo ${escapeHtml(kMethod)} · ${modeText}</span>
+    </div>
+    <div class="stat-card ${classQualityClass(q)}">
+      <span class="stat-value mono">${q && q.excess !== null ? classPct(q.excess) : "—"}</span>
+      <span class="stat-label">Mức vượt mốc tốt nhất của mô hình</span>
+    </div>
+    <div class="stat-card stat-amber">
+      <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
+      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
+    </div>
+  `;
+  setClassWarnings([
+    {
+      level: "warn",
+      text: "Bộ kết hợp là phương pháp thử nghiệm: trong thực nghiệm, nó chưa vượt được một mô hình đơn giản (1 mô hình tăng cường độ dốc chạy qua kiểm tra chéo). Xem cột «Cùng nghi» để biết dòng nào nhiều phương pháp đồng ý.",
+    },
+    classQualityWarning(q),
+    ...(diag.warnings || []).map((w) => ({ level: "warn", text: w })),
+  ]);
+
+  const rows = Object.entries(diag.methods)
+    .map(([name, m]) => {
+      const quality = m.quality === null || m.quality === undefined ? "không có mô hình" : classPct(m.quality);
+      return `<tr>
+        <td>${escapeHtml(CLASS_METHOD_SHORT[name] || name)}</td>
+        <td>${m.on ? "Bật" : "Tắt"}</td>
+        <td class="mono">${quality}</td>
+        <td class="mono">${m.on ? m.weight.toFixed(2) : "—"}</td>
+        <td class="mono">${classNum(m.n_flagged)}</td>
+        <td>${escapeHtml(m.reason)}</td>
+      </tr>`;
+    })
+    .join("");
+  $("class-report-table").innerHTML = `
+    <thead><tr><th>Phương pháp</th><th>Trạng thái</th><th>Mức vượt mốc</th><th>Trọng số</th><th>Tự gắn cờ</th><th>Lý do</th></tr></thead>
+    <tbody>${rows}</tbody>`;
+}
+
 // Findings đã được backend CHUẨN HOÁ chung tên trường cho cả 2 method
 // (suggested_label, score) -- xem app.py::class_noise_detect_api(). Chỉ CHỮ
 // hiển thị (header, nhãn cột điểm số) khác nhau theo method.
@@ -2546,7 +2636,29 @@ const CLASS_SCORE_LABELS = {
   distance_based: { suggested: "Gợi ý nhãn (đa số láng giềng)", score: "Tỉ lệ láng giềng bất đồng" },
   single_learning: { suggested: "Model tự tin", score: "Margin" },
   ensemble_based: { suggested: "Gợi ý nhãn (đa số classifier)", score: "Tỉ lệ classifier bất đồng" },
+  combined: { suggested: "Gợi ý nhãn (bỏ phiếu có trọng số)", score: "Điểm kết hợp" },
 };
+
+// Số dòng hiển thị kèm ghi chú nếu dòng này là bản trùng của 1 dòng đại diện đã bị gắn cờ (bước chuẩn bị đã gộp).
+function classRowCell(f) {
+  return f.duplicate_of ? `${f.row_number} <span class="hint-note">trùng dòng ${f.duplicate_of}</span>` : `${f.row_number}`;
+}
+// Bộ kết hợp: lý do nghi ngờ từng dòng = phương pháp nào cùng gắn cờ + các chỉ số thành phần.
+function classReasonText(f) {
+  // Dòng 1: phương pháp nào cùng gắn cờ; dòng 2 (chữ nhỏ): các chỉ số thành phần của chính dòng đó.
+  const head =
+    f.supporters && f.supporters.length
+      ? "Cùng nghi: " + f.supporters.map((m) => CLASS_METHOD_SHORT[m] || m).join(", ")
+      : "Chưa phương pháp nào tự gắn cờ";
+  const parts = [];
+  if (f.distance_disagreement !== null && f.distance_disagreement !== undefined)
+    parts.push(`láng giềng bất đồng ${classPct(f.distance_disagreement, 0)}`);
+  if (f.model_probability_recorded !== null && f.model_probability_recorded !== undefined)
+    parts.push(`xác suất mô hình cho nhãn ghi ${f.model_probability_recorded.toFixed(2)}`);
+  if (f.ensemble_disagreement !== null && f.ensemble_disagreement !== undefined)
+    parts.push(`classifier bất đồng ${classPct(f.ensemble_disagreement, 0)}`);
+  return { head, detail: parts.join(" · ") };
+}
 
 function renderClassFindingsTable() {
   const all = getFilteredClassFindings();
@@ -2558,14 +2670,18 @@ function renderClassFindingsTable() {
 
   const labels = CLASS_SCORE_LABELS[state.classResultMethod] || CLASS_SCORE_LABELS.single_learning;
   const table = $("class-findings-table");
-  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${labels.suggested}</th><th>${labels.score}</th></tr></thead>`;
+  const isCombined = state.classResultMethod === "combined";
+  const colCount = isCombined ? 5 : 4;
+  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${labels.suggested}</th><th>${labels.score}</th>${isCombined ? "<th>Cùng nghi</th>" : ""}</tr></thead>`;
   if (!pageRows.length) {
-    table.innerHTML = `${headHtml}<tbody><tr><td colspan="4" class="empty-cell">Không có dòng nào khớp.</td></tr></tbody>`;
+    table.innerHTML = `${headHtml}<tbody><tr><td colspan="${colCount}" class="empty-cell">Không có dòng nào khớp.</td></tr></tbody>`;
   } else {
     table.innerHTML = `${headHtml}<tbody>${pageRows
       .map(
         (f) =>
-          `<tr><td class="mono">${f.row_number}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label)}</td><td class="mono">${f.score.toFixed(4)}</td></tr>`
+          `<tr><td class="mono">${classRowCell(f)}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label || "—")}</td><td class="mono">${f.score.toFixed(4)}</td>${
+            isCombined ? (() => { const r = classReasonText(f); return `<td class="class-reason-cell">${escapeHtml(r.head)}<br><span class="hint-note">${escapeHtml(r.detail)}</span></td>`; })() : ""
+          }</tr>`
       )
       .join("")}</tbody>`;
   }
@@ -2796,8 +2912,9 @@ $("ch-bulk-assign-btn").addEventListener("click", () => {
   if (!action || matches.length === 0) return;
   chDismissConfirm();
   matches.forEach((f) => {
-    if (action === "relabel_suggested") classHandling.plan.set(f.row_number, { action: "relabel", newLabel: f.suggested_label });
-    else classHandling.plan.set(f.row_number, { action, newLabel: null });
+    if (action === "relabel_suggested") {
+      if (f.suggested_label) classHandling.plan.set(f.row_number, { action: "relabel", newLabel: f.suggested_label });
+    } else classHandling.plan.set(f.row_number, { action, newLabel: null });
   });
   const names = { keep: "Giữ nguyên", remove_row: "Xoá dòng", relabel_suggested: "Sửa nhãn theo gợi ý" };
   setStatusMessage($("ch-status"), `Đã gán «${names[action]}» cho ${chNum(matches.length)} dòng (chưa áp dụng).`, "ok");
@@ -2822,8 +2939,9 @@ function chRowOptions(f, current) {
     ["", "— Chọn cách xử lý —"],
     ["keep", "Giữ nguyên"],
     ["remove_row", "Xoá dòng"],
-    [`relabel:${f.suggested_label}`, `Sửa thành «${f.suggested_label}» (gợi ý)`],
   ];
+  // Bộ kết hợp có thể không có nhãn gợi ý cho 1 dòng (suggested_label rỗng): khi đó chỉ còn các nhãn có sẵn bên dưới.
+  if (f.suggested_label) opts.push([`relabel:${f.suggested_label}`, `Sửa thành «${f.suggested_label}» (gợi ý)`]);
   chClassNames()
     .filter((c) => c !== f.recorded_label && c !== f.suggested_label)
     .forEach((c) => opts.push([`relabel:${c}`, `Sửa thành «${c}»`]));
@@ -2860,7 +2978,7 @@ function chRenderTable() {
           const cell = d
             ? `<span class="status-text is-ok">${chDoneText(d)}</span>`
             : `<select class="select ch-row-action" data-row="${f.row_number}" aria-label="Cách xử lý dòng ${f.row_number}">${chRowOptions(f, classHandling.plan.get(f.row_number))}</select>`;
-          return `<tr><td class="mono">${start + i + 1}</td><td class="mono">${f.row_number}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label)}</td><td class="mono">${f.score.toFixed(4)}</td><td>${cell}</td></tr>`;
+          return `<tr><td class="mono">${start + i + 1}</td><td class="mono">${classRowCell(f)}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label || "—")}</td><td class="mono">${f.score.toFixed(4)}</td><td>${cell}</td></tr>`;
         })
         .join("") +
       "</tbody>";

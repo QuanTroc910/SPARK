@@ -72,6 +72,7 @@ from attribute_noise.quick_tools import (
     quick_fix_format_noise,
     quick_trim_whitespace,
 )
+from class_noise.combined import detect_class_noise_combined
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
 from class_noise.distance_based import detect_class_noise_distance
@@ -82,6 +83,14 @@ from class_noise.feature_selection import (
     log_transform,
     rank_by_importance,
     select_by_elbow,
+)
+from class_noise.preprocess import PreprocessConfig, PreprocessError, prepare_for_class_noise
+from class_noise.web_adapter import (
+    expand_findings,
+    finite,
+    preprocess_info,
+    quality_assessment,
+    string_frame,
 )
 from converters.transform import (
     DELIMITER_LABELS,
@@ -668,6 +677,16 @@ def class_noise_detect_api():
       - "ensemble_based": N29 (class_noise/ensemble_based.py) -- 3 classifier
         khác họ (LogisticRegression, GaussianNB, LinearSVC) biểu quyết qua
         cross-validation. Tham số riêng: cv_folds.
+      - "combined" (MỚI, CLAUDE.md "Kế hoạch cải tiến Class Noise" mục 7): bộ kết hợp
+        (class_noise/combined.py) chạy cả 3 phương pháp trên rồi gộp thành 1 danh sách Top-K.
+        Tham số riêng: alpha (0 = "công tắc", > 0 = "pha trộn"), n_estimators, cv_folds.
+        LƯU Ý: thực nghiệm đầy đủ (CLAUDE.md mục 5) cho thấy bộ này KHÔNG vượt đối chứng
+        sklearn thuần; giao diện ghi rõ đây là phương pháp thử nghiệm.
+
+    MỌI method đều đi qua BƯỚC CHUẨN BỊ CHUNG (class_noise/preprocess.py) trước khi chạy; payload
+    nhận thêm `reduce_columns` (true = "Giảm số cột" theo nhãn, mặc định false). Response có thêm
+    `preprocess` (cột nào bị bỏ + lý do, dòng bị loại/gộp, nhóm dòng mâu thuẫn) và
+    `diagnostics.quality` (nhận xét độ tin cậy theo MỨC VƯỢT MỐC, xem class_noise/web_adapter.py).
     Route này CHỈ "phiên dịch" JSON <-> Python object + JSON-hoá kết quả,
     không có logic detect nào viết thêm ở đây -- logic thật nằm hết ở 3 module
     class_noise/confident_learning.py và class_noise/distance_based.py.
@@ -712,7 +731,7 @@ def class_noise_detect_api():
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
 
     method = payload.get("method") or "single_learning"
-    if method not in ("single_learning", "distance_based", "ensemble_based"):
+    if method not in ("single_learning", "distance_based", "ensemble_based", "combined"):
         return jsonify({"error": f"method không hợp lệ: {method}"}), 400
 
     label_column = payload.get("label_column")
@@ -742,38 +761,62 @@ def class_noise_detect_api():
             }
         ), 400
 
-    # Bước 3 (xem class_noise/feature_selection.py + CLAUDE.md mục 9): cap outlier (về biên IQR) +
-    # log-transform lên feature_columns TRƯỚC khi chạy, CHỈ cho Distance-based và Ensemble-based
-    # (không phải tuỳ chọn; chỉ sửa GIÁ TRỊ, không xoá dòng/cột nên không có rủi ro mất dữ liệu).
-    # Confident Learning dùng cây quyết định nên bỏ qua bước này (lý do ở docstring route).
-    if method == "single_learning":
-        cleaned_df = df
-    else:
-        cleaned_df = cap_outliers(df, feature_columns)
-        cleaned_df = log_transform(cleaned_df, feature_columns)
+    cv_folds = int(payload.get("cv_folds") or 5)
+    reduce_by_label = _as_bool(payload.get("reduce_columns"))
 
-    if method == "distance_based":
-        dist_config = ClassNoiseConfig(label_column=label_column, feature_columns=feature_columns)
-        k = int(payload.get("k") or 5)
-        try:
-            result = detect_class_noise_distance(cleaned_df, dist_config, k=k)
-        except (ValueError, KeyError) as exc:
-            return jsonify({"error": f"Không chạy được với cấu hình này: {exc}"}), 400
+    # BƯỚC CHUẨN BỊ CHUNG (class_noise/preprocess.py, CLAUDE.md "Kế hoạch cải tiến Class Noise" mục 1),
+    # chạy TRƯỚC mọi phương pháp và KHÔNG dùng nhãn để chọn cột: bỏ cột hằng / gần như toàn ô trống /
+    # định danh / tương quan >= 0,8; bỏ dòng còn ô trống; gộp dòng trùng đặc trưng cùng nhãn; báo dòng
+    # mâu thuẫn. "Giảm số cột theo nhãn" (Random Forest + điểm gãy) chỉ chạy khi người dùng chọn.
+    try:
+        prepared = prepare_for_class_noise(
+            df,
+            PreprocessConfig(
+                label_column=label_column,
+                feature_columns=feature_columns,
+                n_folds=cv_folds,
+                reduce_by_label=reduce_by_label,
+            ),
+        )
+    except (PreprocessError, ValueError, KeyError) as exc:
+        return jsonify({"error": f"Không chuẩn bị được dữ liệu: {exc}"}), 400
+    used_features = prepared.feature_columns
+    report_json = preprocess_info(prepared.report, reduce_by_label)
 
-        diag = result.diagnostics
-        return jsonify(
-            {
-                "method": "distance_based",
-                "source": _class_source_info(file_id),
-                "diagnostics": {
-                    "n_rows_total": diag.n_rows_total,
-                    "n_rows_used": diag.n_rows_used,
-                    "k": diag.k,
-                    "n_rows_with_mutual_neighbors": diag.n_rows_with_mutual_neighbors,
-                    "class_names": diag.class_names,
-                    "class_counts": diag.class_counts,
-                },
-                "findings": [
+    # Biến đổi RIÊNG từng phương pháp (kế hoạch mục 3, 22/11/2026):
+    #  - Distance-based, Ensemble-based: cap outlier (về biên IQR) + log-transform
+    #    (`cap_outliers()` + `log_transform()`), vì 2 phương pháp này đo khoảng cách / dùng mô hình
+    #    tuyến tính nên nhạy với giá trị cực đoan và phân phối lệch.
+    #  - Single learning (cây quyết định): KHÔNG cap, KHÔNG log. Log là phép đơn điệu nên cây không đổi;
+    #    cap có thể xoá tín hiệu thật ở giá trị cực đoan. Đã đo trên Car, Adult, Credit Card (3 seed).
+    #  - Bộ kết hợp: tự áp dụng đúng quy tắc trên cho từng thành phần.
+    def _cap_and_log(frame, cols):
+        text = frame.copy()
+        text[list(cols)] = text[list(cols)].astype(str)  # 2 hàm này cần bảng dạng chuỗi
+        return log_transform(cap_outliers(text, list(cols)), list(cols))
+
+    def _respond(body: dict, findings: list):
+        body["method"] = method
+        body["source"] = _class_source_info(file_id)
+        body["preprocess"] = report_json
+        body["diagnostics"]["n_rows_total"] = prepared.report.n_rows_input  # tổng dòng của file, không phải sau khi gộp
+        body["findings"] = expand_findings(findings, prepared)
+        return jsonify(body)
+
+    try:
+        if method == "distance_based":
+            dist_config = ClassNoiseConfig(label_column=label_column, feature_columns=used_features)
+            # Ô k để TRỐNG (gửi null / "" / "auto") = tự chọn k theo độ phủ; không gửi khoá "k" = k = 5 như bản cũ.
+            if "k" not in payload:
+                k = 5
+            elif payload.get("k") in (None, "", "auto"):
+                k = "auto"
+            else:
+                k = int(payload["k"])
+            result = detect_class_noise_distance(_cap_and_log(prepared.df, used_features), dist_config, k=k)
+            return _respond(
+                {"diagnostics": _distance_diagnostics_json(result.diagnostics)},
+                [
                     {
                         "row_number": f.row_number,
                         "recorded_label": f.recorded_label,
@@ -782,32 +825,14 @@ def class_noise_detect_api():
                     }
                     for f in result.findings
                 ],
-            }
-        )
+            )
 
-    if method == "ensemble_based":
-        ens_config = ClassNoiseConfig(label_column=label_column, feature_columns=feature_columns)
-        cv_folds = int(payload.get("cv_folds") or 5)
-        try:
-            result = detect_class_noise_ensemble(cleaned_df, ens_config, cv_folds=cv_folds)
-        except (ValueError, KeyError) as exc:
-            return jsonify({"error": f"Không chạy được với cấu hình này: {exc}"}), 400
-
-        diag = result.diagnostics
-        return jsonify(
-            {
-                "method": "ensemble_based",
-                "source": _class_source_info(file_id),
-                "diagnostics": {
-                    "n_rows_total": diag.n_rows_total,
-                    "n_rows_used": diag.n_rows_used,
-                    "classifier_names": diag.classifier_names,
-                    "per_classifier_accuracy": diag.per_classifier_accuracy,
-                    "majority_baseline_accuracy": diag.majority_baseline_accuracy,
-                    "class_names": diag.class_names,
-                    "class_counts": diag.class_counts,
-                },
-                "findings": [
+        if method == "ensemble_based":
+            ens_config = ClassNoiseConfig(label_column=label_column, feature_columns=used_features)
+            result = detect_class_noise_ensemble(_cap_and_log(prepared.df, used_features), ens_config, cv_folds=cv_folds)
+            return _respond(
+                {"diagnostics": _ensemble_diagnostics_json(result.diagnostics)},
+                [
                     {
                         "row_number": f.row_number,
                         "recorded_label": f.recorded_label,
@@ -816,46 +841,36 @@ def class_noise_detect_api():
                     }
                     for f in result.findings
                 ],
-            }
+            )
+
+        if method == "combined":
+            alpha = float(payload.get("alpha") or 0.0)
+            if not 0.0 <= alpha <= 1.0:
+                return jsonify({"error": "alpha phải nằm trong khoảng 0 đến 1"}), 400
+            comb_config = ClassNoiseConfig(
+                label_column=label_column,
+                feature_columns=used_features,
+                n_estimators=int(payload.get("n_estimators") or 100),
+                cv_folds=cv_folds,
+            )
+            result = detect_class_noise_combined(
+                prepared.df, comb_config, alpha=alpha, k_neighbors="auto", cv_folds=cv_folds,
+                prepare_features=_cap_and_log,
+            )
+            body, findings = _combined_json(result)
+            return _respond(body, findings)
+
+        # method == "single_learning" (hành vi gốc, Confident Learning + Random Forest)
+        config = ClassNoiseConfig(
+            label_column=label_column,
+            feature_columns=used_features,
+            n_estimators=int(payload.get("n_estimators") or 300),
+            cv_folds=cv_folds,
         )
-
-    # method == "single_learning" (hành vi gốc, Confident Learning + Random Forest)
-    config = ClassNoiseConfig(
-        label_column=label_column,
-        feature_columns=feature_columns,
-        n_estimators=int(payload.get("n_estimators") or 300),
-        cv_folds=int(payload.get("cv_folds") or 5),
-    )
-    try:
-        result = detect_class_noise(cleaned_df, config)
-    except (ValueError, KeyError) as exc:
-        # Hay gặp nhất: 1 lớp có quá ít dòng dùng được so với cv_folds (vd chọn
-        # cv_folds=5 nhưng lớp hiếm chỉ có 3 dòng sau khi loại bỏ dòng hỏng) --
-        # StratifiedKFold của sklearn tự raise ValueError trong trường hợp này.
-        return jsonify({"error": f"Không chạy được với cấu hình này: {exc}"}), 400
-
-    diag = result.diagnostics
-    return jsonify(
-        {
-            "method": "single_learning",
-            "source": _class_source_info(file_id),
-            "diagnostics": {
-                "n_rows_total": diag.n_rows_total,
-                "n_rows_used": diag.n_rows_used,
-                "class_names": diag.class_names,
-                "class_counts": diag.class_counts,
-                "cv_accuracy": diag.cv_accuracy,
-                "majority_baseline_accuracy": diag.majority_baseline_accuracy,
-                "class_thresholds": diag.class_thresholds,
-                "per_class_report": diag.per_class_report,
-                "confusion_count_matrix": {
-                    "class_names": diag.class_names,
-                    # .tolist() tự ép numpy int64 (kiểu pandas hay dùng) thành
-                    # int thường -- jsonify() không serialize được numpy int64.
-                    "rows": diag.confusion_count_matrix.values.tolist(),
-                },
-            },
-            "findings": [
+        result = detect_class_noise(prepared.df, config)
+        return _respond(
+            {"diagnostics": _single_diagnostics_json(result.diagnostics)},
+            [
                 {
                     "row_number": f.row_number,
                     "recorded_label": f.recorded_label,
@@ -864,8 +879,147 @@ def class_noise_detect_api():
                 }
                 for f in result.findings
             ],
+        )
+    except (ValueError, KeyError) as exc:
+        # Hay gặp nhất: 1 lớp có quá ít dòng dùng được so với cv_folds (vd chọn cv_folds=5 nhưng lớp
+        # hiếm chỉ có 3 dòng) -- StratifiedKFold của sklearn tự raise ValueError trong trường hợp này.
+        return jsonify({"error": f"Không chạy được với cấu hình này: {exc}"}), 400
+
+
+def _single_diagnostics_json(diag) -> dict:
+    """Chẩn đoán của Confident Learning + Random Forest, thêm các chỉ số kế hoạch mục 3 (mức vượt mốc,
+    MCC, PR-AUC, ước lượng tỷ lệ nhãn sai) và nhận xét độ tin cậy theo mức vượt mốc."""
+    return {
+        "n_rows_total": diag.n_rows_total,
+        "n_rows_used": diag.n_rows_used,
+        "class_names": diag.class_names,
+        "class_counts": diag.class_counts,
+        "cv_accuracy": diag.cv_accuracy,
+        "majority_baseline_accuracy": diag.majority_baseline_accuracy,
+        "excess_over_baseline": finite(diag.excess_over_baseline),
+        "mcc": finite(diag.mcc),
+        "pr_auc_macro": finite(diag.pr_auc_macro),
+        "estimated_noise_rate": finite(diag.estimated_noise_rate),
+        "estimated_label_errors": int(diag.estimated_label_errors),
+        "params": diag.params,
+        "warnings": diag.warnings,
+        "quality": quality_assessment(diag.excess_over_baseline, "Random Forest"),
+        "class_thresholds": diag.class_thresholds,
+        "per_class_report": diag.per_class_report,
+        "confusion_count_matrix": {
+            "class_names": diag.class_names,
+            # .tolist() tự ép numpy int64 (kiểu pandas hay dùng) thành int thường --
+            # jsonify() không serialize được numpy int64.
+            "rows": diag.confusion_count_matrix.values.tolist(),
+        },
+    }
+
+
+def _distance_diagnostics_json(diag) -> dict:
+    """Chẩn đoán của Mutual k-NN: không có mô hình nên không có mức vượt mốc; thay bằng độ phủ."""
+    return {
+        "n_rows_total": diag.n_rows_total,
+        "n_rows_used": diag.n_rows_used,
+        "k": diag.k,
+        "k_mode": diag.k_mode,
+        "coverage": finite(diag.coverage),
+        "coverage_by_k": {str(k): finite(v) for k, v in diag.coverage_by_k.items()},
+        "n_rows_with_mutual_neighbors": diag.n_rows_with_mutual_neighbors,
+        "binary_columns": diag.binary_columns,
+        "pca": diag.pca,
+        "warnings": diag.warnings,
+        "class_names": diag.class_names,
+        "class_counts": diag.class_counts,
+    }
+
+
+def _ensemble_diagnostics_json(diag) -> dict:
+    """Chẩn đoán của Ensemble 3 classifier: accuracy + mức vượt mốc từng classifier và của classifier tốt nhất."""
+    return {
+        "n_rows_total": diag.n_rows_total,
+        "n_rows_used": diag.n_rows_used,
+        "classifier_names": diag.classifier_names,
+        "per_classifier_accuracy": diag.per_classifier_accuracy,
+        "per_classifier_excess": {k: finite(v) for k, v in diag.per_classifier_excess.items()},
+        "best_excess_over_baseline": finite(diag.best_excess_over_baseline),
+        "majority_baseline_accuracy": diag.majority_baseline_accuracy,
+        "quality": quality_assessment(diag.best_excess_over_baseline, "Classifier tốt nhất"),
+        "class_names": diag.class_names,
+        "class_counts": diag.class_counts,
+    }
+
+
+def _combined_json(result) -> tuple[dict, list]:
+    """Đóng gói kết quả bộ kết hợp: chẩn đoán từng phương pháp thành phần (bật/tắt + lý do + trọng số),
+    và với MỖI dòng trong Top-K, lý do nghi ngờ: phương pháp nào cùng gắn cờ, tỉ lệ láng giềng bất đồng,
+    xác suất mô hình cho nhãn đang ghi, tỉ lệ classifier bất đồng."""
+    diag = result.diagnostics
+    single = result.method_results["single_learning"]
+    dist = result.method_results["distance_based"]
+    ens = result.method_results["ensemble_based"]
+
+    # Điểm từng thành phần theo số dòng 1-based (đã bỏ NaN) để tra nhanh cho các dòng Top-K.
+    dist_score = pd.Series(dist.scores.disagreement, index=dist.scores.row_numbers)
+    p_recorded = pd.Series(1.0 - single.scores.suspicion, index=single.scores.row_numbers)
+    ens_score = pd.Series(ens.scores.disagreement, index=ens.scores.row_numbers)
+
+    def _lookup(series: pd.Series, row: int):
+        return finite(series.get(row)) if row in series.index else None
+
+    findings = [
+        {
+            "row_number": f.row_number,
+            "recorded_label": f.recorded_label,
+            "suggested_label": f.suggested_label,
+            "score": f.score,
+            "supporters": f.supporters,
+            "ranks": f.ranks,
+            "distance_disagreement": _lookup(dist_score, f.row_number),
+            "model_probability_recorded": _lookup(p_recorded, f.row_number),
+            "ensemble_disagreement": _lookup(ens_score, f.row_number),
         }
-    )
+        for f in result.findings
+    ]
+
+    # Độ tin cậy chung: mức vượt mốc tốt nhất trong các MÔ HÌNH còn bật. Không mô hình nào còn bật thì
+    # kết quả chỉ dựa vào Mutual k-NN -- nói rõ để người dùng biết.
+    model_methods = {m: info for m, info in diag.methods.items() if m != "distance_based"}
+    qualities_on = [info["quality"] for info in model_methods.values() if info["on"] and info["quality"] is not None]
+    if qualities_on:
+        quality = quality_assessment(max(qualities_on), "Mô hình tốt nhất")
+    else:
+        best = max((i["quality"] for i in model_methods.values() if i["quality"] is not None), default=None)
+        quality = {
+            "level": "none",
+            "excess": finite(best),
+            "threshold": 0.0,
+            "message": (
+                "Cả hai mô hình học máy đều không hơn cách đoán toàn lớp đông nhất, nên kết quả chỉ dựa vào "
+                "Mutual k-NN. Thử chọn lại cột đặc trưng."
+            ),
+        }
+
+    body = {
+        "diagnostics": {
+            "n_rows_total": single.diagnostics.n_rows_total,
+            "n_rows_used": single.diagnostics.n_rows_used,
+            "alpha": diag.alpha,
+            "k": diag.k,
+            "k_method": diag.k_method,
+            "methods": {
+                m: {**info, "quality": finite(info["quality"]), "weight": finite(info["weight"])}
+                for m, info in diag.methods.items()
+            },
+            "warnings": diag.warnings,
+            "quality": quality,
+            "single": _single_diagnostics_json(single.diagnostics),
+            "distance": _distance_diagnostics_json(dist.diagnostics),
+            "ensemble": _ensemble_diagnostics_json(ens.diagnostics),
+            "class_names": single.diagnostics.class_names,
+            "class_counts": single.diagnostics.class_counts,
+        }
+    }
+    return body, findings
 
 
 def _is_mostly_numeric(series, min_ratio: float = 0.9) -> bool:

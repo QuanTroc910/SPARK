@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.preprocessing import LabelEncoder
 
 from attribute_noise.detectors import detect_duplicate_rows
 
@@ -158,11 +159,14 @@ def _margin_over_baseline(num: pd.DataFrame, labels: pd.Series, cfg: PreprocessC
     model = RandomForestClassifier(
         n_estimators=cfg.n_estimators, class_weight="balanced", random_state=cfg.random_state, n_jobs=-1
     )
+    # Mã hoá nhãn thành số TRƯỚC khi đưa vào: scikit-learn 1.9 báo lỗi "classes ... are not in class_weight"
+    # khi nhãn là chuỗi mà vẫn bật class_weight="balanced" trong cross_val_predict.
+    y = LabelEncoder().fit_transform(labels.to_numpy())
     pred = cross_val_predict(
-        model, num.to_numpy(), labels.to_numpy(),
+        model, num.to_numpy(), y,
         cv=StratifiedKFold(n_splits, shuffle=True, random_state=cfg.random_state),
     )
-    accuracy = float((pred == labels.to_numpy()).mean())
+    accuracy = float((pred == y).mean())
     return (accuracy - baseline) / (1 - baseline)
 
 

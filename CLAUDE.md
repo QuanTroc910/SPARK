@@ -244,6 +244,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     là 300 cây con cộng lại (mỗi cây phải mọc qua nhiều bước chia nhánh tốn
     kém), còn 3 classifier kia đều là bài toán tối ưu LỒI (hoặc không cần
     tối ưu gì như GaussianNB) nên hội tụ rất nhanh dù "có train".
+  - `web_adapter.py` — **MỚI (mục 45)**: hàm phụ cho route Class Noise của web (`expand_findings`, `quality_assessment` theo MỨC VƯỢT MỐC, `preprocess_info`, `string_frame`, `finite`); thuần Python, không phụ thuộc Flask.
   - `feature_selection.py` — **MỚI, GIẢM SỐ CỘT trước khi chạy Confident
     Learning** (theo yêu cầu thầy sau buổi báo cáo — xem mục 9 dưới đây để
     biết đầy đủ lý do/lịch sử quyết định): `rank_by_importance()` (Bước 1 —
@@ -1952,6 +1953,33 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Cách làm:** `app.py::upload_file()` bọc `load_data(save_path)` trong `try/finally: save_path.unlink(missing_ok=True)` — giống `_read_df_for_noise_tool()` của các tool. Bảng chỉ còn trong `UPLOADED_FILES` (RAM); thư mục `uploads/` vẫn được tạo vì các tool dùng làm chỗ lưu tạm.
     - **Kiểm chứng:** Flask test client: đăng ký + đăng nhập → `/api/upload` (200, 3 dòng) → không còn tệp mới trong `uploads/` → `/api/class-noise/detect` (distance_based) 200 → `/api/class-noise/apply` xoá 1 dòng 200 → `/api/export-working` 200; tệp rỗng vẫn lỗi 500 như trước nhưng tệp cũng đã bị xoá. Máy đã chạy bản cũ thì tự xoá các tệp cũ còn trong `uploads/`.
 
+45. **Class Noise trên web: bước chuẩn bị chung, "Bộ kết hợp", Giảm số cột là lựa chọn, báo cáo cột bị bỏ, cảnh báo theo mức vượt mốc — ĐÃ XONG (22/11/2026), CHỈ chạy thử bằng tay, KHÔNG viết test mới (chưa commit lúc ghi):**
+    - **Nguồn gốc:** mục "7. Web" trong bản yêu cầu của user (= mục 6 của kế hoạch cải tiến Class Noise ở cuối file); user nói "Làm mục 7 đi, không cần test đâu".
+    - **Backend `/api/class-noise/detect` (`app.py`):** MỌI phương pháp giờ đi qua `class_noise/preprocess.py::prepare_for_class_noise()` TRƯỚC khi chạy (bỏ cột hằng / gần toàn trống / định danh / tương quan >= 0,8
+      KHÔNG dùng nhãn; bỏ dòng còn ô trống; gộp dòng trùng đặc trưng cùng nhãn; báo nhóm mâu thuẫn). Payload thêm `reduce_columns` (mặc định false = "Không giảm số cột"; true = giảm theo nhãn bằng Random Forest +
+      điểm gãy, kèm cảnh báo trong `preprocess.warnings`). Thêm `method="combined"` (`detect_class_noise_combined`, tham số `alpha` 0 = công tắc / 0,5 = pha trộn, `n_estimators` mặc định 100, k của Mutual k-NN = "auto").
+      `k` của Distance-based: không gửi khoá `k` = 5 như cũ; gửi `null` / `""` / `"auto"` = tự chọn theo độ phủ (ô k trên web để trống = tự động, mặc định ô vẫn là 5 vì thực nghiệm mục 5 cho thấy "k theo độ phủ" kém k = 5 ở 3/4 bộ).
+      Distance + Ensemble vẫn cap outlier + log (trên bản chuỗi của bảng đã chuẩn bị), Confident Learning dùng giá trị nguyên.
+    - **Response mới:** `preprocess` (cột bị bỏ + mã luật + chi tiết, cột giữ, số dòng nhãn trống / ô trống / gộp / nhóm mâu thuẫn, danh sách nhóm mâu thuẫn cắt ở 50 nhóm, `label_reduction`, `warnings`);
+      `diagnostics.quality` = {level `none` (mức vượt mốc <= 0) | `low` (< 20%) | `ok`, excess, message} (Single: Random Forest; Ensemble: classifier tốt nhất; Distance không có vì không có mô hình, vẫn dùng độ phủ < 50%);
+      Single thêm `excess_over_baseline`, `mcc`, `pr_auc_macro`, `estimated_noise_rate`, `estimated_label_errors`, `params`, `warnings`; Distance thêm `k_mode`, `coverage`, `coverage_by_k`, `binary_columns`, `pca`, `warnings`;
+      Ensemble thêm `per_classifier_excess`, `best_excess_over_baseline`; Combined có `diagnostics.methods` {bật/tắt, mức vượt mốc, trọng số, số dòng tự gắn cờ, lý do} + `single`/`distance`/`ensemble` và mỗi dòng Top-K có
+      `supporters`, `ranks`, `distance_disagreement`, `model_probability_recorded` (xác suất mô hình cho NHÃN ĐANG GHI), `ensemble_disagreement`. `diagnostics.n_rows_total` luôn là tổng dòng của FILE (không phải sau khi gộp).
+    - **Dòng trùng đã gộp được trả về cả nhóm:** dòng đại diện bị gắn cờ thì mọi dòng cùng nhóm cũng có mặt trong `findings` kèm `duplicate_of` (`web_adapter.expand_findings`); `row_number` vẫn là số dòng của file gốc.
+    - **File mới `class_noise/web_adapter.py`** (thuần Python): `string_frame`, `expand_findings`, `quality_assessment`, `preprocess_info`, `finite` — tách khỏi `app.py` để `app.py` chỉ "phiên dịch" JSON. Ngưỡng cảnh báo `LOW_EXCESS` = 0,2 lấy chung với
+      `PreprocessConfig.low_margin_warning` (con số TỰ ĐỀ XUẤT, chưa có căn cứ thống kê). **Khác yêu cầu gốc:** yêu cầu ghi cảnh báo khi mức vượt mốc "<= 0"; mình cảnh báo thêm mức vàng cho < 20% (đỏ vẫn là <= 0).
+    - **Sửa lỗi tìm thấy khi chạy thử:** `preprocess.py::_margin_over_baseline` báo "classes ... are not in class_weight" với nhãn dạng chuỗi trên scikit-learn 1.9 (cross_val_predict + class_weight="balanced") → mã hoá nhãn bằng `LabelEncoder` trước khi đưa vào.
+    - **Giao diện (`workspace.html`, `workspace-flow.js`, `workspace.css`):** thẻ phương pháp thứ 4 "Bộ kết hợp (thử nghiệm)"; khối "Giảm số cột" = 2 ô chọn (radio) thay nút "Chạy giảm cột tự động" (route cũ `/api/class-noise/reduce-features` VẪN CÒN trong `app.py` nhưng giao diện không gọi nữa);
+      ô tham số "Cách kết hợp" (công tắc / pha trộn); thẻ `#class-preprocess-card` ở bước Kết quả (cột bị bỏ + luật, dòng gộp / mâu thuẫn, xếp hạng khi giảm theo nhãn, cảnh báo); thẻ chỉ số Single có Mức vượt mốc, MCC, PR-AUC, ước lượng nhãn sai;
+      khung cảnh báo `#class-warning-card` dùng `diag.quality` (đỏ khi `none`, vàng khi `low`); bảng danh sách của Bộ kết hợp có cột "Cùng nghi" (2 dòng: phương pháp cùng gắn cờ + chỉ số thành phần); bảng ghi chú "trùng dòng X" cho dòng thêm từ nhóm trùng;
+      nhãn gợi ý rỗng (Bộ kết hợp có thể không có gợi ý) được xử lý ở bước Xử lý (không có lựa chọn "gợi ý", gán hàng loạt bỏ qua dòng đó); Guide + dòng "Thuật toán 4 lựa chọn" cập nhật.
+    - **Bộ kết hợp trên web dùng Ensemble 3 mô hình CŨ** (không phải bản 5 họ): bản 5 họ chậm hơn (MLP, KNN, HistGradientBoosting) và chạy ĐỒNG BỘ; thực nghiệm mục 7 cho thấy cả hai bản đều không vượt `naive_cv`. Ensemble 5 họ vẫn CHƯA nối vào web.
+    - **Chạy thử bằng tay (không phải test chính thức):** Flask test client + trình duyệt thật (Playwright) trên Car (`car_noisy_5.csv`) cho cả 4 phương pháp (không lỗi JS, bảng + thẻ hiện đúng, sang được bước Xử lý) và lựa chọn "Giảm số cột";
+      mẫu Credit Card 4.513 dòng (có thêm 20 dòng trùng + 1 nhóm mâu thuẫn): gộp 49 dòng vào 41 nhóm, 1 nhóm mâu thuẫn, cột `Time` bị bỏ vì "giống mã định danh" (mẫu nhỏ nên 95% giá trị khác nhau — trên file đầy đủ 284.807 dòng tỉ lệ chỉ ~44% nên cột được giữ),
+      cột V7, V12, V17... bị bỏ vì tương quan; ép mô hình yếu (chỉ cột `doors`) → cảnh báo đỏ ở cả Single, Ensemble, Bộ kết hợp. KHÔNG chạy lại các bộ test cũ (user bảo bỏ qua; test cũ vốn nằm ngoài repo).
+    - **Giới hạn / chưa làm:** chạy đồng bộ, chưa có thanh tiến độ (Bộ kết hợp chạy cả 3 phương pháp nên lâu hơn); chưa hiện `calibrated_joint` hay `pr_auc_per_class` trên web; danh sách nhóm mâu thuẫn chỉ cắt 50 nhóm; Guide bước 4 ("Xử lý") vẫn ghi
+      "chưa có xử lý tự động" dù mục 37 đã làm (sai từ trước, chưa sửa); bộ lọc ở bước Xử lý vẫn dựa trên `suggested_label` nên với Bộ kết hợp các dòng không có gợi ý nằm chung nhóm "→ —"; chưa push.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -2221,12 +2249,11 @@ từ 21/11 — dùng lại, không viết mới.
    - [x] thêm phương pháp: ENN k = 3 (đường cơ sở), combined (công tắc + pha trộn), các biến thể ở 2–3;
    - [x] lưu điểm từng phương pháp ra đĩa (gộp lại không phải chạy lại); lưu mức vượt mốc (MCC / PR-AUC của mô hình CHƯA lưu);
    - [x] chạy 5 seed; script tổng hợp mean ± std + kiểm định Wilcoxon bắt cặp.
-6. Web:
-   - [ ] route + giao diện "Kết hợp (tự chọn)": hiện mức vượt mốc, phương pháp được tin, bảng Top-K;
-   - [ ] sửa luật cảnh báo theo mức vượt mốc (bỏ ngưỡng 30%);
-   - [ ] thay nút "Giảm cột tự động" bằng 2 lựa chọn "Giảm số cột" / "Không giảm số cột" (xem mục 1) +
-         báo cáo các cột bị bỏ ở bước lọc cột không dùng nhãn (bỏ vì luật nào, trùng với cột nào);
-   - [ ] (nếu kịp) chạy nền + thanh tiến độ.
+6. Web — ĐÃ LÀM (22/11/2026, user bảo "làm mục 7 đi, không cần test"; chi tiết ở mục 45 phía trên):
+   - [x] route + giao diện "Bộ kết hợp (thử nghiệm)": bảng các phương pháp thành phần (bật/tắt, mức vượt mốc, trọng số, lý do) + bảng Top-K kèm lý do từng dòng;
+   - [x] luật cảnh báo theo mức vượt mốc (bỏ luật cũ "<= 2 điểm % và dưới 30% mức trần"): <= 0 đỏ, < 20% vàng;
+   - [x] 2 lựa chọn "Giảm số cột" / "Không giảm số cột" (mặc định không giảm) thay nút "Giảm cột tự động" + báo cáo cột bị bỏ (luật nào, trùng với cột nào) + số dòng gộp / nhóm mâu thuẫn;
+   - [ ] (nếu kịp) chạy nền + thanh tiến độ — CHƯA làm.
 7. (Nếu còn giờ) Ensemble 5 họ — ĐÃ CODE + TEST (22/11/2026, user bảo bỏ qua mục 6 làm mục 7; CHƯA đánh giá chính thức, chưa nối vào web):
    - [x] LogisticRegression, GaussianNB, KNeighborsClassifier, MLPClassifier, HistGradientBoosting (`class_noise/ensemble_diverse.py`);
    - [x] bỏ `balanced`; chỉnh ngưỡng từng mô hình cho cân 2 loại lỗi (cách hiểu của dự án, chưa đọc bài Khoshgoftaar 2005);
