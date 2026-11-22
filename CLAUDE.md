@@ -2019,6 +2019,93 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       `noise_ground_truth.csv`/`noise_ground_truth_large.csv` — rủi ro lớn
       nhất hiện tại cho điểm khoá luận là CHƯA có bước đánh giá định lượng nào.
 
+## Kế hoạch cải tiến Class Noise (chốt 22/11/2026, theo góp ý của thầy) — THỨ TỰ
+
+Mục tiêu: có đóng góp riêng ở 2 tầng (cải tiến từng phương pháp + bộ kết hợp), không chỉ gọi 3
+phương pháp có sẵn. Mọi bước thiết kế cho BẤT KỲ bảng nào; bộ dữ liệu chỉ dùng để thực nghiệm.
+Khung thí nghiệm nhiều seed `evaluate_class_noise_multiseed.py` (A/B/IDN, downstream, naive_cv) đã có
+từ 21/11 — dùng lại, không viết mới.
+
+**Việc của Quân**
+- [ ] Q1. Gửi thầy tin nhắn chốt hướng (bản soạn sẵn trong chat).
+- [x] Q2. Chốt bộ dữ liệu nhãn đúng 100% để cấy nhiễu có kiểm soát: Car Evaluation (UCI) — đã thêm
+        `data/car_evaluation.csv`. (KEEL bị loại: bản nhiễu của KEEL không kèm file đáp án dòng nào bị đổi.)
+- [ ] Q3. (Tùy) Tải bài gốc Mutual k-NN (Liu & Zhang 2012) qua thư viện trường.
+- [ ] Q4. Cuối cùng: cập nhật mục lục, xuất PDF từ Word, đóng gói nộp.
+
+**Việc của Claude (code), theo thứ tự**
+1. Pipeline chuẩn bị chung, KHÔNG dùng nhãn — file mới `class_noise/preprocess.py`:
+   - [ ] chuẩn hoá cột nhãn (cắt khoảng trắng); báo lớp có ít dòng hơn số fold;
+   - [ ] loại dòng có ô trống ở cột đã chọn, báo rõ số dòng bị loại;
+   - [ ] bỏ cột hằng; cột gần như toàn ô trống (mặc định > 50%); cột định danh (số nguyên/chữ có
+         ≥ 95% giá trị khác nhau — KHÔNG áp cho cột số thực);
+   - [ ] lọc tương quan |r| ≥ 0,8, chọn cột giữ KHÔNG dùng nhãn (ít ô trống hơn → ít tương quan với
+         các cột khác hơn → đứng trước); viết lại `filter_correlated()`;
+   - [ ] giảm số cột theo nhãn (Random Forest + điểm gãy, đúng bước 1 thầy yêu cầu) thành LỰA CHỌN của
+         người dùng: 2 nút "Giảm số cột" / "Không giảm số cột", mặc định "Không giảm". Khi chọn "Giảm"
+         mà mức vượt mốc của mô hình thấp hoặc lớp hiếm quá ít dòng → hiện cảnh báo nhãn có thể chưa đủ
+         tin cậy để chọn cột theo nhãn;
+   - [ ] gom dòng trùng theo cột đặc trưng: nhóm khác nhãn → báo "dòng mâu thuẫn"; nhóm cùng nhãn →
+         gộp 1 đại diện trước khi chạy, trả kết quả về cả nhóm.
+2. Mutual k-NN (`class_noise/distance_based.py`):
+   - [ ] z-score trừ cột nhị phân (cột 2 giá trị giữ 0/1);
+   - [ ] trả điểm bất đồng cho MỌI dòng (không chỉ dòng > 0,5);
+   - [ ] chọn k theo độ phủ: tìm láng giềng 1 lần với k = 15, lấy k nhỏ nhất trong {3,5,7,9,11,15}
+         đạt ngưỡng độ phủ (mặc định 90%); người dùng vẫn sửa tay được;
+   - [ ] biến thể để đo: bỏ phiếu theo khoảng cách, khoảng cách Manhattan, PCA (tự bật khi số thành
+         phần giữ 95% biến thiên < 1/2 số cột), có/không kéo biên + log.
+3. Confident Learning (`class_noise/confident_learning.py`):
+   - [ ] bỏ kéo biên/log khỏi nhánh CL (mô hình cây không cần);
+   - [ ] Random Forest thêm `min_samples_leaf` (mặc định 5) + tham số số cây; tuỳ chọn bật/tắt `balanced`;
+   - [ ] trả mức vượt mốc, MCC, PR-AUC; trả điểm nghi ngờ MỌI dòng (1 − xác suất nhãn ghi);
+   - [ ] hiệu chỉnh ma trận đếm → ước lượng tỷ lệ nhãn sai (theo bài gốc Northcutt 2021);
+   - [ ] sửa docstring "dòng thật sự thuộc lớp" → "dòng mang nhãn lớp".
+4. Bộ kết hợp — file mới `class_noise/combined.py` (ĐÓNG GÓP CHÍNH):
+   - [ ] đổi điểm từng phương pháp về thứ hạng phần trăm;
+   - [ ] trọng số từ mức vượt mốc (mức vượt mốc ≤ 0 → loại); k-NN luôn có mặt; 2 bản: công tắc + pha trộn (α chọn trên
+         seed 0 rồi giữ cố định);
+   - [ ] K = số dòng phương pháp trọng số lớn nhất tự gắn cờ; trả Top-K kèm phương pháp nào cùng nghi
+         + lý do (mức vượt mốc).
+5. Thực nghiệm — mở rộng `evaluate_class_noise_multiseed.py`:
+   - [ ] thêm bộ Car Evaluation `data/car_evaluation.csv` (nhãn sinh từ bộ luật DEX → đúng 100%;
+         1.728 dòng = mọi tổ hợp 4×4×4×3×3×3, không trùng). Đổi chữ → số theo thứ tự: buying/maint
+         low=1 med=2 high=3 vhigh=4; doors 2/3/4/5more=2/3/4/5; persons 2/4/more=2/4/5; lug_boot
+         small/med/big=1/2/3; safety low/med/high=1/2/3. Gộp 2 nhãn THEO THỨ TỰ: unacc+acc=0 (1.594),
+         good+vgood=1 (134, ~7,8%). KHÔNG gộp lệch thứ tự (vd good+unacc) vì làm hỏng phép thử;
+   - [ ] thêm phương pháp: ENN k = 3 (đường cơ sở), combined (công tắc + pha trộn), các biến thể ở 2–3;
+   - [ ] lưu điểm từng phương pháp ra đĩa (gộp lại không phải chạy lại); lưu mức vượt mốc, MCC, PR-AUC;
+   - [ ] chạy 5 seed; script tổng hợp mean ± std + kiểm định Wilcoxon bắt cặp.
+6. Web:
+   - [ ] route + giao diện "Kết hợp (tự chọn)": hiện mức vượt mốc, phương pháp được tin, bảng Top-K;
+   - [ ] sửa luật cảnh báo theo mức vượt mốc (bỏ ngưỡng 30%);
+   - [ ] thay nút "Giảm cột tự động" bằng 2 lựa chọn "Giảm số cột" / "Không giảm số cột" (xem mục 1) +
+         báo cáo các cột bị bỏ ở bước lọc cột không dùng nhãn (bỏ vì luật nào, trùng với cột nào);
+   - [ ] (nếu kịp) chạy nền + thanh tiến độ.
+7. (Nếu còn giờ) Ensemble 5 họ: LogisticRegression, GaussianNB, KNeighborsClassifier, MLPClassifier,
+   HistGradientBoosting; bỏ `balanced`; chỉnh ngưỡng từng mô hình cho cân 2 loại lỗi (Khoshgoftaar
+   2005); mức bỏ phiếu 3/5 – 4/5 – 5/5; đo độ đa dạng (tỷ lệ đoán giống nhau từng cặp).
+   Không kịp → giữ bản cũ làm đối chứng, thiết kế mới đưa vào hướng phát triển.
+8. Mỗi cụm code xong: test → ghi file này → push.
+9. Sửa bài:
+   - [ ] Mở đầu: bỏ câu "khoá luận không đưa ra thuật toán mới", viết lại đóng góp;
+   - [ ] Chương 1: các phương pháp liên quan; Garcia 2016, Ali 2026, Nazaretyan 2025;
+   - [ ] Chương 2: mệnh đề mức vượt mốc ≤ 1 − f/n₁ (gắn với điều kiện của CL); lý do bỏ chọn cột có giám sát
+         (Frénay 2014); bagging chịu nhiễu (Dietterich 2000); chọn k (Hall 2008);
+   - [ ] Chương 3: pipeline chuẩn bị mới, thiết kế bộ kết hợp (giả mã), giao diện mới;
+   - [ ] Chương 4: số liệu mới (mean ± std), so với đường cơ sở, giả định nhãn gốc sạch, Ensemble kém
+         vì cùng họ (Khoshgoftaar 2005; Sluban & Lavrač 2015);
+   - [ ] Kết luận + hướng phát triển (Ensemble 5 họ nếu chưa làm, k theo từng điểm, tập sạch nhỏ /
+         active learning, cột chữ, DuckDB/Parquet, chạy nền đầy đủ, xuất quy trình làm sạch).
+
+Bắt buộc: 1, 2 (trừ phần biến thể), 3, 4, 5 (Car Evaluation + 5 seed), 6 (2 mục đầu), 9. Còn lại làm nếu kịp.
+
+Ghi chú: chỉ số (độ chính xác CV − độ chính xác đoán toàn lớp đông nhất) / (1 − cùng mốc đó)
+gọi là **mức vượt mốc** (trên web: "% mức trần tối đa"); KHÔNG viết tắt bằng chữ cái.
+Chờ Quân quyết: thêm bộ dữ liệu nào ngoài Car Evaluation; lọc tương quan có đổi sang Spearman không.
+File mới `class_noise/preprocess.py` chỉ chứa phần CHƯA có (cột hằng / định danh / gần toàn trống,
+dòng mâu thuẫn); dùng lại `feature_selection.py` (sửa `filter_correlated()` tại chỗ) và
+`attribute_noise/detectors.py::detect_duplicate_rows`.
+
 ## Môi trường chạy của user
 
 - Anaconda (`(base)` env), Ubuntu, có cả VS Code lẫn PyCharm.
