@@ -3,3 +3,6 @@ __pycache__/
 output/
 uploads/
 spark_accounts.db
+
+# điểm từng dòng của thí nghiệm Class Noise (sinh lại được bằng evaluate_class_noise_multiseed.py)
+data/class_noise_scores_v2/

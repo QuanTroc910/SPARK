@@ -200,6 +200,19 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     không chạy lại), `detect_class_noise_combined(df, config, alpha, k_neighbors, prepare_features)` (chạy cả 3 rồi gộp; `prepare_features`
     = cap + log chỉ cho Distance và Ensemble). **Cách hiểu "công tắc / pha trộn" là của mình (kế hoạch chỉ ghi 1 dòng) — đối chiếu lại với thầy.**
     α KHÔNG chọn ở đây (việc của mục 5: chọn trên 1 seed rồi giữ cố định). Chưa nối vào `app.py`/giao diện (mục 6).
+    **THỰC NGHIỆM ĐẦY ĐỦ (mục 5) KHÔNG ỦNG HỘ bộ kết hợp:** thua đối chứng `naive_cv`, không hơn cách chỉ cắt top-K theo điểm của Confident Learning, α gần như vô nghĩa; xem mục 5 trước khi trích dẫn.
+  - `ensemble_diverse.py` — **MỚI (22/11/2026, kế hoạch mục 7) — ENSEMBLE 5 HỌ**, làm lại `ensemble_based.py` (bản cũ GIỮ NGUYÊN làm đối chứng):
+    `detect_class_noise_ensemble_diverse(df, config, cv_folds=5, random_state=42, min_votes=3, balance_thresholds=True)` -> `EnsembleDiverseResult(findings, diagnostics, scores)`.
+    (1) 5 họ đều có `predict_proba`: LogisticRegression, GaussianNB, KNeighbors (k=15), MLP (1 lớp 64, early stopping), HistGradientBoosting
+    (`make_classifiers()`); KNeighbors cùng "họ láng giềng" với Mutual k-NN, HistGradientBoosting cùng "họ cây" với Random Forest — mục 11 từng LOẠI 2 họ này vì sợ trùng
+    góc nhìn, kế hoạch mục 7 đưa lại nên có `pairwise_agreement` để đo trùng thật. (2) BỎ `class_weight="balanced"` và bỏ ép tiên nghiệm đều của GaussianNB.
+    (3) CÂN HAI LOẠI LỖI bằng ngưỡng (`balanced_predictions()`): 2 lớp -> chọn ngưỡng cho TỪNG mô hình để tỉ lệ dương giả = tỉ lệ âm giả (điểm EER trên ROC, xác suất out-of-fold so với
+    nhãn ghi, lớp hiếm là "dương"); nhiều lớp -> argmax p(c)/tần suất(c). **CHƯA đọc bài Khoshgoftaar 2005**: đây là cách hiểu "cân 2 loại lỗi" của dự án, chưa kiểm là đúng từng chi tiết.
+    (4) `min_votes` 3/5, 4/5, 5/5 (số mô hình phản đối nhãn ghi để gắn cờ). Điểm cho MỌI dòng: `scores.suspicion` = trung bình 5 mô hình của (1 − P(nhãn ghi)) (bỏ phiếu mềm, liên tục, dùng xếp
+    hạng) + `scores.votes` (phiếu cứng 0..5) + `suggested_labels`. Chẩn đoán: accuracy / mức vượt mốc từng mô hình (argmax THUẦN, không qua ngưỡng cân bằng để so được với baseline), `best_excess_over_baseline`,
+    `thresholds`, `pairwise_agreement` (ma trận 5×5 tỉ lệ dự đoán giống nhau) + `mean_pairwise_agreement`, `vote_distribution`. 37 kiểm tra đơn vị đạt (ngưỡng EER dò tay, luật p/prior,
+    tập cờ 5/5 ⊆ 4/5 ⊆ 3/5, ma trận đa dạng khớp tính tay...). `combined.py::from_ensemble_diverse()` nối vào bộ kết hợp (thay đúng chỗ Ensemble cũ).
+    **Chạy chậm hơn Ensemble cũ** (có MLP, KNN, HistGradientBoosting); chưa nối vào `app.py`/giao diện.
   - `ensemble_based.py` — **MỚI, thuật toán DETECT thứ 3** cho Class noise,
     theo paper **N29** trong Bảng 6 Gupta & Gupta (2019) -- nhóm "Ensemble
     based" (Khoshgoftaar, Zhong, Joshi, 2005, "Enhancing software quality
@@ -2170,25 +2183,73 @@ từ 21/11 — dùng lại, không viết mới.
    (c) so với Distance/Ensemble không công bằng về số dòng (chúng cờ 225–657 dòng, K của chúng không bị cắt), đừng trích như "kết hợp thắng Distance/Ensemble";
    (d) điểm Ensemble chỉ có 4 mức nên đóng góp xếp hạng thô — kế hoạch mục 7 (5 họ có xác suất) sẽ cải thiện;
    (e) `k="auto"` cho Distance chọn k=3 trên Car (xem mục 2), có thể làm Distance yếu hơn mức có thể; (f) α chưa được chọn theo giao thức nên các số theo α chỉ để xem xu hướng.
-5. Thực nghiệm — mở rộng `evaluate_class_noise_multiseed.py`:
-   - [ ] thêm bộ Car Evaluation `data/car_evaluation.csv` (nhãn sinh từ bộ luật DEX → đúng 100%;
+   **(g) CẢI CHÍNH SAU MỤC 5:** kết quả "kết hợp F1 0,854 so với Confident Learning 0,713" trên Car KHÔNG tổng quát hoá khi chạy 4 bộ x 4 seed giữ lại — xem mục 5 (bộ kết hợp thua `naive_cv` và không hơn cách cắt top-K theo điểm của Confident Learning).
+5. Thực nghiệm — mở rộng `evaluate_class_noise_multiseed.py` — ĐÃ CHẠY XONG (22/11/2026): 4 bộ x 5 seed x 3 kiểu nhiễu = 60 ô, 900 bản ghi.
+   **Thiết lập:** harness v2 ghi `data/class_noise_multiseed_v2.jsonl` (+ điểm từng dòng ở `data/class_noise_scores_v2/`, git bỏ qua, ~35 MB, sinh lại được);
+   `summarize_class_noise_multiseed.py` ghi báo cáo đầy đủ `data/class_noise_experiment_summary.md` (bảng theo từng bộ x kiểu nhiễu, Wilcoxon, downstream, biến thể, cổng, thời gian);
+   `analyze_class_noise_same_k.py` làm phân tích "cắt cùng K". Bộ dữ liệu: Car (1.728 dòng, 2 lớp, 7,75% hiếm, nhãn gốc đúng 100%), Adult (mẫu 30.000 dòng, 6 cột số), dữ liệu thầy (mẫu 30.000/588.393
+   dòng, 3 cột yếu), Credit Card (mẫu 30.000 dòng gồm đủ 492 gian lận => 1,64%, cao hơn 0,17% của bộ gốc). Nhiễu: A 10% (đồng đều), B 30% (lớp hiếm <-> lớp đông), IDN 10% (phụ thuộc đặc trưng, SINH BẰNG
+   HistGradientBoosting nên thiên vị có lợi cho đối chứng naive_cv). Chia 70/30 phân tầng, nhiễu chỉ cấy vào train. Giao thức: α chọn CHỈ trên seed 0, mọi so sánh chỉ trên seed 1–4 (12 cặp mỗi bộ,
+   48 cặp gộp; các cặp trong cùng bộ KHÔNG độc lập hoàn toàn). Đặc trưng theo luồng web: Confident Learning dùng giá trị thô, các phương pháp còn lại dùng cap + log.
+   **KẾT QUẢ CHÍNH — ĐÓNG GÓP "BỘ KẾT HỢP" KHÔNG ĐƯỢC SỐ LIỆU ỦNG HỘ:**
+   (1) *α không có ý nghĩa:* F1 seed 0 theo α = 0 / 0,25 / 0,5 / 0,75 / 1 là 0,6390 / 0,6391 / 0,6395 / 0,6396 / 0,6398 (chênh 0,0008: α=1 được chọn nhưng thực chất là hoà). Ensemble cũ bị cổng loại ở
+       100% ô của Car, dữ liệu thầy, Credit Card và 33% ô của Adult; Confident Learning chỉ bị loại 8% ô Car => thường chỉ còn Confident Learning + Mutual k-NN, mà theo cách định nghĩa trọng số (q của k-NN =
+       trung bình q của các phương pháp còn lại) hai bên LUÔN chia đều dù α bao nhiêu. Bản "công tắc" và "pha trộn" gần như đồng nhất.
+   (2) *So với đối chứng sklearn thuần `naive_cv` (1 mô hình HistGradientBoosting out-of-fold) bộ kết hợp THUA có ý nghĩa:* gộp 48 cặp, F1 −0,073 (thắng 12 / thua 36, p < 0,0001), AP −0,033 (8/40), P@K −0,022
+       (p = 0,0027). Bỏ IDN (32 cặp A + B): F1 −0,051 (12/20, p = 0,024), AP −0,037 (7/25, p = 0,0002). Thắng đủ 4/4 seed (F1) chỉ ở Car A và Adult A (3/4 ở Credit Card B); 9/12 ô thắng không quá 1 trong 4 seed.
+       Đây đúng chỗ thầy chê ("chỉ gọi model có sẵn"): đối chứng thư viện thuần là đường cơ sở rất khó thắng.
+   (3) *So với Confident Learning:* F1 +0,111 (32/48, Holm 0,0011) NHƯNG AP −0,022 (thắng 4/48) và P@K −0,016 (8/48). Phân tích cắt cùng K (K = số dòng Confident Learning tự gắn cờ; trung bình 48 ô): Precision của luật gắn
+       cờ riêng của Confident Learning = 0,531; cắt top-K theo CHÍNH điểm nghi ngờ của nó = 0,641; bộ kết hợp = 0,631; naive_cv cắt top-K = 0,649. Bộ kết hợp KÉM hơn chỉ cắt Confident Learning theo điểm của nó ở 39/48 ô
+       (hơn ở 8, bằng 1). => Phần "hơn Confident Learning về F1" gần như HOÀN TOÀN do luật confident-joint là cách CẮT danh sách kém hơn xếp hạng của chính nó (cắt theo điểm tốt hơn luật ở 34/48 ô), KHÔNG do gộp thêm
+       Mutual k-NN / Ensemble.
+   (4) *Thắng rõ về xếp hạng so với các phương pháp yếu hơn:* AP hơn Mutual k-NN +0,161 (47/1/0), ENN +0,141 (48/0/0), Ensemble cũ +0,480 (48/0/0). Về F1 hơn Mutual k-NN +0,014 (Holm 0,07) và ENN +0,013 (p = 0,16): KHÔNG có ý nghĩa.
+   (5) *Downstream (PR-AUC trên test sạch, HistGradientBoosting):* khoảng cách Oracle − nhiễu rất nhỏ ở Adult (0,014), dữ liệu thầy (0,025), Credit Card (0,036) so với Car (0,178) => mô hình bền với nhiễu ở các bộ đó, và lọc dòng bị cờ
+       thường làm TỆ đi (Adult −0,013 đến −0,123; dữ liệu thầy −0,026 đến −0,202). Chỉ Car cải thiện (+0,07 đến +0,10 khi lọc, khoảng nửa khoảng cách tới Oracle). Ngoài Car không phương pháp nào có lợi downstream ổn định.
+   (6) *Biến thể Mutual k-NN (mọi seed):* "k theo độ phủ" kém bản k=5 ở Car / Adult / dữ liệu thầy (F1 0,686 so với 0,754; 0,356 so với 0,385; 0,576 so với 0,647) nhưng TỐT hơn ở Credit Card (0,792 so với 0,742) => không có luật chọn k
+       tốt cho mọi bộ; Manhattan ≈ gốc; bỏ phiếu theo khoảng cách không tốt hơn; KHÔNG cap + log cho kết quả ≈ hoặc nhỉnh hơn (dữ liệu thầy 0,685 so với 0,647; còn lại chênh <= 0,01) => cap + log không giúp Mutual k-NN.
+   (7) *Ensemble CŨ vô dụng:* gắn cờ 308–7.833 dòng, Precision 0,06–0,33, AP gần tỉ lệ nền ở mọi bộ (bản làm lại: mục 7).
+   (8) Thời gian trung bình mỗi ô (30.000 dòng): Confident Learning 1,5–14 giây, các phương pháp còn lại < 8 giây.
+   **Hạn chế khi trích dẫn:** chỉ 4 seed giữ lại; mẫu con 30.000 dòng; IDN sinh bằng cùng họ mô hình với naive_cv; lưới α/k cố định; chỉ bài toán 2 lớp; Credit Card mẫu có 1,64% gian lận chứ không phải 0,17%; chưa chạy trên file gốc ~35 cột
+   của thầy. KHÔNG nên viết "bộ kết hợp vượt các phương pháp thành phần" — số liệu không ủng hộ. Có thể viết: các thành phần bổ sung nhau yếu, đối chứng sklearn thuần rất mạnh, và luật CẮT danh sách quan trọng không kém điểm xếp hạng.
+   **Hướng nên thử tiếp (CHƯA làm; nên đánh giá trên seed MỚI 5–9 để không tinh chỉnh theo seed đã xem):** (a) cắt danh sách theo xếp hạng với K = số dòng nhãn sai ước lượng từ ma trận đếm hiệu chỉnh (mục 3) thay cho luật
+   confident-joint; (b) cho k-NN một trọng số độc lập với q của các phương pháp khác để α có tác dụng; (c) thay Ensemble cũ bằng Ensemble 5 họ (mục 7), vì Ensemble cũ gần như luôn bị cổng loại nên bộ kết hợp thực chất chỉ có 2 thành phần.
+   - [x] thêm bộ Car Evaluation `data/car_evaluation.csv` (nhãn sinh từ bộ luật DEX → đúng 100%;
          1.728 dòng = mọi tổ hợp 4×4×4×3×3×3, không trùng). Đổi chữ → số theo thứ tự: buying/maint
          low=1 med=2 high=3 vhigh=4; doors 2/3/4/5more=2/3/4/5; persons 2/4/more=2/4/5; lug_boot
          small/med/big=1/2/3; safety low/med/high=1/2/3. Gộp 2 nhãn THEO THỨ TỰ: unacc+acc=0 (1.594),
          good+vgood=1 (134, ~7,8%). KHÔNG gộp lệch thứ tự (vd good+unacc) vì làm hỏng phép thử;
-   - [ ] thêm phương pháp: ENN k = 3 (đường cơ sở), combined (công tắc + pha trộn), các biến thể ở 2–3;
-   - [ ] lưu điểm từng phương pháp ra đĩa (gộp lại không phải chạy lại); lưu mức vượt mốc, MCC, PR-AUC;
-   - [ ] chạy 5 seed; script tổng hợp mean ± std + kiểm định Wilcoxon bắt cặp.
+   - [x] thêm phương pháp: ENN k = 3 (đường cơ sở), combined (công tắc + pha trộn), các biến thể ở 2–3;
+   - [x] lưu điểm từng phương pháp ra đĩa (gộp lại không phải chạy lại); lưu mức vượt mốc (MCC / PR-AUC của mô hình CHƯA lưu);
+   - [x] chạy 5 seed; script tổng hợp mean ± std + kiểm định Wilcoxon bắt cặp.
 6. Web:
    - [ ] route + giao diện "Kết hợp (tự chọn)": hiện mức vượt mốc, phương pháp được tin, bảng Top-K;
    - [ ] sửa luật cảnh báo theo mức vượt mốc (bỏ ngưỡng 30%);
    - [ ] thay nút "Giảm cột tự động" bằng 2 lựa chọn "Giảm số cột" / "Không giảm số cột" (xem mục 1) +
          báo cáo các cột bị bỏ ở bước lọc cột không dùng nhãn (bỏ vì luật nào, trùng với cột nào);
    - [ ] (nếu kịp) chạy nền + thanh tiến độ.
-7. (Nếu còn giờ) Ensemble 5 họ: LogisticRegression, GaussianNB, KNeighborsClassifier, MLPClassifier,
-   HistGradientBoosting; bỏ `balanced`; chỉnh ngưỡng từng mô hình cho cân 2 loại lỗi (Khoshgoftaar
-   2005); mức bỏ phiếu 3/5 – 4/5 – 5/5; đo độ đa dạng (tỷ lệ đoán giống nhau từng cặp).
-   Không kịp → giữ bản cũ làm đối chứng, thiết kế mới đưa vào hướng phát triển.
+7. (Nếu còn giờ) Ensemble 5 họ — ĐÃ CODE + TEST (22/11/2026, user bảo bỏ qua mục 6 làm mục 7; CHƯA đánh giá chính thức, chưa nối vào web):
+   - [x] LogisticRegression, GaussianNB, KNeighborsClassifier, MLPClassifier, HistGradientBoosting (`class_noise/ensemble_diverse.py`);
+   - [x] bỏ `balanced`; chỉnh ngưỡng từng mô hình cho cân 2 loại lỗi (cách hiểu của dự án, chưa đọc bài Khoshgoftaar 2005);
+   - [x] mức bỏ phiếu 3/5 – 4/5 – 5/5 (`min_votes`); đo độ đa dạng (ma trận tỉ lệ đoán giống nhau từng cặp);
+   - [x] đánh giá chính thức so với Ensemble cũ trên đủ 4 bộ x 5 seed x 3 kiểu nhiễu (ĐÃ CHẠY, kết quả ngay bên dưới; báo cáo đầy đủ ở `data/class_noise_experiment_summary.md` mục 8): harness đã đăng ký `--methods ...,ensemble5` (KHÔNG nằm trong mặc định; tự sinh thêm `ensemble5_v4`, `ensemble5_v5`
+     từ số phiếu đã lưu và `combined5_a<alpha>` = bộ kết hợp thay Ensemble cũ bằng bản mới), chạy SAU khi mục 5 xong để khỏi ghi chồng cùng file.
+   **Xem sơ bộ trên Car (6 ô = seed 1, 2 x 3 kiểu nhiễu, 1 bộ dữ liệu, KHÔNG phải đánh giá):** thước đo XẾP HẠNG cải thiện rất mạnh so với Ensemble cũ: AP từ 0,17–0,21 lên 0,74–0,98, P@K từ 0,19–0,27
+   lên 0,57–0,94 (điểm cũ chỉ có 4 mức nên xếp hạng gần như ngẫu nhiên, điểm mềm của 5 mô hình mịn). Còn DANH SÁCH GẮN CỜ theo phiếu vẫn gắn quá nhiều: 3/5 cờ 236–416 dòng so với 56–121 dòng thật
+   (Precision 0,21–0,28, F1 ≈ bản cũ), vì ngưỡng cân FPR = FNR chấp nhận nhiều dương giả khi lớp hiếm ít; 5/5 gọn lại (cờ 64–113, Precision 0,34–0,59, Recall 0,32–0,68). Độ đa dạng: dự đoán giống nhau
+   trung bình 0,66–0,78; MLP có mức vượt mốc ÂM ở các ô nhiễu B và IDN (−0,03 đến −0,18). **Hệ quả cho bộ kết hợp:** nếu để α lớn thì Ensemble mới thành phương pháp "nặng nhất" và K lấy từ số cờ của nó
+   (366–416 dòng) nên `combined5_a1` có Precision 0,29–0,33 — luật "K = số cờ của phương pháp nặng nhất" dễ vỡ khi phương pháp đó gắn cờ quá tay.
+   **ĐÁNH GIÁ CHÍNH THỨC (22/11/2026, cùng 60 ô và cùng nhiễu với mục 5; so trên seed 1–4, 48 cặp gộp; thiết kế Ensemble 5 họ KHÔNG chỉnh theo kết quả nào — chỉ có xem sơ bộ trên Car seed 1, 2 ở trên):**
+   (1) *Xếp hạng cải thiện rất mạnh so với Ensemble cũ:* AP +0,506 (thắng 48/48), P@K +0,422 (48/48), p < 0,0001. So với `naive_cv`: AP −0,006 (25/23, p = 0,26) và P@K −0,004 (p = 0,36) => KHÔNG khác biệt có ý nghĩa; so với
+       Confident Learning: AP +0,004 (p = 0,27), P@K +0,001 (p = 0,89) => cũng ngang nhau; so với Mutual k-NN: AP +0,188 (47/48), P@K +0,102. Tức điểm mềm của 5 họ xếp hạng ngang một mô hình sklearn thuần.
+   (2) *Nhưng DANH SÁCH GẮN CỜ vẫn kém, thậm chí kém Ensemble cũ ở mức 3/5:* F1 −0,054 so với bản cũ (thắng 19 / thua 29, p = 0,002); ở mức 5/5 −0,012 (p = 0,93, ngang). F1 thua `naive_cv` ở CẢ 48/48 cặp (−0,455). Lý do: gắn cờ quá tay —
+       mức 3/5 cờ 313 dòng (Car), 6.435 (Adult), 7.868 (dữ liệu thầy), 6.958 (Credit Card) trong khi số dòng thật bị đảo là ~56–121, ~2.100–3.034, ~322–2.100, ~206–2.100. Ngưỡng cân FPR = FNR tự nó chấp nhận nhiều dương giả khi lớp hiếm ít;
+       tăng lên 4/5, 5/5 chỉ giảm số cờ chứ không đưa F1 lên mức `naive_cv`.
+   (3) *Độ đa dạng (tỉ lệ dòng 2 mô hình dự đoán trùng, trung bình các cặp):* Car 0,730; Adult 0,867 (gần như cùng ý kiến); dữ liệu thầy 0,631; Credit Card 0,610. *Mức vượt mốc từng mô hình:* GaussianNB TỆ hơn đoán bừa ở dữ liệu thầy (−0,48) và
+       Credit Card (−0,63) (xác suất quá cực đoan); MLP âm ở Car (−0,07); ở dữ liệu thầy (3 cột yếu) mọi mô hình ≈ 0 => Ensemble 5 họ bị cổng của bộ kết hợp loại ở 12% số ô.
+   (4) *Bộ kết hợp dùng Ensemble 5 họ* (α chọn trên seed 0 = 0; K lấy từ Confident Learning ở 98% ô): hơn bộ kết hợp dùng Ensemble cũ một chút NHƯNG nhất quán — F1 +0,007 (thắng 35 / hoà 10 / thua 3), AP +0,012 (40/6/2), P@K +0,007 (34/7/7) —
+       nhưng VẪN THUA `naive_cv`: F1 −0,066 (12/36, p = 0,0001), AP −0,021 (12/36, p = 0,0008), P@K −0,015 (p = 0,027); và vẫn không hơn chính xếp hạng của Confident Learning: AP −0,011 (10/38), P@K −0,009 (10/1/37), F1 +0,118 (32/48).
+   **Kết luận cho mục 7:** Ensemble 5 họ là bản làm lại ĐÁNG KỂ về chất lượng xếp hạng (bản cũ gần như ngẫu nhiên), nhưng không làm thay đổi kết luận của mục 5: bộ kết hợp vẫn không vượt đối chứng `naive_cv`. Phần cần sửa tiếp là LUẬT CẮT
+   danh sách (xem "Hướng nên thử tiếp" ở mục 5). Tiếp theo không nên lại thêm họ mô hình; nên dùng điểm mềm này với K lấy từ tỉ lệ nhãn sai ước lượng (mục 3). Chưa nối vào web.
 8. Mỗi cụm code xong: test → ghi file này → push.
 9. Sửa bài:
    - [ ] Mở đầu: bỏ câu "khoá luận không đưa ra thuật toán mới", viết lại đóng góp;

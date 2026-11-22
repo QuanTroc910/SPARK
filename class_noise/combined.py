@@ -163,6 +163,25 @@ def from_ensemble(result) -> MethodOutput:
     )
 
 
+def from_ensemble_diverse(result) -> MethodOutput:
+    """Từ kết quả của ensemble_diverse.detect_class_noise_ensemble_diverse (Ensemble 5 họ, kế hoạch mục 7).
+
+    Dùng ĐIỂM MỀM (trung bình 1 - P(nhãn ghi) của 5 mô hình) để xếp hạng, và luật phiếu cứng min_votes để
+    gắn cờ. Mang tên "ensemble_based" để thay đúng chỗ của Ensemble cũ trong thứ tự phá hoà trọng số.
+    Mức vượt mốc = của mô hình tốt nhất tính bằng argmax thuần (không qua ngưỡng cân bằng).
+    """
+    s = result.scores
+    return MethodOutput(
+        name="ensemble_based",
+        row_numbers=s.row_numbers,
+        scores=np.asarray(s.suspicion, dtype=float),
+        flagged=_flag_mask(s.row_numbers, result.findings),
+        suggested_labels=s.suggested_labels,
+        quality=float(result.diagnostics.best_excess_over_baseline),
+        note=f"Ensemble 5 họ, bỏ phiếu {result.diagnostics.min_votes}/5",
+    )
+
+
 # --------------------------------------------------------------------------------------
 # Lõi: gộp
 # --------------------------------------------------------------------------------------
@@ -349,6 +368,8 @@ def detect_class_noise_combined(
     prepare_features: hàm (df, feature_columns) -> df dùng làm tiền xử lý cho Mutual k-NN và
         Ensemble (vd cap outlier + log như web); Confident Learning luôn dùng df nguyên (cây
         quyết định không cần, xem CLAUDE.md kế hoạch mục 3). None = không tiền xử lý.
+        Lưu ý: `cap_outliers()` / `log_transform()` của feature_selection.py làm việc trên bảng
+        DẠNG CHUỖI như `load_data()` trả về (đọc `dtype=str`); đưa vào bảng đã là số sẽ lỗi kiểu dữ liệu.
     """
     # Import trong hàm để module này nhẹ khi chỉ dùng combine_methods với điểm đã lưu.
     from .confident_learning import _prepare_usable_subset, detect_class_noise
