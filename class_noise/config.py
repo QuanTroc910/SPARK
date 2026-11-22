@@ -24,6 +24,18 @@ class ClassNoiseConfig:
         "pred_probs" trung thực cho MỌI dòng (xem docstring
         get_out_of_fold_probs() trong confident_learning.py).
     random_state: seed cố định để kết quả tái lập y hệt giữa các lần chạy.
+    min_samples_leaf: số dòng tối thiểu ở MỖI lá của cây (chỉ Confident Learning dùng).
+        Mặc định 5 thay vì 1: nhãn có nhiễu mà để cây mọc tới từng dòng lẻ thì cây
+        "học thuộc" luôn cả nhãn sai, xác suất dự đoán bị đẩy về 0/1 quá cực đoan --
+        trong khi Confident Learning cần xác suất mượt, phản ánh đúng độ tự tin.
+    balanced: True = Random Forest dùng class_weight="balanced" (bù cho lớp hiếm); False =
+        không bù (MẶC ĐỊNH). Bù thì xác suất bị đẩy lên cho lớp hiếm, làm Confident Learning
+        gắn cờ quá tay và ước lượng tỷ lệ nhãn sai bị cao. Đã đo (cấy nhiễu có kiểm soát, 3 seed):
+        với min_samples_leaf=5 (mặc định) tắt bù tốt hơn hoặc ngang bù ở cả 7 kịch bản trên Car,
+        Adult, Credit Card; chênh lớn nhất ở nhiễu đồng đều trên Credit Card 5% (F1 0,715 so với
+        0,449). Với min_samples_leaf=1 thì KHÔNG đúng ở mọi nơi: Credit Card nhiễu lớp hiếm 10%
+        bật bù lại tốt hơn (0,786 so với 0,740). Chỉ Confident Learning dùng. Số liệu đầy đủ:
+        CLAUDE.md, kế hoạch mục 3.
     """
 
     label_column: str
@@ -31,3 +43,5 @@ class ClassNoiseConfig:
     n_estimators: int = 300
     cv_folds: int = 5
     random_state: int = 42
+    min_samples_leaf: int = 5
+    balanced: bool = False

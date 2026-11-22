@@ -115,7 +115,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
   toán **Confident Learning** (Northcutt et al., JAIR 2021) với **Random
   Forest** (scikit-learn) làm model nền:
   - `config.py` — `ClassNoiseConfig` (dataclass: `label_column`,
-    `feature_columns`, `n_estimators=300`, `cv_folds=5`, `random_state=42`).
+    `feature_columns`, `n_estimators=300`, `cv_folds=5`, `random_state=42`, + **mục 3**:
+    `min_samples_leaf=5`, `balanced=False` — chỉ Confident Learning dùng, xem bullet bên dưới).
     Khác attribute noise, class noise là bài toán supervised học CÓ GIÁM
     SÁT — người dùng PHẢI tự khai cột nào là nhãn, cột nào là đặc trưng
     (hệ thống không tự suy ra được, giống tinh thần rule liên cột ở mục 7).
@@ -140,6 +141,14 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     chat, dữ liệu đó chỉ có 3 đặc trưng, recall lớp hiếm ~30%, thấp hơn hẳn
     khi thử trên 2 bộ Kaggle khác có nhiều đặc trưng hơn — KHÔNG phải lỗi
     thuật toán, đã kiểm chứng bằng thí nghiệm có đối chứng).
+  - **CẢI TIẾN `confident_learning.py` (22/11/2026, kế hoạch mục 3)**: (1) Random Forest có `min_samples_leaf` (mặc định 5) và
+    `balanced` (mặc định **False**, trước đây luôn bật `class_weight="balanced"`); (2) vector hoá 2 vòng lặp từng dòng (kết quả giống
+    hệt bản cũ, đã đối chiếu); (3) `diagnostics` thêm `excess_over_baseline` (mức vượt mốc), `mcc`, `pr_auc_per_class`/`pr_auc_macro`,
+    `estimated_noise_rate`, `estimated_label_errors`, `calibrated_joint` (Q̂), `params`, `warnings`; (4) `result.scores` (`ClassNoiseScores`)
+    cho MỌI dòng: `suspicion` = 1 − P(nhãn ghi), `suggested_labels` (nhãn khác nhãn ghi có xác suất cao nhất), `confident_labels`;
+    (5) **ước lượng tỷ lệ nhãn sai** bằng hiệu chỉnh ma trận đếm đúng theo Northcutt 2021 (`_calibrated_joint()`: kéo mỗi hàng về số dòng
+    mang nhãn ghi đó rồi chia tổng; tỷ lệ = 1 − trace(Q̂)); (6) docstring "dòng thật sự thuộc lớp" → "dòng mang nhãn lớp"; chỉ 1 lớp → ValueError.
+    `app.py` (route single_learning) vẫn đọc các trường cũ, chưa trả các trường mới ra JSON (việc của mục 6).
   - `distance_based.py` — **MỚI, thuật toán DETECT thứ 2** cho Class noise,
     theo paper **N13** trong Bảng 6 Gupta & Gupta (2019) -- nhóm
     "Distance based" (Liu & Zhang, 2012, "Noisy data elimination using
@@ -160,6 +169,37 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     model để đo accuracy). `_prepare_usable_subset()` CỐ TÌNH lặp lại logic
     lọc dòng y hệt `confident_learning.py` (không import dùng chung) để 2
     module độc lập nhau, không bị ràng buộc chéo khi sửa sau này.
+    **CẢI TIẾN (22/11/2026, kế hoạch mục 2) — viết lại bằng numpy, mặc định cho ra ĐÚNG kết quả bản cũ:**
+    `detect_class_noise_distance(df, config, k=5 | "auto", disagreement_threshold=0.5, *, metric="euclidean"|"manhattan",
+    weighting="count"|"distance", pca=False|"auto"|True, keep_binary=True, coverage_target=0.9, k_candidates=K_CANDIDATES)`.
+    (1) **Cột nhị phân** (đúng 2 giá trị) KHÔNG z-score mà đưa về 0/1 (`_scale_features`): z-score làm cột nhị phân lệch (vd giá trị
+    hiếm thành ~9,95) nên át cột số; kết quả không phụ thuộc cách mã hoá (0/1 hay 5/9). (2) **Điểm cho MỌI dòng**: `result.scores`
+    (`DistanceNoiseScores`: `row_numbers`, `disagreement` (NaN = không có láng giềng lẫn nhau), `n_mutual`, `suggested_labels`) —
+    `findings` chỉ là các dòng điểm > ngưỡng; để so các ngưỡng 0,5/0,8/1,0 không phải chạy lại. (3) **`k="auto"`**: tìm láng giềng 1 lần
+    với k lớn nhất (15), lấy k NHỎ NHẤT trong {3,5,7,9,11,15} có độ phủ >= `coverage_target` (không k nào đạt → lấy k lớn nhất + cảnh báo);
+    chẩn đoán có `k_mode`, `coverage`, `coverage_by_k`, `warnings`. Số nguyên vẫn đặt tay được. (4) Biến thể: `weighting="distance"`
+    (phiếu = 1/(d + eps), eps = 0,1 × trung vị khoảng cách dương trên các cạnh lẫn nhau), `metric="manhattan"`, `pca` (95% biến thiên;
+    `"auto"` chỉ bật khi số thành phần < 1/2 số cột). Chẩn đoán ghi `metric`, `weighting`, `binary_columns`, `pca`. (5) **Sửa lỗi cũ**: nhãn
+    gợi ý trước đây đếm phiếu trên TẤT CẢ láng giềng nên nhiều lớp có thể ra nhãn gợi ý TRÙNG nhãn ghi (11 dòng trên Car 5%); nay chỉ bỏ
+    phiếu giữa các nhãn KHÁC nhãn ghi, hoà phiếu → nhãn nhỏ nhất (lặp lại được). (6) Tìm láng giềng loại chính nó theo CHỈ SỐ (không
+    theo "cột đầu") nên đúng cả khi có điểm trùng hệt. `app.py`, `run_class_noise.py`, các script `evaluate_*` vẫn gọi `k=<số>` như cũ.
+    `run_class_noise.py` thêm `--k auto`, `--metric`, `--weighting`, `--pca`.
+  - **CẢI TIẾN `ensemble_based.py` (22/11/2026, kế hoạch mục 4)**: thêm `result.scores` (`EnsembleNoiseScores`: `disagreement` cho MỌI dòng, chỉ
+    nhận 0/⅓/⅔/1 nên rất nhiều dòng hoà điểm; `suggested_labels`), `diagnostics.per_classifier_excess` + `best_excess_over_baseline`
+    (mức vượt mốc từng classifier và của classifier tốt nhất), vector hoá vòng lặp. **Sửa lỗi cũ**: nhãn gợi ý đếm phiếu cả phiếu trùng
+    nhãn ghi nên nhiều lớp có thể ra gợi ý TRÙNG nhãn ghi (cùng lỗi đã sửa ở Distance); nay chỉ bỏ phiếu giữa nhãn khác nhãn ghi, hoà → nhãn
+    có chỉ số nhỏ nhất. Tập dòng gắn cờ và `disagree_ratio` KHÔNG đổi (32 kiểm tra đạt, giống bản cũ từng dòng).
+  - `combined.py` — **MỚI (22/11/2026, kế hoạch mục 4) — PHƯƠNG PHÁP KẾT HỢP, đóng góp riêng của đề tài**: gộp 3 phương pháp thành 1 danh sách.
+    (1) mỗi phương pháp đổi điểm sang HẠNG PHẦN TRĂM (hoà → hạng trung bình); (2) CỔNG CHẤT LƯỢNG: Confident Learning và Ensemble bị loại
+    nếu mức vượt mốc <= 0 (Ensemble lấy của classifier tốt nhất), Mutual k-NN luôn có mặt (không có mô hình để đo); (3) trọng số theo tham số
+    `alpha`: `w = (1−α)·(1/số phương pháp bật) + α·(q/Σq)` (k-NN lấy q = trung bình q các phương pháp còn lại) — **α = 0 là bản "công tắc"**,
+    α > 0 là bản "pha trộn"; (4) điểm kết hợp = trung bình có trọng số các hạng, chỉ tính phương pháp CÓ ý kiến về dòng đó; (5) **K = số dòng
+    phương pháp có trọng số LỚN NHẤT tự gắn cờ** (hoà trọng số → thứ tự cố định single, distance, ensemble), trả K dòng điểm cao nhất kèm
+    `supporters` (phương pháp cùng gắn cờ), `ranks` từng phương pháp, nhãn gợi ý bỏ phiếu có trọng số, `diagnostics.methods` (trọng số, bật/tắt + lý do).
+    API: `MethodOutput`, `from_single/from_distance/from_ensemble`, `combine_methods(outputs, alpha, recorded_labels)` (gộp từ điểm đã lưu,
+    không chạy lại), `detect_class_noise_combined(df, config, alpha, k_neighbors, prepare_features)` (chạy cả 3 rồi gộp; `prepare_features`
+    = cap + log chỉ cho Distance và Ensemble). **Cách hiểu "công tắc / pha trộn" là của mình (kế hoạch chỉ ghi 1 dòng) — đối chiếu lại với thầy.**
+    α KHÔNG chọn ở đây (việc của mục 5: chọn trên 1 seed rồi giữ cố định). Chưa nối vào `app.py`/giao diện (mục 6).
   - `ensemble_based.py` — **MỚI, thuật toán DETECT thứ 3** cho Class noise,
     theo paper **N29** trong Bảng 6 Gupta & Gupta (2019) -- nhóm "Ensemble
     based" (Khoshgoftaar, Zhong, Joshi, 2005, "Enhancing software quality
@@ -209,6 +249,10 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     `log_transform()` (Bước 3b — `ln(x+1)` cho cột KHÔNG có giá trị âm, giữ
     nguyên cột có âm; bản đầu lặp Python từng dòng GẦN TREO MÁY trên 284k
     dòng, đã sửa sang gán vector hoá, còn 0.53s).
+  - `preprocess.py` — **MỚI (22/11/2026, kế hoạch mục 1)**: pipeline chuẩn bị chung, KHÔNG dùng nhãn để chọn cột:
+    `prepare_for_class_noise(df, PreprocessConfig)` -> `PreparedData` (df chỉ gồm nhãn + cột số, giữ index gốc; `groups`
+    nhóm dòng trùng; `expand_row_numbers()` trả kết quả về cả nhóm) + `PreprocessReport.to_dict()` (cột bị bỏ kèm lý do,
+    dòng bị loại, lớp ít dòng, nhóm mâu thuẫn, cảnh báo). Chưa nối vào `app.py`.
   Dùng lại `attribute_noise/pipeline.py::load_data()` để đọc file (không
   viết lại hàm đọc CSV/Excel riêng). Có `demo_class_noise.py` ở gốc repo để
   chạy thử CLI, và 1 loạt file `demo_*.py` KHÁC (`demo_model_don_gian.py`,
@@ -325,10 +369,12 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     (áp dụng cho CẢ 2 method, cùng 1 validate), báo lỗi nêu đúng tên cột
     chữ nếu sai (cùng lỗi "0 dòng dùng được" như `reduce-features`, lúc đầu
     CHỈ fix ở `reduce-features`, sau phát hiện endpoint này cũng dính y hệt
-    vì người dùng tick tay feature chữ được, đã fix bổ sung). **LUÔN** chạy
+    vì người dùng tick tay feature chữ được, đã fix bổ sung). Chạy
     `cap_outliers()` + `log_transform()` (Bước 3, xem `feature_selection.py`)
-    lên `feature_columns` TRƯỚC khi chạy — áp dụng cho CẢ 2 method, không
-    phải tuỳ chọn, vì 2 hàm này chỉ sửa giá trị, không xoá dòng/cột.
+    lên `feature_columns` TRƯỚC khi chạy — **[ĐỔI 22/11/2026, mục 3] CHỈ cho `distance_based` và `ensemble_based`; `single_learning`
+    dùng giá trị NGUYÊN** (cây quyết định: log là phép đơn điệu nên không đổi gì, cap có thể xoá tín hiệu ở giá trị cực đoan; đã đo
+    raw/cap/cap+log trên Car, Adult, Credit Card, 3 seed: chênh trong vòng dao động giữa các seed). Câu mô tả ở `workspace.html`
+    (`#panel-3-class-desc`) đã sửa cho khớp.
   - `POST /api/class-noise/reduce-features` — **MỚI**: chạy
     `rank_by_importance()` → `select_by_elbow()` → `filter_correlated()`
     (xem `class_noise/feature_selection.py` ở mục kiến trúc trên) trên TẤT
@@ -2035,37 +2081,95 @@ từ 21/11 — dùng lại, không viết mới.
 
 **Việc của Claude (code), theo thứ tự**
 1. Pipeline chuẩn bị chung, KHÔNG dùng nhãn — file mới `class_noise/preprocess.py`:
-   - [ ] chuẩn hoá cột nhãn (cắt khoảng trắng); báo lớp có ít dòng hơn số fold;
-   - [ ] loại dòng có ô trống ở cột đã chọn, báo rõ số dòng bị loại;
-   - [ ] bỏ cột hằng; cột gần như toàn ô trống (mặc định > 50%); cột định danh (số nguyên/chữ có
+   - [x] chuẩn hoá cột nhãn (cắt khoảng trắng); báo lớp có ít dòng hơn số fold;
+   - [x] loại dòng có ô trống ở cột đã chọn, báo rõ số dòng bị loại;
+   - [x] bỏ cột hằng; cột gần như toàn ô trống (mặc định > 50%); cột định danh (số nguyên/chữ có
          ≥ 95% giá trị khác nhau — KHÔNG áp cho cột số thực);
-   - [ ] lọc tương quan |r| ≥ 0,8, chọn cột giữ KHÔNG dùng nhãn (ít ô trống hơn → ít tương quan với
+   - [x] lọc tương quan |r| ≥ 0,8, chọn cột giữ KHÔNG dùng nhãn (ít ô trống hơn → ít tương quan với
          các cột khác hơn → đứng trước); viết lại `filter_correlated()`;
-   - [ ] giảm số cột theo nhãn (Random Forest + điểm gãy, đúng bước 1 thầy yêu cầu) thành LỰA CHỌN của
+   - [x] (phần BACKEND xong; 2 nút trên giao diện còn ở mục 6) giảm số cột theo nhãn (Random Forest + điểm gãy, đúng bước 1 thầy yêu cầu) thành LỰA CHỌN của
          người dùng: 2 nút "Giảm số cột" / "Không giảm số cột", mặc định "Không giảm". Khi chọn "Giảm"
          mà mức vượt mốc của mô hình thấp hoặc lớp hiếm quá ít dòng → hiện cảnh báo nhãn có thể chưa đủ
          tin cậy để chọn cột theo nhãn;
-   - [ ] gom dòng trùng theo cột đặc trưng: nhóm khác nhãn → báo "dòng mâu thuẫn"; nhóm cùng nhãn →
+   - [x] gom dòng trùng theo cột đặc trưng: nhóm khác nhãn → báo "dòng mâu thuẫn"; nhóm cùng nhãn →
          gộp 1 đại diện trước khi chạy, trả kết quả về cả nhóm.
-2. Mutual k-NN (`class_noise/distance_based.py`):
-   - [ ] z-score trừ cột nhị phân (cột 2 giá trị giữ 0/1);
-   - [ ] trả điểm bất đồng cho MỌI dòng (không chỉ dòng > 0,5);
-   - [ ] chọn k theo độ phủ: tìm láng giềng 1 lần với k = 15, lấy k nhỏ nhất trong {3,5,7,9,11,15}
+   → ĐÃ CODE (22/11/2026, chưa nối vào web): `class_noise/preprocess.py` (`prepare_for_class_noise()`, `PreprocessConfig`,
+     `PreparedData`, `PreprocessReport`) + `feature_selection.py::filter_correlated()` viết lại tại chỗ
+     (`prioritized=False` = chọn cột KHÔNG dùng nhãn, `method="spearman"`, `return_report=True`; `prioritized=True` giữ
+     đúng hành vi cũ nên `app.py`/các script cũ không phải đổi) + `order_columns_without_labels()`.
+     Kiểm chứng: 37 kiểm tra đơn vị (nhãn, luật cột, lọc tương quan: cột giữ KHÔNG đổi khi xáo trộn nhãn, bản cũ = mới
+     trên 20 bộ ngẫu nhiên, ô trống, nhóm trùng/mâu thuẫn, giảm cột theo nhãn + cảnh báo, lỗi, JSON) + chạy 4 bộ thật:
+     Credit Card (6,2s; giữ đủ 30 cột, gộp 1.081 dòng trùng -> 283.726 dòng), Adult (bỏ 8 cột chữ; gộp 186 dòng; 40 nhóm
+     mâu thuẫn/81 dòng), Car (không đổi gì), dữ liệu thầy (111 nhóm mâu thuẫn/7.409 dòng vì chỉ có 3 đặc trưng) + Distance chạy
+     được trên dữ liệu đã chuẩn bị; route cũ `/api/class-noise/reduce-features` vẫn 200.
+     Quyết định tạm (chưa chốt với Quân): `low_margin_warning` = 20% mức vượt mốc, `min_minority_rows` = 50, định danh chỉ xét
+     từ 30 dòng; nhóm mâu thuẫn được GIỮ nguyên (không gộp). "Nhóm mâu thuẫn" KHÔNG đồng nghĩa chắc chắn sai nhãn: với
+     Adult/dữ liệu thầy đặc trưng không đủ phân biệt nên cùng đặc trưng khác nhãn là bình thường (khác Car, nhãn sinh từ luật).
+     Chưa làm: nối vào `/api/class-noise/detect` + giao diện (mục 6), mở rộng kết quả về cả nhóm trùng khi trả response.
+2. Mutual k-NN (`class_noise/distance_based.py`) — ĐÃ CODE + TEST (22/11/2026, chưa nối vào web):
+   - [x] z-score trừ cột nhị phân (cột 2 giá trị giữ 0/1);
+   - [x] trả điểm bất đồng cho MỌI dòng (không chỉ dòng > 0,5);
+   - [x] chọn k theo độ phủ: tìm láng giềng 1 lần với k = 15, lấy k nhỏ nhất trong {3,5,7,9,11,15}
          đạt ngưỡng độ phủ (mặc định 90%); người dùng vẫn sửa tay được;
-   - [ ] biến thể để đo: bỏ phiếu theo khoảng cách, khoảng cách Manhattan, PCA (tự bật khi số thành
-         phần giữ 95% biến thiên < 1/2 số cột), có/không kéo biên + log.
-3. Confident Learning (`class_noise/confident_learning.py`):
-   - [ ] bỏ kéo biên/log khỏi nhánh CL (mô hình cây không cần);
-   - [ ] Random Forest thêm `min_samples_leaf` (mặc định 5) + tham số số cây; tuỳ chọn bật/tắt `balanced`;
-   - [ ] trả mức vượt mốc, MCC, PR-AUC; trả điểm nghi ngờ MỌI dòng (1 − xác suất nhãn ghi);
-   - [ ] hiệu chỉnh ma trận đếm → ước lượng tỷ lệ nhãn sai (theo bài gốc Northcutt 2021);
-   - [ ] sửa docstring "dòng thật sự thuộc lớp" → "dòng mang nhãn lớp".
-4. Bộ kết hợp — file mới `class_noise/combined.py` (ĐÓNG GÓP CHÍNH):
-   - [ ] đổi điểm từng phương pháp về thứ hạng phần trăm;
-   - [ ] trọng số từ mức vượt mốc (mức vượt mốc ≤ 0 → loại); k-NN luôn có mặt; 2 bản: công tắc + pha trộn (α chọn trên
-         seed 0 rồi giữ cố định);
-   - [ ] K = số dòng phương pháp trọng số lớn nhất tự gắn cờ; trả Top-K kèm phương pháp nào cùng nghi
+   - [x] biến thể để đo: bỏ phiếu theo khoảng cách, khoảng cách Manhattan, PCA (tự bật khi số thành
+         phần giữ 95% biến thiên < 1/2 số cột) — đã có tham số `weighting` / `metric` / `pca`;
+   - [ ] có/không kéo biên + log: hàm detect KHÔNG tự kéo biên/log, do nơi gọi quyết định (web, bộ thí nghiệm) → đo ở mục 5.
+   Kiểm chứng: 56 kiểm tra đơn vị đạt (giống bản cũ khi tham số mặc định trên 3 bộ ngẫu nhiên; điểm MỌI dòng khớp cài đặt độc lập bằng
+   ma trận khoảng cách đầy đủ cho cả 4 tổ hợp euclid/manhattan × đếm/theo khoảng cách; bất biến mã hoá nhị phân; công thức trọng số;
+   PCA tự bật/tắt đúng; `k="auto"` khớp k nhỏ nhất khi chạy k cố định từng giá trị; điểm trùng hệt; index gốc; tham số sai). Trên Car
+   (`car_noisy_5/10.csv` + `car_noise_ground_truth.csv`) bản mới = bản cũ TỪNG DÒNG ở k=5 và k=7 (không hồi quy).
+   **Số đo thật (22/11/2026, sau cap outlier + log như web):** Credit Card 284.807 dòng × 30 cột: k=5 mất 73,4 giây (bản cũ ~82–87 giây),
+   96 dòng gắn cờ, độ phủ 92,4% (đúng số đã ghi ở mục 38); `k="auto"` thử k=3 (độ phủ 84,1% < 90%) rồi k=5 (92,4%) → chọn 5, 78,3 giây.
+   Dữ liệu thầy 588.393 dòng × 3 cột: k=5 mất 9,0 giây (độ phủ 97,3%, 14.351 dòng gắn cờ), `auto` chọn k=3 (độ phủ 94,2%, 15.134 dòng).
+   Car 5% (có đáp án, 86 dòng cấy): k=5 → 141 dòng cờ, tìm 84/86; k=7 → 162 dòng, 85/86; theo ngưỡng điểm (k=7): > 0,5 → 52% đúng,
+   ≥ 0,8 → 91% (72/79), = 1,0 → 100% (59/59). Biến thể weighting/manhattan/PCA/keep_binary khác k=7 mặc định chỉ vài dòng (TP 85–86).
+   **Hai phát hiện cần nhớ:** (1) `k="auto"` theo ĐỘ PHỦ chỉ chọn k nhỏ nhất đạt 90% nên trên dữ liệu dày (Car, độ phủ ~99% ngay ở k=3)
+   luôn ra k=3 và KÉM hơn k=5/7: Car 5% Precision 0,40 (198 dòng cờ, 80/86) so với 0,60 ở k=5 và 0,52 ở k=7. Độ phủ chỉ đảm bảo "đủ láng giềng
+   lẫn nhau để kết luận", KHÔNG đảm bảo độ chính xác; chưa đổi luật (đúng kế hoạch), cần đo ở mục 5 trên nhiều bộ + nhiều seed, và KHÔNG chọn
+   luật bằng cách nhìn đáp án của đúng file đang đánh giá (peeking). Ứng viên luật: k tối thiểu 5, hoặc đòi mỗi dòng có >= 2 láng giềng lẫn nhau.
+   (2) Car là lưới rời rạc nên 83% số dòng (1440/1728 ở k=7) bị HOÀ khoảng cách ở ranh giới top-k; láng giềng nào lọt top-k khi hoà là tuỳ
+   thứ tự nội bộ của sklearn. Lặp lại được trên cùng máy/phiên bản nhưng không "chắc chắn theo toán học"; khi báo cáo số trên Car nên nói rõ.
+3. Confident Learning (`class_noise/confident_learning.py`) — ĐÃ CODE + TEST (22/11/2026, chưa nối vào giao diện):
+   - [x] bỏ kéo biên/log khỏi nhánh CL (mô hình cây không cần) — làm ở NƠI GỌI (`app.py`, `run_class_noise.py`); hàm detect vốn không cap/log;
+   - [x] Random Forest thêm `min_samples_leaf` (mặc định 5) + tham số số cây; tuỳ chọn bật/tắt `balanced` (mặc định tắt);
+   - [x] trả mức vượt mốc, MCC, PR-AUC; trả điểm nghi ngờ MỌI dòng (1 − xác suất nhãn ghi);
+   - [x] hiệu chỉnh ma trận đếm → ước lượng tỷ lệ nhãn sai (theo bài gốc Northcutt 2021);
+   - [x] sửa docstring "dòng thật sự thuộc lớp" → "dòng mang nhãn lớp".
+   **Kiểm chứng:** 45 kiểm tra đơn vị (với `min_samples_leaf=1, balanced=True` = bản cũ từng dòng, từng margin; vector hoá = vòng lặp cũ kể cả hoà phiếu;
+   điểm/chỉ số tính lại độc lập bằng sklearn; hiệu chỉnh ma trận đếm khớp ví dụ tính tay; ước lượng nhiễu), 16 kiểm tra route `/api/class-noise/detect`
+   qua Flask test client (cả 3 phương pháp khớp gọi hàm trực tiếp), CLI chạy được.
+   **Số đo (cấy nhiễu có kiểm soát; kịch bản A = đảo đồng đều, B = đảo lớp hiếm ↔ lớp đông; 3 seed; 100 cây; Credit Card = MẪU 492 gian lận + 30.000
+   dòng bình thường = 30.492 dòng, cap tính trên cả file rồi mới lấy mẫu; Adult = 6 cột số):**
+   · *Cap/log có cần cho CL không?* F1 raw / cap / cap+log: Credit Card B10 0,785 / 0,779 / 0,778; B30 0,808 / 0,810 / 0,811; A5 0,449 / 0,446 / 0,445;
+     Adult A10 0,434 / 0,433 / 0,432; A30 0,561 / 0,562 / 0,562; Car y hệt nhau — độ lệch chuẩn giữa seed 0,002–0,027 nên KHÔNG khác biệt đo được → bỏ.
+     (Trên Car: cùng tập dòng gắn cờ và cùng accuracy, nhưng xác suất lệch tối đa 0,011 giữa raw và cap+log; nguyên nhân CHƯA tìm, chưa kiểm giả thuyết log làm tròn 4 số lẻ.)
+   · *Chọn `min_samples_leaf` × `balanced`* (F1 trung bình 3 seed; "mặc định cũ" = leaf 1 + bật bù; mặc định mới = leaf 5 + tắt bù):
+     Credit Card A5 0,715 (mới) so với 0,449 (leaf 5 + bù) và 0,519 (leaf 1 + bù); B10 0,782 / 0,785 / 0,786; B30 0,834 / 0,808 / 0,815;
+     Adult A10 0,483 / 0,434 / 0,354; A30 0,576 / 0,560 / 0,490; Car 5% 0,713 / 0,573 / 0,720; Car 10% 0,765 / 0,629 / 0,624 (Car 1 lần cấy, không seed).
+     Mặc định mới tốt nhất hoặc trong vòng dao động của tốt nhất ở cả 7 kịch bản. **Không đúng cho mọi `leaf`:** với leaf=1, Credit Card B10 bật bù
+     lại tốt hơn (0,786 so với 0,740). Kết luận chỉ cho mặc định leaf=5.
+   · *Ước lượng tỷ lệ nhãn sai* (mặc định mới): dữ liệu tổng hợp tách rõ 0 / 5 / 10 / 20% → 0,0 / 5,3 / 10,0 / 20,6%; Credit Card A5 5,3% (thật 5,0%), B10 0,4%
+     (0,3%), B30 1,1% (1,0%); Car 5,4% (4,98%) và 11,2% (10,0%). **Lệch cao khi đặc trưng yếu:** Adult A10 21% (thật 10%), A30 41% (30%) — mô hình sai
+     và nhiễu sẵn có của Adult đều bị tính là nhãn sai. Dùng cùng "mức vượt mốc": chỉ đáng tin khi mức vượt mốc cao; coi là cận trên.
+   **Chưa làm / việc nợ:** `evaluate_class_noise_multiseed.py` vẫn cap + log một lần cho CẢ 3 phương pháp (dòng ~85) nên đưa dữ liệu đã cap/log cho CL —
+   không hại (đã đo bằng nhau) nhưng không khớp web, sửa khi mở rộng harness (mục 5); giao diện/JSON chưa hiển thị mức vượt mốc, MCC, PR-AUC, ước lượng nhiễu (mục 6).
+4. Bộ kết hợp — file mới `class_noise/combined.py` (ĐÓNG GÓP CHÍNH) — ĐÃ CODE + TEST (22/11/2026, chưa nối vào web, chưa chọn α):
+   - [x] đổi điểm từng phương pháp về thứ hạng phần trăm;
+   - [x] trọng số từ mức vượt mốc (mức vượt mốc ≤ 0 → loại); k-NN luôn có mặt; 2 bản: công tắc + pha trộn (α chọn trên
+         seed 0 rồi giữ cố định) — hai bản = α = 0 và α > 0; việc CHỌN α vẫn chờ mục 5;
+   - [x] K = số dòng phương pháp trọng số lớn nhất tự gắn cờ; trả Top-K kèm phương pháp nào cùng nghi
          + lý do (mức vượt mốc).
+   **Kiểm chứng:** 40 kiểm tra đơn vị (hạng phần trăm hoà, trọng số 3 giá trị α khớp tính tay, cổng chất lượng gồm đúng ngưỡng 0, ví dụ tay 6 dòng,
+   K theo phương pháp nặng nhất, dòng NaN, điểm hằng số, hợp số dòng, bỏ phiếu nhãn, tham số sai) + chạy đầu-cuối trên Car có đáp án.
+   **Thử đầu-cuối trên Car (mặc định mới, 100 cây, 1 lần cấy — KHÔNG phải đánh giá chính thức):** Car 5% (86 dòng cấy): Confident Learning F1 0,713 (71 cờ),
+   Distance (k=auto→3) 0,527 (225 cờ), Ensemble 0,266 (501 cờ); KẾT HỢP 71 dòng (K từ Confident Learning) P 0,944 R 0,779 F1 0,854 với cả α = 0 / 0,5 / 1.
+   Car 10% (173 dòng cấy): 0,765 / 0,651 / 0,381; KẾT HỢP F1 0,819 (α=0), 0,855 (0,5), 0,898 (1). Dòng có cả 3 phương pháp cùng nghi: 108/117 đúng ở Car 10%,
+   chỉ 2 phương pháp: 28/42 → số phương pháp cùng nghi là tín hiệu tin cậy hữu ích (ứng viên cho nhãn "mức tin cậy" trên giao diện).
+   **Đọc kết quả này thận trọng:** (a) MỘT bộ dữ liệu, nhãn sinh từ luật (đặc trưng quyết định nhãn nên mô hình học rất tốt), 1 lần cấy nhiễu; chưa chạy Adult/Credit Card;
+   (b) K lấy từ Confident Learning nên so với CL là CÙNG số dòng cờ — phần cải thiện là nhờ xếp hạng lại bằng thông tin 2 phương pháp kia, không phải gắn cờ nhiều hơn;
+   (c) so với Distance/Ensemble không công bằng về số dòng (chúng cờ 225–657 dòng, K của chúng không bị cắt), đừng trích như "kết hợp thắng Distance/Ensemble";
+   (d) điểm Ensemble chỉ có 4 mức nên đóng góp xếp hạng thô — kế hoạch mục 7 (5 họ có xác suất) sẽ cải thiện;
+   (e) `k="auto"` cho Distance chọn k=3 trên Car (xem mục 2), có thể làm Distance yếu hơn mức có thể; (f) α chưa được chọn theo giao thức nên các số theo α chỉ để xem xu hướng.
 5. Thực nghiệm — mở rộng `evaluate_class_noise_multiseed.py`:
    - [ ] thêm bộ Car Evaluation `data/car_evaluation.csv` (nhãn sinh từ bộ luật DEX → đúng 100%;
          1.728 dòng = mọi tổ hợp 4×4×4×3×3×3, không trùng). Đổi chữ → số theo thứ tự: buying/maint

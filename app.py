@@ -683,10 +683,15 @@ def class_noise_detect_api():
     trường (`suggested_label`, `score`) cho cả 2 method để bảng "danh sách
     dòng nghi ngờ" ở frontend dùng chung được 1 cách render.
 
-    **MỚI (giữ nguyên từ trước)**: trước khi chạy, LUÔN tự động áp dụng Bước 3
-    của pipeline giảm cột (`cap_outliers()` + `log_transform()`, xem
-    class_noise/feature_selection.py) lên feature_columns -- áp dụng cho CẢ 2
-    method vì đều cần feature_columns đã được làm sạch outlier/phân phối.
+    Tiền xử lý đặc trưng THEO PHƯƠNG PHÁP (kế hoạch mục 3, 22/11/2026):
+      - "distance_based" và "ensemble_based": tự cap outlier (về biên IQR) + log-transform
+        (`cap_outliers()` + `log_transform()`, class_noise/feature_selection.py) lên
+        feature_columns, vì 2 phương pháp này đo khoảng cách / dùng mô hình tuyến tính nên
+        nhạy với giá trị cực đoan và phân phối lệch.
+      - "single_learning" (cây quyết định): KHÔNG cap, KHÔNG log, dùng nguyên giá trị. Log là phép
+        đơn điệu nên cây không đổi; cap thì có thể xoá tín hiệu thật nằm ở giá trị cực đoan. Đã đo
+        trên Car, Adult, Credit Card (3 seed, cấy nhiễu có kiểm soát): ra y hệt nhau trong vòng dao
+        động giữa các seed, nên bỏ cho gọn (xem CLAUDE.md, kế hoạch mục 3).
 
     CẢNH BÁO quan trọng cho người chạy thử: với file lớn (hàng trăm nghìn
     dòng), "single_learning" (train Random Forest qua Cross-Validation) có
@@ -737,11 +742,15 @@ def class_noise_detect_api():
             }
         ), 400
 
-    # Bước 3 (xem class_noise/feature_selection.py + CLAUDE.md mục 9): LUÔN áp dụng cap outlier
-    # (về biên IQR) + log-transform lên feature_columns TRƯỚC khi chạy -- áp dụng cho CẢ 3 method,
-    # không phải tuỳ chọn (chỉ sửa GIÁ TRỊ, không xoá dòng/cột nên không có rủi ro mất dữ liệu).
-    cleaned_df = cap_outliers(df, feature_columns)
-    cleaned_df = log_transform(cleaned_df, feature_columns)
+    # Bước 3 (xem class_noise/feature_selection.py + CLAUDE.md mục 9): cap outlier (về biên IQR) +
+    # log-transform lên feature_columns TRƯỚC khi chạy, CHỈ cho Distance-based và Ensemble-based
+    # (không phải tuỳ chọn; chỉ sửa GIÁ TRỊ, không xoá dòng/cột nên không có rủi ro mất dữ liệu).
+    # Confident Learning dùng cây quyết định nên bỏ qua bước này (lý do ở docstring route).
+    if method == "single_learning":
+        cleaned_df = df
+    else:
+        cleaned_df = cap_outliers(df, feature_columns)
+        cleaned_df = log_transform(cleaned_df, feature_columns)
 
     if method == "distance_based":
         dist_config = ClassNoiseConfig(label_column=label_column, feature_columns=feature_columns)

@@ -38,9 +38,9 @@ class_weight="balanced" (có hỗ trợ sẵn); GaussianNB không có tham số 
 trong dữ liệu) để giảm thiên vị lớp đa số.
 """
 
-from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
@@ -68,6 +68,24 @@ class EnsembleNoiseFinding:
 
 
 @dataclass
+class EnsembleNoiseScores:
+    """Điểm cho MỌI dòng dùng được (không chỉ dòng bị gắn cờ) -- để phương pháp kết hợp
+    (combined.py) xếp hạng được trên cùng 1 thang với các phương pháp khác.
+
+    disagreement: tỉ lệ classifier (trong 3 cái) dự đoán KHÁC nhãn ghi, chỉ nhận 4 giá
+        trị 0, 1/3, 2/3, 1 nên có RẤT NHIỀU dòng bằng điểm nhau -- ai dùng để xếp hạng
+        phải xử lý hoà (combined.py dùng hạng trung bình). Đây là hạn chế của việc dùng
+        nhãn dự đoán thay vì xác suất; thiết kế 5 họ có xác suất là kế hoạch mục 7.
+    suggested_labels: nhãn được nhiều classifier chọn nhất TRONG SỐ các nhãn khác nhãn
+        ghi; chuỗi rỗng nếu cả 3 classifier đều đồng ý với nhãn ghi (không có gợi ý).
+    """
+
+    row_numbers: np.ndarray
+    disagreement: np.ndarray
+    suggested_labels: np.ndarray
+
+
+@dataclass
 class EnsembleNoiseDiagnostics:
     """Chỉ số chẩn đoán -- vai trò tương đương ClassNoiseDiagnostics, nhưng
     thay vì 1 cv_accuracy duy nhất (1 model), có RIÊNG accuracy cho TỪNG
@@ -85,12 +103,19 @@ class EnsembleNoiseDiagnostics:
     majority_baseline_accuracy: float
     class_names: list[str]
     class_counts: dict[str, int]
+    # Thêm ở kế hoạch mục 4 (có giá trị mặc định để code cũ không vỡ): "mức vượt mốc"
+    # = (accuracy - baseline) / (1 - baseline) của TỪNG classifier, và của classifier tốt
+    # nhất -- nếu ngay cả classifier tốt nhất cũng <= 0 thì không classifier nào học được
+    # gì, phương pháp kết hợp sẽ loại phương pháp này.
+    per_classifier_excess: dict[str, float] = field(default_factory=dict)
+    best_excess_over_baseline: float = 0.0
 
 
 @dataclass
 class EnsembleNoiseResult:
     findings: list[EnsembleNoiseFinding]
     diagnostics: EnsembleNoiseDiagnostics
+    scores: EnsembleNoiseScores | None = None
 
 
 def _prepare_usable_subset(df: pd.DataFrame, config: ClassNoiseConfig) -> pd.DataFrame:
@@ -144,25 +169,45 @@ def detect_class_noise_ensemble(
 
     class_counts_raw = pd.Series(y).value_counts()
     majority_baseline_accuracy = float(class_counts_raw.max() / len(y))
+    if majority_baseline_accuracy < 1.0:
+        per_classifier_excess = {
+            name: (acc - majority_baseline_accuracy) / (1.0 - majority_baseline_accuracy)
+            for name, acc in per_classifier_accuracy.items()
+        }
+    else:  # chỉ còn 1 lớp có dòng -> không có "khoảng cách" để vượt
+        per_classifier_excess = {name: 0.0 for name in per_classifier_accuracy}
 
     clf_names = list(classifiers.keys())
     n_clf = len(clf_names)
-    findings: list[EnsembleNoiseFinding] = []
-    for i in range(n_rows_used):
-        votes = [predictions[name][i] for name in clf_names]
-        disagree_count = sum(1 for v in votes if v != y[i])
-        disagree_ratio = disagree_count / n_clf
-        if disagree_ratio > 0.5:  # quá bán -- đa số classifier không đồng ý với nhãn ghi
-            majority_vote, _count = Counter(votes).most_common(1)[0]
-            findings.append(
-                EnsembleNoiseFinding(
-                    row_number=int(row_numbers[i]),
-                    recorded_label=class_names[y[i]],
-                    suggested_label=class_names[majority_vote],
-                    disagree_ratio=float(disagree_ratio),
-                )
-            )
 
+    # Tính cả bảng bằng numpy. preds_matrix[i, m] = nhãn classifier m đoán cho dòng i.
+    preds_matrix = np.column_stack([predictions[name] for name in clf_names])
+    disagree_ratio_all = (preds_matrix != y[:, None]).sum(axis=1) / n_clf
+
+    # Nhãn gợi ý = nhãn được NHIỀU classifier chọn nhất TRONG SỐ các nhãn khác nhãn ghi
+    # (hoà phiếu -> nhãn có chỉ số nhỏ nhất, để kết quả lặp lại được). Bản cũ đếm phiếu
+    # trên cả phiếu trùng nhãn ghi nên với nhiều lớp có thể ra nhãn gợi ý TRÙNG nhãn ghi
+    # (vd phiếu [a, b, nhãn ghi] hoà nhau và lấy phiếu đầu); đã sửa. Tập dòng bị gắn cờ
+    # và disagree_ratio KHÔNG đổi.
+    vote_counts = np.zeros((n_rows_used, n_classes), dtype=int)
+    for m in range(n_clf):
+        np.add.at(vote_counts, (np.arange(n_rows_used), preds_matrix[:, m]), 1)
+    vote_counts[np.arange(n_rows_used), y] = 0  # bỏ phiếu cho chính nhãn ghi
+    best_other = vote_counts.argmax(axis=1)
+    has_suggestion = vote_counts.max(axis=1) > 0
+    names = np.array(class_names, dtype=object)
+    suggested_all = np.where(has_suggestion, names[best_other], "")
+
+    flagged_idx = np.where(disagree_ratio_all > 0.5)[0]  # quá bán -- đa số classifier không đồng ý với nhãn ghi
+    findings = [
+        EnsembleNoiseFinding(
+            row_number=int(row_numbers[i]),
+            recorded_label=class_names[y[i]],
+            suggested_label=str(suggested_all[i]),
+            disagree_ratio=float(disagree_ratio_all[i]),
+        )
+        for i in flagged_idx
+    ]
     findings.sort(key=lambda f: f.disagree_ratio, reverse=True)
 
     diagnostics = EnsembleNoiseDiagnostics(
@@ -173,6 +218,13 @@ def detect_class_noise_ensemble(
         majority_baseline_accuracy=majority_baseline_accuracy,
         class_names=class_names,
         class_counts={class_names[c]: int(cnt) for c, cnt in class_counts_raw.items()},
+        per_classifier_excess=per_classifier_excess,
+        best_excess_over_baseline=max(per_classifier_excess.values()),
+    )
+    scores = EnsembleNoiseScores(
+        row_numbers=row_numbers,
+        disagreement=disagree_ratio_all,
+        suggested_labels=suggested_all,
     )
 
-    return EnsembleNoiseResult(findings=findings, diagnostics=diagnostics)
+    return EnsembleNoiseResult(findings=findings, diagnostics=diagnostics, scores=scores)

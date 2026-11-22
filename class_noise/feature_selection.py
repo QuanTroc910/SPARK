@@ -110,33 +110,70 @@ def select_by_elbow(ranked: list[FeatureRanking]) -> list[str]:
     return [r.column for r in ranked[:elbow_index]]
 
 
+def order_columns_without_labels(
+    df: pd.DataFrame, columns: list[str], method: str = "pearson"
+) -> list[str]:
+    """Xếp thứ tự ưu tiên giữ cột mà KHÔNG nhìn cột nhãn (nên không bị nhãn bẩn làm lệch).
+
+    Luật (theo đúng thứ tự so sánh): (1) ít ô trống hơn -> đứng trước, vì cột đủ dữ liệu
+    đáng tin hơn; (2) tương quan trung bình với các cột khác THẤP hơn -> đứng trước, vì
+    cột "độc lập" mang nhiều thông tin riêng hơn; (3) hoà thì giữ nguyên thứ tự ban đầu.
+    """
+    numeric = df[columns].apply(pd.to_numeric, errors="coerce")
+    blanks = numeric.isna().sum()
+    corr = numeric.corr(method=method).abs().fillna(0.0).to_numpy(copy=True)
+    np.fill_diagonal(corr, 0.0)  # bỏ tương quan của cột với chính nó
+    mean_other = corr.sum(axis=1) / max(1, len(columns) - 1)
+    position = {c: i for i, c in enumerate(columns)}
+    return sorted(
+        columns,
+        key=lambda c: (int(blanks[c]), float(mean_other[position[c]]), position[c]),
+    )
+
+
 def filter_correlated(
     df: pd.DataFrame,
-    ranked_columns: list[str],
+    columns: list[str],
     threshold: float = 0.8,
-) -> list[str]:
-    """Bước 2: loại cột THỪA THÔNG TIN LẪN NHAU (tương quan cao giữa CỘT VỚI
-    CỘT còn lại, không liên quan gì tới nhãn) -- ngưỡng 0.8 là quy ước thống
-    kê phổ biến (giống 1.5 của IQR, 3.0 của Z-score).
+    prioritized: bool = True,
+    method: str = "pearson",
+    return_report: bool = False,
+):
+    """Loại cột THỪA THÔNG TIN LẪN NHAU (tương quan cao giữa CỘT VỚI CỘT, không liên quan
+    gì tới nhãn) -- ngưỡng 0.8 là quy ước thống kê phổ biến (giống 1.5 của IQR, 3.0 của
+    Z-score).
 
-    `ranked_columns` PHẢI đã được sắp xếp theo độ quan trọng giảm dần (lấy từ
-    `rank_by_importance()`). Duyệt lần lượt theo đúng thứ tự đó: với mỗi cột,
-    nếu nó tương quan >= threshold với 1 cột ĐÃ ĐƯỢC GIỮ trước đó thì loại nó
-    đi -- vì cột đã giữ luôn quan trọng hơn hoặc bằng (do duyệt đúng thứ tự
-    ưu tiên), nên trong mỗi cặp "thừa nhau", cột kém quan trọng hơn bị loại.
+    Hai cách chọn cột nào được GIỮ trong mỗi cặp "thừa nhau":
+      - prioritized=True (hành vi cũ, các nơi gọi cũ không phải đổi): `columns` ĐÃ được sắp
+        theo độ ưu tiên giảm dần (thường lấy từ `rank_by_importance()` -- tức dựa vào NHÃN).
+        Duyệt đúng thứ tự đó, cột nào tương quan >= threshold với 1 cột ĐÃ GIỮ thì bị loại.
+      - prioritized=False (KHÔNG dùng nhãn): tự xếp thứ tự bằng `order_columns_without_labels()`
+        (ít ô trống -> ít tương quan với cột khác). Nhờ vậy nhãn sai không ảnh hưởng gì tới
+        cột được giữ. Danh sách trả về vẫn theo thứ tự ban đầu của `columns`.
+
+    method: "pearson" (mặc định) hoặc "spearman" (bắt được quan hệ đồng biến không tuyến tính).
+    return_report=True: trả thêm danh sách cột bị loại, mỗi phần tử có dạng
+    {"column", "kept_column", "correlation"} -- loại vì trùng thông tin với cột nào, |r| bao nhiêu.
     """
-    working = df.copy()
-    for col in ranked_columns:
-        working[col] = pd.to_numeric(working[col], errors="coerce")
-
-    corr_matrix = working[ranked_columns].corr().abs()
+    working = df[columns].apply(pd.to_numeric, errors="coerce")
+    order = columns if prioritized else order_columns_without_labels(working, columns, method)
+    corr_matrix = working.corr(method=method).abs()
 
     kept: list[str] = []
-    for col in ranked_columns:
-        too_similar_to_kept = any(corr_matrix.loc[col, k] >= threshold for k in kept)
-        if not too_similar_to_kept:
+    dropped: list[dict] = []
+    for col in order:
+        # các cột đã giữ mà cột này quá giống (NaN so sánh luôn False nên cột hằng không bị loại ở đây)
+        similar = [(float(corr_matrix.loc[col, k]), k) for k in kept if corr_matrix.loc[col, k] >= threshold]
+        if similar:
+            r, kept_col = max(similar)
+            dropped.append({"column": col, "kept_column": kept_col, "correlation": r})
+        else:
             kept.append(col)
-    return kept
+
+    if not prioritized:
+        keep_set = set(kept)
+        kept = [c for c in columns if c in keep_set]  # trả lại theo thứ tự ban đầu cho dễ đọc
+    return (kept, dropped) if return_report else kept
 
 
 def cap_outliers(
