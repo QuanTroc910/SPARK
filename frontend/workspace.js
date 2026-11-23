@@ -2907,12 +2907,12 @@ $("cf-detect-btn").addEventListener("click", async () => {
   note.textContent = noteParts.join(" ");
   if (multi) {
     const colsWithErrors = data.per_column.filter((p) => p.findings_count > 0).length;
-    setStatus($(T.status), `⚑ ${data.findings_count} ô lỗi ở ${colsWithErrors} cột · ${data.flagged_rows_count} dòng (tổng ${data.total_rows}). Chọn cách xử lý từng cột bên dưới.`, "is-ok");
+    setStatus($(T.status), `${data.findings_count} ô lỗi ở ${colsWithErrors} cột · ${data.flagged_rows_count} dòng (tổng ${data.total_rows}). Chọn cách xử lý từng cột bên dưới.`, "is-ok");
   } else {
     // Phụ thuộc hàm nhiều cột phụ thuộc: kèm số dòng vi phạm của từng cột (cột nào 0 dòng thì không nhắc).
     const parts = (data.rule_breakdown || []).filter((b) => b.flagged_rows_count > 0).map((b) => `${b.column}: ${b.flagged_rows_count} dòng`);
     const byDep = parts.length ? ` Theo cột phụ thuộc — ${parts.join(" · ")}.` : "";
-    setStatus($(T.status), `⚑ ${data.findings_count} ô lỗi ở ${data.flagged_rows_count} dòng (tổng ${data.total_rows}).${byDep} Chọn cách xử lý bên dưới.`, "is-ok");
+    setStatus($(T.status), `${data.findings_count} ô lỗi ở ${data.flagged_rows_count} dòng (tổng ${data.total_rows}).${byDep} Chọn cách xử lý bên dưới.`, "is-ok");
   }
   // Nhịp 2: danh sách cách xử lý do backend quyết theo kiểu cột × loại lỗi.
   const sel = $("cf-action");
