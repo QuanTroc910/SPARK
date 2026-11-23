@@ -72,7 +72,7 @@ from attribute_noise.quick_tools import (
     quick_fix_format_noise,
     quick_trim_whitespace,
 )
-from class_noise.combined import detect_class_noise_combined
+from class_noise.combined import detect_class_noise_combined, method_findings
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
 from class_noise.distance_based import detect_class_noise_distance
@@ -86,8 +86,10 @@ from class_noise.feature_selection import (
 )
 from class_noise.preprocess import PreprocessConfig, PreprocessError, prepare_for_class_noise
 from class_noise.web_adapter import (
+    COMPONENT_LABELS,
     expand_findings,
     finite,
+    method_list_json,
     preprocess_info,
     quality_assessment,
     string_frame,
@@ -677,11 +679,16 @@ def class_noise_detect_api():
       - "ensemble_based": N29 (class_noise/ensemble_based.py) -- 3 classifier
         khác họ (LogisticRegression, GaussianNB, LinearSVC) biểu quyết qua
         cross-validation. Tham số riêng: cv_folds.
-      - "combined" (MỚI, CLAUDE.md "Kế hoạch cải tiến Class Noise" mục 7): bộ kết hợp
-        (class_noise/combined.py) chạy cả 3 phương pháp trên rồi gộp thành 1 danh sách Top-K.
-        Tham số riêng: alpha (0 = "công tắc", > 0 = "pha trộn"), n_estimators, cv_folds.
+      - "combined" (CÁCH DUY NHẤT giao diện Denoise gọi, từ 23/11/2026): bộ kết hợp
+        (class_noise/combined.py) chạy Confident Learning + Mutual k-NN rồi gộp thành 1 danh sách
+        Top-K. Ensemble KHÔNG còn nằm trong bộ kết hợp (vẫn có nhánh "ensemble_based" riêng ở trên).
+        Tham số (đều tuỳ chọn, giao diện không gửi nên dùng mặc định): k (mặc định 5; null / "" /
+        "auto" = chọn theo độ phủ), alpha (mặc định 0 = "công tắc", > 0 = "pha trộn"), n_estimators
+        (mặc định 100), cv_folds (mặc định 5). Response thêm `method_findings` = danh sách RIÊNG
+        của từng phương pháp thành phần (dòng nó tự gắn cờ + điểm nghi của nó) cho phần "Xem thêm".
         LƯU Ý: thực nghiệm đầy đủ (CLAUDE.md mục 5) cho thấy bộ này KHÔNG vượt đối chứng
-        sklearn thuần; giao diện ghi rõ đây là phương pháp thử nghiệm.
+        sklearn thuần; công thức gộp điểm và luật chọn K chưa chốt (class_noise/combined.py::
+        merge_scores_and_select_k).
 
     MỌI method đều đi qua BƯỚC CHUẨN BỊ CHUNG (class_noise/preprocess.py) trước khi chạy; payload
     nhận thêm `reduce_columns` (true = "Giảm số cột" theo nhãn, mặc định false). Response có thêm
@@ -803,16 +810,19 @@ def class_noise_detect_api():
         body["findings"] = expand_findings(findings, prepared)
         return jsonify(body)
 
+    def _neighbors_from_payload() -> int | str:
+        """k của Mutual k-NN: không gửi khoá "k" = 5 (mặc định); gửi null / "" / "auto" = tự chọn theo độ phủ;
+        còn lại là số nguyên người gọi chọn."""
+        if "k" not in payload:
+            return 5
+        if payload.get("k") in (None, "", "auto"):
+            return "auto"
+        return int(payload["k"])
+
     try:
         if method == "distance_based":
             dist_config = ClassNoiseConfig(label_column=label_column, feature_columns=used_features)
-            # Ô k để TRỐNG (gửi null / "" / "auto") = tự chọn k theo độ phủ; không gửi khoá "k" = k = 5 như bản cũ.
-            if "k" not in payload:
-                k = 5
-            elif payload.get("k") in (None, "", "auto"):
-                k = "auto"
-            else:
-                k = int(payload["k"])
+            k = _neighbors_from_payload()
             result = detect_class_noise_distance(_cap_and_log(prepared.df, used_features), dist_config, k=k)
             return _respond(
                 {"diagnostics": _distance_diagnostics_json(result.diagnostics)},
@@ -853,11 +863,12 @@ def class_noise_detect_api():
                 n_estimators=int(payload.get("n_estimators") or 100),
                 cv_folds=cv_folds,
             )
+            # Phương pháp thành phần để MẶC ĐỊNH (Confident Learning + Mutual k-NN): Ensemble không còn trong bộ kết hợp.
             result = detect_class_noise_combined(
-                prepared.df, comb_config, alpha=alpha, k_neighbors="auto", cv_folds=cv_folds,
+                prepared.df, comb_config, alpha=alpha, k_neighbors=_neighbors_from_payload(), cv_folds=cv_folds,
                 prepare_features=_cap_and_log,
             )
-            body, findings = _combined_json(result)
+            body, findings = _combined_json(result, prepared)
             return _respond(body, findings)
 
         # method == "single_learning" (hành vi gốc, Confident Learning + Random Forest)
@@ -949,22 +960,31 @@ def _ensemble_diagnostics_json(diag) -> dict:
     }
 
 
-def _combined_json(result) -> tuple[dict, list]:
-    """Đóng gói kết quả bộ kết hợp: chẩn đoán từng phương pháp thành phần (bật/tắt + lý do + trọng số),
-    và với MỖI dòng trong Top-K, lý do nghi ngờ: phương pháp nào cùng gắn cờ, tỉ lệ láng giềng bất đồng,
-    xác suất mô hình cho nhãn đang ghi, tỉ lệ classifier bất đồng."""
+def _combined_json(result, prepared) -> tuple[dict, list]:
+    """Đóng gói kết quả bộ kết hợp.
+
+    - `findings` (trả riêng): danh sách KẾT HỢP, mỗi dòng kèm lý do nghi ngờ: phương pháp nào cùng gắn cờ, tỉ lệ
+      láng giềng bất đồng, xác suất mô hình cho nhãn đang ghi (và tỉ lệ classifier bất đồng nếu có chạy Ensemble).
+    - `diagnostics.methods`: bảng từng phương pháp thành phần (bật/tắt + lý do + trọng số + mức vượt mốc), kèm
+      chẩn đoán riêng `single` (Confident Learning) / `distance` (Mutual k-NN) / `ensemble` (nếu có chạy).
+    - `method_findings`: danh sách RIÊNG của từng phương pháp (dòng chính nó tự gắn cờ + điểm nghi của nó) cho
+      phần "Xem thêm"; đã mở rộng ra cả nhóm dòng trùng như danh sách kết hợp.
+    Chỉ đóng gói phương pháp THỰC SỰ có chạy (mặc định: Confident Learning + Mutual k-NN).
+    """
     diag = result.diagnostics
-    single = result.method_results["single_learning"]
-    dist = result.method_results["distance_based"]
-    ens = result.method_results["ensemble_based"]
+    single = result.method_results.get("single_learning")
+    dist = result.method_results.get("distance_based")
+    ens = result.method_results.get("ensemble_based")
 
     # Điểm từng thành phần theo số dòng 1-based (đã bỏ NaN) để tra nhanh cho các dòng Top-K.
-    dist_score = pd.Series(dist.scores.disagreement, index=dist.scores.row_numbers)
-    p_recorded = pd.Series(1.0 - single.scores.suspicion, index=single.scores.row_numbers)
-    ens_score = pd.Series(ens.scores.disagreement, index=ens.scores.row_numbers)
+    dist_score = pd.Series(dist.scores.disagreement, index=dist.scores.row_numbers) if dist is not None else None
+    p_recorded = pd.Series(1.0 - single.scores.suspicion, index=single.scores.row_numbers) if single is not None else None
+    ens_score = pd.Series(ens.scores.disagreement, index=ens.scores.row_numbers) if ens is not None else None
 
-    def _lookup(series: pd.Series, row: int):
-        return finite(series.get(row)) if row in series.index else None
+    def _lookup(series, row: int):
+        if series is None or row not in series.index:
+            return None
+        return finite(series.get(row))
 
     findings = [
         {
@@ -981,44 +1001,66 @@ def _combined_json(result) -> tuple[dict, list]:
         for f in result.findings
     ]
 
+    # Danh sách riêng từng phương pháp (đã mở rộng ra nhóm dòng trùng).
+    per_method = {
+        name: method_list_json(method_findings(output, result.recorded_labels), prepared)
+        for name, output in result.method_outputs.items()
+    }
+
     # Độ tin cậy chung: mức vượt mốc tốt nhất trong các MÔ HÌNH còn bật. Không mô hình nào còn bật thì
-    # kết quả chỉ dựa vào Mutual k-NN -- nói rõ để người dùng biết.
+    # kết quả chỉ dựa vào Mutual k-NN -- nói rõ để người dùng biết. Không có mô hình nào trong bộ thì không đo được.
     model_methods = {m: info for m, info in diag.methods.items() if m != "distance_based"}
     qualities_on = [info["quality"] for info in model_methods.values() if info["on"] and info["quality"] is not None]
-    if qualities_on:
-        quality = quality_assessment(max(qualities_on), "Mô hình tốt nhất")
+    model_names = [COMPONENT_LABELS.get(m, m) for m in model_methods]
+    if not model_methods:
+        quality = None
+    elif qualities_on:
+        quality = quality_assessment(max(qualities_on), model_names[0] if len(model_names) == 1 else "Mô hình tốt nhất")
     else:
         best = max((i["quality"] for i in model_methods.values() if i["quality"] is not None), default=None)
+        subject = (
+            f"{model_names[0]} không hơn cách đoán toàn lớp đông nhất"
+            if len(model_names) == 1
+            else "Cả các mô hình học máy đều không hơn cách đoán toàn lớp đông nhất"
+        )
         quality = {
             "level": "none",
             "excess": finite(best),
             "threshold": 0.0,
-            "message": (
-                "Cả hai mô hình học máy đều không hơn cách đoán toàn lớp đông nhất, nên kết quả chỉ dựa vào "
-                "Mutual k-NN. Thử chọn lại cột đặc trưng."
-            ),
+            "message": f"{subject}, nên kết quả chỉ dựa vào Mutual k-NN. Thử chọn lại cột đặc trưng.",
         }
 
+    first = (single or dist or ens).diagnostics  # n_rows_used, class_names... giống nhau giữa các phương pháp
     body = {
         "diagnostics": {
-            "n_rows_total": single.diagnostics.n_rows_total,
-            "n_rows_used": single.diagnostics.n_rows_used,
+            "n_rows_total": first.n_rows_total,
+            "n_rows_used": first.n_rows_used,
             "alpha": diag.alpha,
             "k": diag.k,
             "k_method": diag.k_method,
             "methods": {
-                m: {**info, "quality": finite(info["quality"]), "weight": finite(info["weight"])}
+                m: {
+                    **info,
+                    "quality": finite(info["quality"]),
+                    "weight": finite(info["weight"]),
+                    # Số dòng phương pháp tự gắn cờ tính cả các dòng trùng đã gộp (khớp bảng "Xem thêm").
+                    "n_flagged_rows": len(per_method.get(m, [])),
+                }
                 for m, info in diag.methods.items()
             },
             "warnings": diag.warnings,
             "quality": quality,
-            "single": _single_diagnostics_json(single.diagnostics),
-            "distance": _distance_diagnostics_json(dist.diagnostics),
-            "ensemble": _ensemble_diagnostics_json(ens.diagnostics),
-            "class_names": single.diagnostics.class_names,
-            "class_counts": single.diagnostics.class_counts,
-        }
+            "class_names": first.class_names,
+            "class_counts": first.class_counts,
+        },
+        "method_findings": per_method,
     }
+    if single is not None:
+        body["diagnostics"]["single"] = _single_diagnostics_json(single.diagnostics)
+    if dist is not None:
+        body["diagnostics"]["distance"] = _distance_diagnostics_json(dist.diagnostics)
+    if ens is not None:
+        body["diagnostics"]["ensemble"] = _ensemble_diagnostics_json(ens.diagnostics)
     return body, findings
 
 

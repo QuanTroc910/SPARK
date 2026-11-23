@@ -1143,7 +1143,7 @@ function renderContinuePanel(g) {
   });
 }
 // Chuyển kết quả hiện tại (CSV) sang Class Noise: mở khối Class Noise rồi nạp text như một file vừa chọn ở bước 1
-// (workspace-flow.js: DenoiseFlow.loadCsvText). Người dùng chọn phương pháp rồi bấm "Tải lên" như thường.
+// (workspace-flow.js: DenoiseFlow.loadCsvText). Người dùng bấm "Tải lên" như thường.
 function sendPipeToClassNoise() {
   const p = state.pipe;
   if (!p.currentText || p.currentKind !== "csv") return;

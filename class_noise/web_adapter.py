@@ -14,6 +14,7 @@ import math
 
 import pandas as pd
 
+from .combined import MethodFinding
 from .preprocess import PreparedData, PreprocessConfig, PreprocessReport
 
 # Dưới ngưỡng này thì mô hình chỉ "hơi hơn" đoán bừa -> chỉ nên tham khảo danh sách. Dùng CHUNG với
@@ -23,6 +24,13 @@ LOW_EXCESS = PreprocessConfig.__dataclass_fields__["low_margin_warning"].default
 
 # Báo cáo trả cho giao diện chỉ liệt kê tối đa ngần này nhóm/dòng (số tổng vẫn đầy đủ).
 MAX_LISTED_IN_RESPONSE = 50
+
+# Tên ngắn của từng phương pháp thành phần của bộ kết hợp, dùng trong câu nhận xét trả cho giao diện.
+COMPONENT_LABELS = {
+    "single_learning": "Confident Learning (Random Forest)",
+    "distance_based": "Mutual k-NN",
+    "ensemble_based": "Ensemble",
+}
 
 
 def finite(value):
@@ -64,6 +72,24 @@ def expand_findings(findings: list[dict], prepared: PreparedData) -> list[dict]:
                 out.append(copy)
     out.sort(key=lambda f: -(f.get("score") or 0.0))  # sort ổn định: hoà điểm giữ thứ tự cũ
     return out
+
+
+def method_list_json(findings: list[MethodFinding], prepared: PreparedData) -> list[dict]:
+    """Danh sách RIÊNG của 1 phương pháp thành phần (các dòng chính nó tự gắn cờ, kèm điểm nghi của nó) ở dạng JSON.
+
+    Trả về cả nhóm dòng trùng đã gộp ở bước chuẩn bị (giống danh sách kết hợp, xem expand_findings) để số dòng
+    khớp với bảng chính. Mỗi phần tử: row_number, recorded_label, suggested_label, score (+ duplicate_of nếu là bản trùng).
+    """
+    rows = [
+        {
+            "row_number": int(f.row_number),
+            "recorded_label": f.recorded_label,
+            "suggested_label": f.suggested_label,
+            "score": finite(f.score),
+        }
+        for f in findings
+    ]
+    return expand_findings(rows, prepared)
 
 
 def quality_assessment(excess: float | None, what: str = "Mô hình", low: float = LOW_EXCESS) -> dict | None:

@@ -1,11 +1,15 @@
 """
 PHƯƠNG PHÁP KẾT HỢP cho Class Noise (kế hoạch mục 4, 22/11/2026) -- đóng góp riêng của đề tài.
 
-Vấn đề: 3 phương pháp có sẵn (Confident Learning, Mutual k-NN, Ensemble) cho 3 danh sách
+Vấn đề: các phương pháp có sẵn (Confident Learning, Mutual k-NN, Ensemble) cho các danh sách
 nghi ngờ khác nhau, chất lượng thay đổi theo dữ liệu (trên dữ liệu có đặc trưng yếu thì mô
 hình học máy gần như đoán bừa, trong khi k-NN vẫn dùng được; ngược lại có dữ liệu mô hình
 tốt hơn hẳn). Người dùng không biết nên tin phương pháp nào. Module này gộp chúng lại thành
 MỘT danh sách duy nhất, tự biết phương pháp nào đáng tin trên chính dữ liệu đang xét.
+
+PHƯƠNG PHÁP THÀNH PHẦN (23/11/2026): trên web bộ kết hợp CHỈ gộp Confident Learning + Mutual k-NN
+(`DEFAULT_METHODS`). Ensemble vẫn nằm trong code và gộp được qua tham số `methods` của
+`detect_class_noise_combined()` (dùng cho thực nghiệm), nhưng không còn chạy mặc định.
 
 Cách làm (đơn giản, kiểm tra được từng bước):
   1. HẠNG PHẦN TRĂM. Điểm của 3 phương pháp khác thang (1 - xác suất, tỉ lệ láng giềng bất
@@ -29,6 +33,10 @@ Cách làm (đơn giản, kiểm tra được từng bước):
      nghi dòng đó và lý do (mức vượt mốc). Nghĩa là bộ kết hợp chỉ SẮP XẾP LẠI cho tốt hơn,
      còn "bao nhiêu dòng" lấy từ phương pháp đáng tin nhất, không tự đặt ngưỡng mới.
 
+Bước 4 + 5 (điểm kết hợp và số dòng K) nằm riêng trong `merge_scores_and_select_k()`: công thức gộp
+điểm và luật chọn K CHƯA chốt (chờ thực nghiệm), nên tách ra 1 hàm để sau này đổi đúng 1 chỗ, không
+đụng tới phần hạng phần trăm / cổng chất lượng / trọng số ở trên.
+
 alpha KHÔNG được chọn ở đây: chọn alpha là việc của khâu thực nghiệm (kế hoạch mục 5: chọn
 trên 1 seed rồi giữ cố định), để không tinh chỉnh theo đúng dữ liệu đang đánh giá.
 
@@ -44,6 +52,36 @@ from .config import ClassNoiseConfig
 
 # Thứ tự cố định dùng để phá hoà khi 2 phương pháp có trọng số bằng nhau.
 METHOD_ORDER = ("single_learning", "distance_based", "ensemble_based")
+
+# Phương pháp thành phần mặc định của bộ kết hợp (web): Confident Learning + Mutual k-NN. Ensemble KHÔNG nằm
+# trong mặc định (vẫn gộp được nếu truyền vào `methods`).
+DEFAULT_METHODS = ("single_learning", "distance_based")
+
+# Gọi tắt cho tiện: "single" = Confident Learning, "distance" = Mutual k-NN, "ensemble" = Ensemble.
+METHOD_ALIASES = {"single": "single_learning", "distance": "distance_based", "ensemble": "ensemble_based"}
+
+
+def normalize_methods(methods) -> tuple[str, ...]:
+    """Chuẩn hoá danh sách phương pháp thành phần: nhận tên đầy đủ hoặc tên gọi tắt, trả tuple tên đầy đủ
+    theo đúng METHOD_ORDER (nên thứ tự người gọi liệt kê không ảnh hưởng kết quả). Rỗng / lạ / trùng thì báo lỗi."""
+    if isinstance(methods, str):
+        methods = (methods,)
+    names: list[str] = []
+    for m in methods:
+        name = METHOD_ALIASES.get(m, m)
+        if name not in METHOD_ORDER:
+            raise ValueError(f"Phương pháp thành phần không hợp lệ: {m!r}. Chọn trong {list(METHOD_ORDER)}.")
+        if name in names:
+            raise ValueError(f"Phương pháp thành phần bị trùng: {m!r}.")
+        names.append(name)
+    if not names:
+        raise ValueError("Cần chọn ít nhất 1 phương pháp thành phần.")
+    return tuple(sorted(names, key=METHOD_ORDER.index))
+
+
+def _order_key(name: str) -> int:
+    """Vị trí của phương pháp trong METHOD_ORDER (tên lạ xếp cuối) -- dùng để phá hoà."""
+    return METHOD_ORDER.index(name) if name in METHOD_ORDER else len(METHOD_ORDER)
 
 
 @dataclass
@@ -101,12 +139,41 @@ class CombinedDiagnostics:
 
 
 @dataclass
+class MethodFinding:
+    """1 dòng mà CHÍNH một phương pháp thành phần tự gắn cờ (theo luật riêng của nó, không qua bộ kết hợp).
+
+    score là điểm nghi ngờ của riêng phương pháp đó: Confident Learning = 1 - xác suất mô hình cho nhãn đang ghi;
+    Mutual k-NN = tỉ lệ láng giềng lẫn nhau mang nhãn khác.
+    """
+
+    row_number: int
+    recorded_label: str
+    suggested_label: str
+    score: float
+
+
+@dataclass
+class MergedScores:
+    """Kết quả bước "gộp điểm + chọn K" (xem merge_scores_and_select_k)."""
+
+    combined: np.ndarray  # điểm kết hợp từng dòng, 0..1 (NaN = không phương pháp đang bật nào có ý kiến)
+    n_supporters: np.ndarray  # số phương pháp đang bật tự gắn cờ dòng đó
+    k: int  # số dòng trả về
+    k_method: str  # phương pháp là nguồn của K ("" nếu không phương pháp nào đang bật)
+
+
+@dataclass
 class CombinedResult:
     findings: list[CombinedFinding]
     diagnostics: CombinedDiagnostics
     scores: CombinedScores
     # Kết quả gốc của từng phương pháp (chỉ có khi chạy qua detect_class_noise_combined).
     method_results: dict = field(default_factory=dict)
+    # Đầu ra đã chuẩn hoá của từng phương pháp thành phần (điểm + cờ + nhãn gợi ý), tên -> MethodOutput.
+    # Có ngay cả khi gọi thẳng combine_methods; dùng để liệt kê "danh sách riêng của từng phương pháp".
+    method_outputs: dict = field(default_factory=dict)
+    # Nhãn đang ghi (index = số dòng 1-based); None nếu người gọi không đưa vào.
+    recorded_labels: pd.Series | None = None
 
 
 # --------------------------------------------------------------------------------------
@@ -182,6 +249,32 @@ def from_ensemble_diverse(result) -> MethodOutput:
     )
 
 
+def method_findings(output: MethodOutput, recorded_labels: pd.Series | None = None) -> list[MethodFinding]:
+    """Danh sách RIÊNG của 1 phương pháp: các dòng mà chính nó tự gắn cờ, xếp theo điểm nghi ngờ của nó giảm dần
+    (hoà điểm -> dòng đứng trước trong file, để lặp lại được).
+
+    Dùng cho phần "xem thêm" trên web: người dùng xem từng phương pháp thành phần đang nghi những dòng nào, không
+    chỉ danh sách đã gộp. recorded_labels: Series nhãn ghi, index = số dòng 1-based; không đưa vào thì nhãn ghi để trống.
+    """
+    scores = np.asarray(output.scores, dtype=float)
+    idx = np.flatnonzero(np.asarray(output.flagged, dtype=bool))
+    # Điểm NaN (không có ý kiến) xếp cuối; thực tế dòng đã gắn cờ luôn có điểm.
+    order = idx[np.argsort(-np.where(np.isnan(scores[idx]), -np.inf, scores[idx]), kind="stable")]
+    rec = recorded_labels.to_dict() if recorded_labels is not None else {}
+    out = []
+    for i in order:
+        row = int(output.row_numbers[i])
+        out.append(
+            MethodFinding(
+                row_number=row,
+                recorded_label=str(rec.get(row, "")),
+                suggested_label=str(output.suggested_labels[i]),
+                score=float(scores[i]),
+            )
+        )
+    return out
+
+
 # --------------------------------------------------------------------------------------
 # Lõi: gộp
 # --------------------------------------------------------------------------------------
@@ -205,6 +298,44 @@ def compute_weights(on: dict[str, bool], quality: dict[str, float | None], alpha
             by_quality = q[m] / total_q if total_q > 0 else uniform
             weights[m] = (1.0 - alpha) * uniform + alpha * by_quality
     return weights
+
+
+def merge_scores_and_select_k(
+    ranks: dict[str, np.ndarray],
+    flagged: dict[str, np.ndarray],
+    weights: dict[str, float],
+    active: list[str],
+    n_rows: int,
+) -> MergedScores:
+    """BƯỚC "GỘP ĐIỂM + CHỌN K" (bước 4 và 5 trong docstring module) -- tách riêng để sau này đổi công thức gộp
+    điểm hoặc luật chọn K chỉ phải sửa hàm này. HIỆN TẠI (chưa chốt, chờ thực nghiệm):
+
+      * điểm kết hợp = trung bình có trọng số của hạng phần trăm, chỉ tính các phương pháp ĐANG BẬT và CÓ ý
+        kiến về dòng đó (hạng NaN = không có ý kiến);
+      * K = số dòng mà phương pháp có trọng số LỚN NHẤT tự gắn cờ theo luật riêng của nó (hoà trọng số -> theo
+        METHOD_ORDER).
+
+    ranks / flagged: tên phương pháp -> mảng độ dài n_rows (hạng phần trăm 0..1, NaN nếu không có ý kiến / cờ
+        True-False); weights: tên -> trọng số; active: các phương pháp đang bật, theo thứ tự cộng dồn.
+    Trả MergedScores; việc lấy Top-K dòng theo điểm kết hợp và ghép nhãn gợi ý do combine_methods làm.
+    """
+    num = np.zeros(n_rows)
+    den = np.zeros(n_rows)
+    n_support = np.zeros(n_rows, dtype=int)
+    for m in active:
+        r = ranks[m]
+        has = ~np.isnan(r)
+        num[has] += weights[m] * r[has]
+        den[has] += weights[m]
+        n_support += (flagged[m] & has).astype(int)
+    combined = np.where(den > 0, num / np.where(den > 0, den, 1.0), np.nan)
+
+    if active:
+        k_method = sorted(active, key=lambda m: (-weights[m], _order_key(m)))[0]
+        k = int(flagged[k_method].sum())
+    else:
+        k_method, k = "", 0
+    return MergedScores(combined=combined, n_supporters=n_support, k=k, k_method=k_method)
 
 
 def combine_methods(
@@ -269,27 +400,15 @@ def combine_methods(
     elif len(active) == 1:
         warnings.append(f"Chỉ còn 1 phương pháp đáng tin ({active[0]}), kết quả kết hợp trùng với phương pháp đó.")
 
-    # Điểm kết hợp: trung bình có trọng số trên các phương pháp CÓ ý kiến về dòng đó.
-    num = np.zeros(n)
-    den = np.zeros(n)
-    n_support = np.zeros(n, dtype=int)
-    for m in active:
-        r = ranks[m].to_numpy()
-        has = ~np.isnan(r)
-        num[has] += weights[m] * r[has]
-        den[has] += weights[m]
-        n_support += (flagged[m].to_numpy() & has).astype(int)
-    combined = np.where(den > 0, num / np.where(den > 0, den, 1.0), np.nan)
-
-    # K = số dòng mà phương pháp trọng số lớn nhất tự gắn cờ (hoà trọng số -> theo METHOD_ORDER).
-    def _order_key(m):
-        return METHOD_ORDER.index(m) if m in METHOD_ORDER else len(METHOD_ORDER)
-
-    if active:
-        k_method = sorted(active, key=lambda m: (-weights[m], _order_key(m)))[0]
-        k = int(flagged[k_method].sum())
-    else:
-        k_method, k = "", 0
+    # Gộp điểm + chọn K (công thức và luật chọn K nằm riêng trong merge_scores_and_select_k).
+    merged = merge_scores_and_select_k(
+        ranks={m: ranks[m].to_numpy() for m in names},
+        flagged={m: flagged[m].to_numpy() for m in names},
+        weights=weights,
+        active=active,
+        n_rows=n,
+    )
+    combined, n_support, k_method, k = merged.combined, merged.n_supporters, merged.k_method, merged.k
 
     # Top-K theo điểm kết hợp (hoà điểm -> dòng đứng trước trong file, để lặp lại được).
     order = np.argsort(-np.where(np.isnan(combined), -np.inf, combined), kind="stable")
@@ -349,11 +468,17 @@ def combine_methods(
         warnings=warnings,
     )
     scores = CombinedScores(row_numbers=all_rows, score=combined, n_supporters=n_support)
-    return CombinedResult(findings=findings, diagnostics=diagnostics, scores=scores)
+    return CombinedResult(
+        findings=findings,
+        diagnostics=diagnostics,
+        scores=scores,
+        method_outputs={o.name: o for o in outputs},
+        recorded_labels=recorded_labels,
+    )
 
 
 # --------------------------------------------------------------------------------------
-# Tiện ích: chạy cả 3 phương pháp rồi gộp
+# Tiện ích: chạy các phương pháp thành phần rồi gộp
 # --------------------------------------------------------------------------------------
 def detect_class_noise_combined(
     df: pd.DataFrame,
@@ -362,32 +487,53 @@ def detect_class_noise_combined(
     k_neighbors: int | str = "auto",
     cv_folds: int = 5,
     prepare_features=None,
+    methods=DEFAULT_METHODS,
 ) -> CombinedResult:
-    """Chạy Confident Learning, Mutual k-NN và Ensemble trên df rồi gộp bằng combine_methods.
+    """Chạy các phương pháp thành phần trên df rồi gộp bằng combine_methods.
 
+    methods: phương pháp thành phần, mặc định Confident Learning + Mutual k-NN (`DEFAULT_METHODS`). Nhận tên đầy
+        đủ ("single_learning", "distance_based", "ensemble_based") hoặc gọi tắt ("single", "distance", "ensemble").
+        Chỉ phương pháp được chọn mới chạy (Ensemble không chạy nếu không chọn).
+    k_neighbors: k của Mutual k-NN (số nguyên hoặc "auto" = chọn theo độ phủ).
+    cv_folds: số fold của Ensemble (Confident Learning lấy `config.cv_folds`); không tác dụng nếu không chọn Ensemble.
     prepare_features: hàm (df, feature_columns) -> df dùng làm tiền xử lý cho Mutual k-NN và
         Ensemble (vd cap outlier + log như web); Confident Learning luôn dùng df nguyên (cây
         quyết định không cần, xem CLAUDE.md kế hoạch mục 3). None = không tiền xử lý.
         Lưu ý: `cap_outliers()` / `log_transform()` của feature_selection.py làm việc trên bảng
         DẠNG CHUỖI như `load_data()` trả về (đọc `dtype=str`); đưa vào bảng đã là số sẽ lỗi kiểu dữ liệu.
     """
-    # Import trong hàm để module này nhẹ khi chỉ dùng combine_methods với điểm đã lưu.
-    from .confident_learning import _prepare_usable_subset, detect_class_noise
-    from .distance_based import detect_class_noise_distance
-    from .ensemble_based import detect_class_noise_ensemble
+    selected = normalize_methods(methods)
 
-    df_other = prepare_features(df, config.feature_columns) if prepare_features else df
-    r_single = detect_class_noise(df, config)
-    r_dist = detect_class_noise_distance(df_other, config, k=k_neighbors)
-    r_ens = detect_class_noise_ensemble(df_other, config, cv_folds=cv_folds, random_state=config.random_state)
+    # Import trong hàm để module này nhẹ khi chỉ dùng combine_methods với điểm đã lưu, và để phương pháp
+    # không được chọn (vd Ensemble) không bị nạp.
+    from .confident_learning import _prepare_usable_subset
+
+    needs_prepared = "distance_based" in selected or "ensemble_based" in selected
+    df_other = prepare_features(df, config.feature_columns) if (prepare_features and needs_prepared) else df
+
+    outputs: list[MethodOutput] = []
+    method_results: dict = {}
+    if "single_learning" in selected:
+        from .confident_learning import detect_class_noise
+
+        method_results["single_learning"] = detect_class_noise(df, config)
+        outputs.append(from_single(method_results["single_learning"]))
+    if "distance_based" in selected:
+        from .distance_based import detect_class_noise_distance
+
+        method_results["distance_based"] = detect_class_noise_distance(df_other, config, k=k_neighbors)
+        outputs.append(from_distance(method_results["distance_based"]))
+    if "ensemble_based" in selected:
+        from .ensemble_based import detect_class_noise_ensemble
+
+        method_results["ensemble_based"] = detect_class_noise_ensemble(
+            df_other, config, cv_folds=cv_folds, random_state=config.random_state
+        )
+        outputs.append(from_ensemble(method_results["ensemble_based"]))
 
     usable = _prepare_usable_subset(df, config)
     recorded = pd.Series(usable[config.label_column].astype(str).to_numpy(), index=usable.index.to_numpy() + 1)
 
-    result = combine_methods(
-        [from_single(r_single), from_distance(r_dist), from_ensemble(r_ens)],
-        alpha=alpha,
-        recorded_labels=recorded,
-    )
-    result.method_results = {"single_learning": r_single, "distance_based": r_dist, "ensemble_based": r_ens}
+    result = combine_methods(outputs, alpha=alpha, recorded_labels=recorded)
+    result.method_results = method_results
     return result

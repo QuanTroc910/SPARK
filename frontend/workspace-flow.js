@@ -148,19 +148,18 @@ const state = {
   // attribute ở trên vì cấu trúc dữ liệu hoàn toàn khác) ----
   classLabelColumn: null,
   classFeatureColumns: new Set(),
-  // "distance_based" | "single_learning" | "ensemble_based" (chưa khả dụng) --
-  // chọn ở Bước 2 ngay sau khi bấm thẻ Class Noise, xem Bảng 6 Gupta & Gupta
-  // 2019 (3 nhóm phương pháp phát hiện class noise).
-  classMethod: null,
+  // Class Noise chỉ còn MỘT cách phát hiện: bộ kết hợp Confident Learning + Mutual k-NN (backend method
+  // "combined"), nên không còn state "đang chọn phương pháp nào".
   classDiagnostics: null,
-  // Method ĐÃ DÙNG để tạo ra classDiagnostics/classFindings hiện tại -- tách
-  // riêng khỏi classMethod (lựa chọn Ở BƯỚC 2) vì classMethod có thể bị đổi
-  // sau khi đã có kết quả cũ (chưa detect lại), renderClassResults() phải
-  // render theo đúng method CỦA KẾT QUẢ đang có, không phải lựa chọn hiện tại.
-  classResultMethod: null,
   // Báo cáo bước chuẩn bị chung (cột bị bỏ, dòng gộp/mâu thuẫn...) của lần phát hiện đang hiện.
   classPreprocess: null,
+  // Danh sách KẾT HỢP (bảng chính, cũng là danh sách đưa sang bước Xử lý).
   classFindings: [],
+  // Danh sách RIÊNG của từng phương pháp thành phần cho phần "Xem thêm": { single_learning: [...], distance_based: [...] }.
+  classMethodFindings: {},
+  // Phần "Xem thêm": mở/đóng (mặc định ĐÓNG) + trang hiện tại của từng danh sách riêng.
+  classMoreOpen: false,
+  classMorePages: {},
   classFindingsPage: 1,
   classFindingsPerPage: 20,
   classFindingsFilterText: "",
@@ -334,12 +333,6 @@ $("class-change-file-btn").addEventListener("click", () => {
 $("upload-btn").addEventListener("click", async () => {
   const file = state.selectedFile;
   if (!file) return;
-  // Bước 1 (Denoise) gộp "chọn phương pháp" vào cùng ô tải file -- phải chọn
-  // 1 trong 3 thẻ ở khung 02 trước khi tải lên.
-  if (!state.classMethod) {
-    setStatusMessage($("upload-status"), "Chọn 1 phương pháp phát hiện ở khung 02 trước.", "error");
-    return;
-  }
 
   setButtonLoading($("upload-btn"), true, "Đang upload...", "Tải lên & tiếp tục");
 
@@ -400,12 +393,13 @@ $("upload-btn").addEventListener("click", async () => {
   // trong danh sách (chỉ các cột của file mới mới được vẽ ra) -- nhẹ thì bị
   // chặn báo lỗi "cột không tồn tại", nặng hơn là ÂM THẦM dùng nhầm lựa chọn
   // cũ nếu 2 file tình cờ trùng tên cột, cho kết quả sai mà không ai biết.
-  // (classMethod GIỮ NGUYÊN: người dùng đã chọn ở ngay bước 1 trước khi tải lên.)
   state.classLabelColumn = null;
   state.classFeatureColumns = new Set();
   state.classDiagnostics = null;
-  state.classResultMethod = null;
   state.classFindings = [];
+  state.classMethodFindings = {};
+  state.classMoreOpen = false;
+  state.classMorePages = {};
   state.classFindingsPage = 1;
   state.classFindingsFilterText = "";
   chResetAll(); // file mới -> bỏ lựa chọn/lịch sử xử lý Class Noise của file cũ
@@ -419,35 +413,11 @@ $("upload-btn").addEventListener("click", async () => {
   goStep(3);
 });
 
-// ====== BƯỚC 2: chọn hướng xử lý ======
-function updateContinueStep2Button() {
-  const ready = state.direction === "attribute" || (state.direction === "class" && state.classMethod);
-  $("continue-step2-btn").disabled = !ready;
-}
-document.querySelectorAll(".direction-grid:not(#class-method-grid) .direction-card").forEach((card) => {
-  card.addEventListener("click", () => {
-    if (card.classList.contains("is-disabled")) return;
-    document.querySelectorAll(".direction-grid:not(#class-method-grid) .direction-card").forEach((c) => c.classList.remove("is-selected"));
-    card.classList.add("is-selected");
-    state.direction = card.dataset.direction;
-    // Chỉ hướng Class Noise mới cần chọn thêm phương pháp (Bảng 6, Gupta &
-    // Gupta 2019) -- Attribute Noise giữ nguyên luồng cũ, không có bước này.
-    $("class-method-section").hidden = state.direction !== "class";
-    updateContinueStep2Button();
-  });
-});
-document.querySelectorAll("#class-method-grid .direction-card").forEach((card) => {
-  card.addEventListener("click", () => {
-    if (card.classList.contains("is-disabled")) return;
-    document.querySelectorAll("#class-method-grid .direction-card").forEach((c) => c.classList.remove("is-selected"));
-    card.classList.add("is-selected");
-    state.classMethod = card.dataset.method;
-    updateContinueStep2Button();
-  });
-});
+// ====== BƯỚC 2 (cũ): chọn hướng xử lý ======
+// KHÔNG còn dùng trong Denoise: hướng luôn là Class Noise và Class Noise chỉ còn 1 cách phát hiện (bộ kết hợp),
+// nên không còn thẻ hướng / thẻ phương pháp. Giữ nút ẩn #continue-step2-btn vì HTML vẫn có (panel-2 rỗng).
 $("continue-step2-btn").addEventListener("click", () => {
   if (!state.direction) return;
-  if (state.direction === "class" && !state.classMethod) return;
   unlockStep(3);
   if (state.direction === "attribute") renderColumnList();
   goStep(3); // goStep() tự gọi toggleStep3Direction() -> dựng form class nếu cần
@@ -2052,24 +2022,20 @@ $("apply-handling-btn").addEventListener("click", async () => {
 // không tính toán gì ở JS -- đúng nguyên tắc chung của toàn trang.
 // ================================================================
 
-// ---- Bước 3: chọn nhãn + đặc trưng ----
-const CLASS_METHOD_LABELS = {
-  distance_based: "Distance-based (Mutual k-NN)",
-  single_learning: "Single learning-based (Confident Learning + Random Forest)",
-  ensemble_based: "Ensemble-based",
-  combined: "Bộ kết hợp (thử nghiệm)",
+// ---- Bước 2: chọn nhãn + đặc trưng ----
+// Tên ngắn của từng phương pháp thành phần của bộ kết hợp (bảng "Cùng nghi", phần "Xem thêm").
+const CLASS_METHOD_SHORT = {
+  single_learning: "Confident Learning",
+  distance_based: "Mutual k-NN",
+  ensemble_based: "Ensemble",
 };
 
 function toggleStep3Direction() {
   const isClass = state.direction === "class";
   $("panel-3-attribute").hidden = isClass;
   $("panel-3-class").hidden = !isClass;
-  // Tiêu đề to viết hoa (Denoise) nên giữ ngắn; tên phương pháp Class Noise
-  // đưa lên dòng nhãn nhỏ "[ Bước 3 / 5 · ... ]" phía trên thay vì nối vào tiêu đề.
   $("panel-3-title").textContent = isClass ? "Chọn nhãn & đặc trưng" : "Cấu hình noise cho từng cột";
-  $("panel-3-eyebrow").textContent = isClass
-    ? `[ Bước 2 / 4 · ${CLASS_METHOD_LABELS[state.classMethod] || "Class Noise"} ]`
-    : "[ Bước 2 / 4 ]";
+  $("panel-3-eyebrow").textContent = "[ Bước 2 / 4 ]";
   if (isClass) {
     renderClassNoiseConfigForm();
     chRenderSourceNote();
@@ -2089,16 +2055,6 @@ function renderClassNoiseConfigForm() {
   }
   labelSelect.value = state.classLabelColumn;
   renderClassFeatureList();
-
-  // Mỗi method có khối tham số nâng cao RIÊNG (n_estimators/cv_folds cho
-  // single_learning, k cho distance_based, cv_folds cho ensemble_based) --
-  // ẩn/hiện đúng khối theo lựa chọn ở Bước 2. distance_based không train
-  // model nên câu cảnh báo "có thể mất vài phút" cũng không áp dụng.
-  $("class-params-single").hidden = state.classMethod !== "single_learning";
-  $("class-params-distance").hidden = state.classMethod !== "distance_based";
-  $("class-params-ensemble").hidden = state.classMethod !== "ensemble_based";
-  $("class-params-combined").hidden = state.classMethod !== "combined";
-  $("class-wait-hint").hidden = state.classMethod === "distance_based";
 }
 
 function renderClassFeatureList() {
@@ -2153,17 +2109,9 @@ $("class-feature-list").addEventListener("change", (e) => {
   else state.classFeatureColumns.delete(h);
 });
 
-// Lựa chọn "Giảm số cột" / "Không giảm số cột" (mặc định KHÔNG giảm). Việc giảm theo nhãn chạy ở backend
-// trong cùng lần bấm "Phát hiện" (class_noise/preprocess.py), nên ở đây chỉ hiện lời nhắc khi chọn "Giảm".
-function classReduceChosen() {
-  const checked = document.querySelector('input[name="class-reduce"]:checked');
-  return !!checked && checked.value === "yes";
-}
-document.querySelectorAll('input[name="class-reduce"]').forEach((radio) => {
-  radio.addEventListener("change", () => {
-    $("class-reduce-hint").hidden = !classReduceChosen();
-  });
-});
+// Chữ trên nút (cố định) và lời báo trong lúc chờ. Chạy ĐỒNG BỘ (không chạy nền, không thanh tiến độ).
+const CLASS_DETECT_LABEL = "Phát hiện nhãn sai →";
+const CLASS_DETECT_WAIT = "Đang chạy Mutual k-NN và Confident Learning, có thể mất vài phút với file lớn…";
 
 $("class-detect-btn").addEventListener("click", async () => {
   const btn = $("class-detect-btn");
@@ -2179,30 +2127,19 @@ $("class-detect-btn").addEventListener("click", async () => {
     return;
   }
 
-  const isDistance = state.classMethod === "distance_based";
-  setButtonLoading(btn, true, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
-  statusEl.textContent = isDistance
-    ? "Đang tính khoảng cách giữa các dòng…"
-    : "Có thể mất vài giây đến vài phút tuỳ kích thước file, vui lòng chờ…";
+  setButtonLoading(btn, true, "Đang phát hiện...", CLASS_DETECT_LABEL);
+  statusEl.textContent = CLASS_DETECT_WAIT;
 
+  // Chỉ còn 1 cách phát hiện: bộ kết hợp. Không gửi k / alpha / n_estimators (backend dùng mặc định k = 5,
+  // alpha = 0, n_estimators = 100) và luôn "Không giảm số cột" (reduce_columns = false). Bước chuẩn bị chung
+  // (bỏ cột hằng / định danh / tương quan, gộp dòng trùng...) vẫn chạy ở backend, không dùng nhãn.
   const requestBody = {
     file_id: state.fileId,
     label_column: state.classLabelColumn,
     feature_columns: featureColumns,
-    method: state.classMethod,
-    reduce_columns: classReduceChosen(),
+    method: "combined",
+    reduce_columns: false,
   };
-  if (state.classMethod === "distance_based") {
-    // Ô k để trống = tự chọn k theo độ phủ (backend nhận null).
-    requestBody.k = parseInt($("class-k-neighbors").value, 10) || null;
-  } else if (state.classMethod === "ensemble_based") {
-    requestBody.cv_folds = parseInt($("class-ensemble-cv-folds").value, 10) || 5;
-  } else if (state.classMethod === "combined") {
-    requestBody.alpha = parseFloat($("class-combined-alpha").value) || 0;
-  } else {
-    requestBody.n_estimators = parseInt($("class-n-estimators").value, 10) || 300;
-    requestBody.cv_folds = parseInt($("class-cv-folds").value, 10) || 5;
-  }
 
   let response;
   try {
@@ -2213,11 +2150,11 @@ $("class-detect-btn").addEventListener("click", async () => {
     });
   } catch (err) {
     alert("Không gọi được backend.");
-    setButtonLoading(btn, false, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
+    setButtonLoading(btn, false, "Đang phát hiện...", CLASS_DETECT_LABEL);
     statusEl.textContent = "";
     return;
   }
-  setButtonLoading(btn, false, "Đang phát hiện...", "🔍 Phát hiện Class Noise");
+  setButtonLoading(btn, false, "Đang phát hiện...", CLASS_DETECT_LABEL);
   statusEl.textContent = "";
 
   if (!response.ok) {
@@ -2234,9 +2171,11 @@ $("class-detect-btn").addEventListener("click", async () => {
 
   const data = await response.json();
   state.classDiagnostics = data.diagnostics;
-  state.classResultMethod = data.method;
   state.classPreprocess = data.preprocess || null;
   state.classFindings = data.findings;
+  state.classMethodFindings = data.method_findings || {};
+  state.classMoreOpen = false; // kết quả mới -> "Xem thêm" đóng lại, về trang 1
+  state.classMorePages = {};
   state.classFindingsPage = 1;
   state.classFindingsFilterText = "";
   $("class-findings-search").value = "";
@@ -2247,7 +2186,7 @@ $("class-detect-btn").addEventListener("click", async () => {
   goStep(4); // goStep() tự gọi toggleStep4Direction() -> renderClassResults()
 });
 
-// ---- Bước 4: chẩn đoán độ tin cậy + danh sách dòng nghi ngờ ----
+// ---- Bước 3: kết quả = danh sách kết hợp + (tuỳ chọn) "Xem thêm" từng phương pháp ----
 function toggleStep4Direction() {
   const isClass = state.direction === "class";
   $("panel-4-attribute").hidden = isClass;
@@ -2255,42 +2194,21 @@ function toggleStep4Direction() {
   if (isClass && state.classDiagnostics) renderClassResults();
 }
 
-// Dispatch theo method CỦA KẾT QUẢ đang có (classResultMethod, không phải
-// classMethod đang chọn ở Bước 2 -- 2 cái có thể lệch nhau nếu người dùng đổi
-// lựa chọn sau khi đã detect xong) -- các phương pháp có hình dạng diagnostics
-// KHÁC NHAU hẳn (distance-based không train model nên không có cv_accuracy/
-// per_class_report/confusion_matrix), nên không gộp chung 1 hàm render được.
 function renderClassResults() {
   const diag = state.classDiagnostics;
   if (!diag) return;
-  if (state.classResultMethod === "distance_based") {
-    renderClassResultsDistance(diag);
-  } else if (state.classResultMethod === "ensemble_based") {
-    renderClassResultsEnsemble(diag);
-  } else if (state.classResultMethod === "combined") {
-    renderClassResultsCombined(diag);
-  } else {
-    renderClassResultsSingleLearning(diag);
-  }
+  renderClassSummary(diag);
   renderClassPreprocess();
   renderClassFindingsTable();
+  renderClassMore();
 }
 
-// ---- Tiện ích dùng chung cho các kiểu kết quả ----
-const CLASS_METHOD_SHORT = {
-  single_learning: "Confident Learning",
-  distance_based: "Mutual k-NN",
-  ensemble_based: "Ensemble",
-};
+// ---- Tiện ích dùng chung ----
 const classNum = (n) => Number(n).toLocaleString("vi-VN");
 const classPct = (x, digits = 1) => `${(x * 100).toFixed(digits)}%`;
 
-// Màu thẻ chỉ số theo nhận xét độ tin cậy của backend (diag.quality, dựa trên MỨC VƯỢT MỐC):
-// none (không hơn đoán bừa) -> đỏ; low (hơn rất ít) -> vàng; ok -> xanh.
-function classQualityClass(q) {
-  if (!q) return "";
-  return q.level === "none" ? "stat-crimson" : q.level === "low" ? "stat-amber" : "stat-teal";
-}
+// Nhận xét độ tin cậy của backend (diag.quality, dựa trên MỨC VƯỢT MỐC): none (không hơn đoán bừa) -> đỏ;
+// low (hơn rất ít) -> vàng; ok -> không cần cảnh báo.
 function classQualityWarning(q) {
   return q && q.level !== "ok" ? { level: q.level === "none" ? "bad" : "warn", text: q.message } : null;
 }
@@ -2402,196 +2320,20 @@ function renderClassPreprocess() {
     ${warns}`;
 }
 
-// ---- Distance-based (Mutual k-NN): không train model -> không có
-// cv_accuracy/baseline/per_class_report/confusion_matrix để chẩn đoán, thay
-// bằng chỉ số "độ phủ" (bao nhiêu dòng có láng giềng lẫn nhau) -- xem
-// DistanceNoiseDiagnostics trong class_noise/distance_based.py. ----
-function renderClassResultsDistance(diag) {
-  const coveragePct = diag.n_rows_used > 0 ? (diag.n_rows_with_mutual_neighbors / diag.n_rows_used) * 100 : 0;
-  const isLowCoverage = coveragePct < 50;
-  const kSub = diag.k_mode === "auto" ? "tự chọn theo độ phủ" : "bạn chọn";
-
-  $("class-stats-grid").innerHTML = `
-    <div class="stat-card">
-      <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
-      <span class="stat-label">Dòng dùng được / ${classNum(diag.n_rows_total)} tổng</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value mono">${diag.k}</span>
-      <span class="stat-label">Số láng giềng (k)</span>
-      <span class="stat-sub mono">${kSub}</span>
-    </div>
-    <div class="stat-card ${isLowCoverage ? "stat-crimson" : "stat-teal"}">
-      <span class="stat-value mono">${coveragePct.toFixed(1)}%</span>
-      <span class="stat-label">Dòng có láng giềng lẫn nhau</span>
-      <span class="stat-sub mono">${classNum(diag.n_rows_with_mutual_neighbors)} / ${classNum(diag.n_rows_used)} dòng</span>
-    </div>
-    <div class="stat-card stat-amber">
-      <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
-      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
-    </div>
-  `;
-
-  setClassWarnings([
-    isLowCoverage
-      ? {
-          level: "warn",
-          text: `Chỉ ${coveragePct.toFixed(1)}% số dòng có láng giềng lẫn nhau, nên phần lớn dòng chưa kết luận được. Thử tăng k hoặc chọn lại cột đặc trưng.`,
-        }
-      : null,
-    ...(diag.warnings || []).map((w) => ({ level: "warn", text: w })),
-  ]);
-
-  // Distance-based không có bảng precision/recall hay ma trận đếm (không
-  // train model nào để tính) -- ẩn hẳn 2 khối đó.
-  $("class-report-card").hidden = true;
-  $("class-confusion-card").hidden = true;
-}
-
-// ---- Ensemble-based (N29 -- LogisticRegression + GaussianNB + LinearSVC
-// biểu quyết): không có 1 cv_accuracy duy nhất (3 model riêng biệt), thay
-// bằng accuracy + MỨC VƯỢT MỐC RIÊNG của từng classifier -- PHẢI xem cả 3
-// trước khi tin findings, giống hệt lý do cv_accuracy bên Single learning. ----
-function renderClassResultsEnsemble(diag) {
-  $("class-report-card").hidden = false;
-  $("class-confusion-card").hidden = true;
-  $("class-report-title").textContent = "Từng classifier so với nhãn ghi";
-
-  const baseline = diag.majority_baseline_accuracy;
-  const entries = diag.classifier_names.map((name) => ({
-    name,
-    acc: diag.per_classifier_accuracy[name],
-    excess: diag.per_classifier_excess ? diag.per_classifier_excess[name] : null,
-  }));
-  const q = diag.quality;
-
-  $("class-stats-grid").innerHTML = `
-    <div class="stat-card">
-      <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
-      <span class="stat-label">Dòng dùng được / ${classNum(diag.n_rows_total)} tổng</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value mono">${diag.classifier_names.length}</span>
-      <span class="stat-label">Số classifier biểu quyết</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value mono">${classPct(baseline, 2)}</span>
-      <span class="stat-label">Baseline (đoán bừa lớp đa số)</span>
-    </div>
-    <div class="stat-card ${classQualityClass(q)}">
-      <span class="stat-value mono">${q ? classPct(q.excess) : "—"}</span>
-      <span class="stat-label">Mức vượt mốc (classifier tốt nhất)</span>
-    </div>
-    <div class="stat-card stat-amber">
-      <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
-      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
-    </div>
-  `;
-  setClassWarnings([classQualityWarning(q)]);
-
-  $("class-report-table").innerHTML = `
-    <thead><tr><th>Classifier</th><th>Accuracy</th><th>Mức vượt mốc</th></tr></thead>
-    <tbody>${entries
-      .map(
-        (e) =>
-          `<tr><td>${escapeHtml(e.name)}</td><td class="mono">${classPct(e.acc, 2)}</td><td class="mono">${e.excess === null || e.excess === undefined ? "—" : classPct(e.excess)}</td></tr>`
-      )
-      .join("")}</tbody>`;
-}
-
-// ---- Single learning-based (Confident Learning + Random Forest): đầy đủ
-// cv_accuracy/baseline/mức vượt mốc/MCC/PR-AUC/ước lượng nhãn sai và bảng
-// precision/recall/confusion matrix để chẩn đoán độ tin cậy trước khi tin findings.
-// Mức vượt mốc = (CV accuracy - baseline) / (1 - baseline); cảnh báo theo mức này (diag.quality). ----
-function renderClassResultsSingleLearning(diag) {
-  $("class-report-card").hidden = false;
-  $("class-confusion-card").hidden = false;
-  $("class-report-title").textContent = "Precision / Recall / F1 từng lớp";
-  $("class-confusion-title").textContent = "Ma trận đếm (hàng = nhãn ghi, cột = nhãn model tự tin)";
-  const q = diag.quality;
-
-  $("class-stats-grid").innerHTML = `
-    <div class="stat-card">
-      <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
-      <span class="stat-label">Dòng dùng được / ${classNum(diag.n_rows_total)} tổng</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value mono">${classPct(diag.cv_accuracy, 2)}</span>
-      <span class="stat-label">CV accuracy</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value mono">${classPct(diag.majority_baseline_accuracy, 2)}</span>
-      <span class="stat-label">Baseline (đoán bừa lớp đa số)</span>
-    </div>
-    <div class="stat-card ${classQualityClass(q)}">
-      <span class="stat-value mono">${q ? classPct(q.excess) : "—"}</span>
-      <span class="stat-label">Mức vượt mốc</span>
-      <span class="stat-sub mono">(CV − baseline) / (1 − baseline)</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value mono">${diag.mcc === null ? "—" : diag.mcc.toFixed(3)}</span>
-      <span class="stat-label">MCC</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value mono">${diag.pr_auc_macro === null ? "—" : diag.pr_auc_macro.toFixed(3)}</span>
-      <span class="stat-label">PR-AUC (trung bình các lớp)</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value mono">${diag.estimated_noise_rate === null ? "—" : classPct(diag.estimated_noise_rate)}</span>
-      <span class="stat-label">Ước lượng tỉ lệ nhãn sai</span>
-      <span class="stat-sub mono">≈ ${classNum(diag.estimated_label_errors)} dòng</span>
-    </div>
-    <div class="stat-card stat-amber">
-      <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
-      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
-    </div>
-  `;
-  setClassWarnings([classQualityWarning(q), ...(diag.warnings || []).map((w) => ({ level: "warn", text: w }))]);
-
-  $("class-report-table").innerHTML = `
-    <thead><tr><th>Lớp</th><th>Precision</th><th>Recall</th><th>F1</th><th>n</th></tr></thead>
-    <tbody>${diag.class_names
-      .map((cls) => {
-        const r = diag.per_class_report[cls];
-        return `<tr><td>${escapeHtml(cls)}</td><td class="mono">${r.precision.toFixed(3)}</td><td class="mono">${r.recall.toFixed(3)}</td><td class="mono">${r["f1-score"].toFixed(3)}</td><td class="mono">${r.support}</td></tr>`;
-      })
-      .join("")}</tbody>`;
-
-  const cm = diag.confusion_count_matrix;
-  $("class-confusion-table").innerHTML = `
-    <thead><tr><th>Nhãn ghi \\ Model tự tin</th>${cm.class_names.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
-    <tbody>${cm.class_names
-      .map((rowName, i) => `<tr><td>${escapeHtml(rowName)}</td>${cm.rows[i].map((v) => `<td class="mono">${v}</td>`).join("")}</tr>`)
-      .join("")}</tbody>`;
-}
-
-// ---- Bộ kết hợp: chạy cả 3 phương pháp (class_noise/combined.py). Chẩn đoán = bảng từng phương pháp
-// (bật/tắt, mức vượt mốc, trọng số, số dòng tự gắn cờ, lý do) vì đó chính là bằng chứng "vì sao danh sách này". ----
-function renderClassResultsCombined(diag) {
-  $("class-report-card").hidden = false;
-  $("class-confusion-card").hidden = true;
-  $("class-report-title").textContent = "Các phương pháp thành phần";
-  const q = diag.quality;
+// ---- Phần chính: thẻ tóm tắt + khung cảnh báo ----
+// Chỉ 2 thẻ (dòng dùng được, dòng nghi ngờ). Các chỉ số tin cậy của từng phương pháp (mức vượt mốc của Confident
+// Learning, độ phủ của Mutual k-NN, trọng số...) nằm ở phần "Xem thêm" bên dưới danh sách.
+function renderClassSummary(diag) {
   const kMethod = CLASS_METHOD_SHORT[diag.k_method] || diag.k_method || "—";
-  const modeText = diag.alpha > 0 ? "pha trộn" : "công tắc";
-
   $("class-stats-grid").innerHTML = `
     <div class="stat-card">
       <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
       <span class="stat-label">Dòng dùng được / ${classNum(diag.n_rows_total)} tổng</span>
     </div>
-    <div class="stat-card">
-      <span class="stat-value mono">${classNum(diag.k)}</span>
-      <span class="stat-label">Số dòng trả về (K)</span>
-      <span class="stat-sub mono">theo ${escapeHtml(kMethod)} · ${modeText}</span>
-    </div>
-    <div class="stat-card ${classQualityClass(q)}">
-      <span class="stat-value mono">${q && q.excess !== null ? classPct(q.excess) : "—"}</span>
-      <span class="stat-label">Mức vượt mốc tốt nhất của mô hình</span>
-    </div>
     <div class="stat-card stat-amber">
       <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
-      <span class="stat-label">Dòng bị gắn cờ nghi ngờ</span>
+      <span class="stat-label">Dòng nghi sai nhãn</span>
+      <span class="stat-sub mono">theo số dòng ${escapeHtml(kMethod)} tự gắn cờ</span>
     </div>
   `;
   setClassWarnings([
@@ -2599,31 +2341,12 @@ function renderClassResultsCombined(diag) {
       level: "warn",
       text: "Bộ kết hợp là phương pháp thử nghiệm: trong thực nghiệm, nó chưa vượt được một mô hình đơn giản (1 mô hình tăng cường độ dốc chạy qua kiểm tra chéo). Xem cột «Cùng nghi» để biết dòng nào nhiều phương pháp đồng ý.",
     },
-    classQualityWarning(q),
+    classQualityWarning(diag.quality),
     ...(diag.warnings || []).map((w) => ({ level: "warn", text: w })),
   ]);
-
-  const rows = Object.entries(diag.methods)
-    .map(([name, m]) => {
-      const quality = m.quality === null || m.quality === undefined ? "không có mô hình" : classPct(m.quality);
-      return `<tr>
-        <td>${escapeHtml(CLASS_METHOD_SHORT[name] || name)}</td>
-        <td>${m.on ? "Bật" : "Tắt"}</td>
-        <td class="mono">${quality}</td>
-        <td class="mono">${m.on ? m.weight.toFixed(2) : "—"}</td>
-        <td class="mono">${classNum(m.n_flagged)}</td>
-        <td>${escapeHtml(m.reason)}</td>
-      </tr>`;
-    })
-    .join("");
-  $("class-report-table").innerHTML = `
-    <thead><tr><th>Phương pháp</th><th>Trạng thái</th><th>Mức vượt mốc</th><th>Trọng số</th><th>Tự gắn cờ</th><th>Lý do</th></tr></thead>
-    <tbody>${rows}</tbody>`;
 }
 
-// Findings đã được backend CHUẨN HOÁ chung tên trường cho cả 2 method
-// (suggested_label, score) -- xem app.py::class_noise_detect_api(). Chỉ CHỮ
-// hiển thị (header, nhãn cột điểm số) khác nhau theo method.
+// ---- Bảng danh sách kết hợp ----
 function getFilteredClassFindings() {
   const text = state.classFindingsFilterText.trim().toLowerCase();
   if (!text) return state.classFindings;
@@ -2632,18 +2355,15 @@ function getFilteredClassFindings() {
   );
 }
 
-const CLASS_SCORE_LABELS = {
-  distance_based: { suggested: "Gợi ý nhãn (đa số láng giềng)", score: "Tỉ lệ láng giềng bất đồng" },
-  single_learning: { suggested: "Model tự tin", score: "Margin" },
-  ensemble_based: { suggested: "Gợi ý nhãn (đa số classifier)", score: "Tỉ lệ classifier bất đồng" },
-  combined: { suggested: "Gợi ý nhãn (bỏ phiếu có trọng số)", score: "Điểm kết hợp" },
-};
+// Tên cột của bảng danh sách kết hợp (dùng cả ở bước Xử lý). Nhãn gợi ý = bỏ phiếu có trọng số giữa các phương
+// pháp đang dùng; điểm kết hợp = trung bình có trọng số hạng phần trăm của các phương pháp.
+const CLASS_COLUMN_LABELS = { suggested: "Nhãn gợi ý", score: "Điểm kết hợp" };
 
 // Số dòng hiển thị kèm ghi chú nếu dòng này là bản trùng của 1 dòng đại diện đã bị gắn cờ (bước chuẩn bị đã gộp).
 function classRowCell(f) {
   return f.duplicate_of ? `${f.row_number} <span class="hint-note">trùng dòng ${f.duplicate_of}</span>` : `${f.row_number}`;
 }
-// Bộ kết hợp: lý do nghi ngờ từng dòng = phương pháp nào cùng gắn cờ + các chỉ số thành phần.
+// Lý do nghi ngờ từng dòng = phương pháp nào cùng gắn cờ + các chỉ số thành phần của chính dòng đó.
 function classReasonText(f) {
   // Dòng 1: phương pháp nào cùng gắn cờ; dòng 2 (chữ nhỏ): các chỉ số thành phần của chính dòng đó.
   const head =
@@ -2668,21 +2388,17 @@ function renderClassFindingsTable() {
   const start = (state.classFindingsPage - 1) * perPage;
   const pageRows = all.slice(start, start + perPage);
 
-  const labels = CLASS_SCORE_LABELS[state.classResultMethod] || CLASS_SCORE_LABELS.single_learning;
   const table = $("class-findings-table");
-  const isCombined = state.classResultMethod === "combined";
-  const colCount = isCombined ? 5 : 4;
-  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${labels.suggested}</th><th>${labels.score}</th>${isCombined ? "<th>Cùng nghi</th>" : ""}</tr></thead>`;
+  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${CLASS_COLUMN_LABELS.suggested}</th><th>${CLASS_COLUMN_LABELS.score}</th><th>Cùng nghi</th></tr></thead>`;
   if (!pageRows.length) {
-    table.innerHTML = `${headHtml}<tbody><tr><td colspan="${colCount}" class="empty-cell">Không có dòng nào khớp.</td></tr></tbody>`;
+    const empty = state.classFindings.length ? "Không có dòng nào khớp." : "Không phát hiện dòng nào nghi sai nhãn.";
+    table.innerHTML = `${headHtml}<tbody><tr><td colspan="5" class="empty-cell">${empty}</td></tr></tbody>`;
   } else {
     table.innerHTML = `${headHtml}<tbody>${pageRows
-      .map(
-        (f) =>
-          `<tr><td class="mono">${classRowCell(f)}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label || "—")}</td><td class="mono">${f.score.toFixed(4)}</td>${
-            isCombined ? (() => { const r = classReasonText(f); return `<td class="class-reason-cell">${escapeHtml(r.head)}<br><span class="hint-note">${escapeHtml(r.detail)}</span></td>`; })() : ""
-          }</tr>`
-      )
+      .map((f) => {
+        const r = classReasonText(f);
+        return `<tr><td class="mono">${classRowCell(f)}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label || "—")}</td><td class="mono">${f.score.toFixed(4)}</td><td class="class-reason-cell">${escapeHtml(r.head)}<br><span class="hint-note">${escapeHtml(r.detail)}</span></td></tr>`;
+      })
       .join("")}</tbody>`;
   }
 
@@ -2690,6 +2406,117 @@ function renderClassFindingsTable() {
   pag.hidden = totalPages <= 1;
   $("class-page-indicator").textContent = `Trang ${state.classFindingsPage}/${totalPages}`;
 }
+
+// ---- "Xem thêm" (mặc định ĐÓNG): mức tin cậy + danh sách RIÊNG của từng phương pháp ----
+const CLASS_MORE_PER_PAGE = 10;
+// Thứ tự hiện: Confident Learning trước, Mutual k-NN sau. Mỗi phương pháp có cách tính điểm nghi riêng.
+const CLASS_MORE_METHODS = [
+  { key: "single_learning", score: "Điểm nghi (1 − xác suất mô hình cho nhãn ghi)" },
+  { key: "distance_based", score: "Điểm nghi (tỉ lệ láng giềng lẫn nhau khác nhãn)" },
+];
+
+// Bảng "Mức tin cậy": mỗi phương pháp một hàng -- chỉ số đo độ tin cậy, trọng số, đang dùng hay bị loại (+ lý do).
+function classTrustTableHTML(diag) {
+  const rows = CLASS_MORE_METHODS.filter(({ key }) => diag.methods && diag.methods[key])
+    .map(({ key }) => {
+      const m = diag.methods[key];
+      let metric = "—";
+      if (key === "single_learning" && diag.single) {
+        const s = diag.single;
+        metric =
+          `Mức vượt mốc <strong>${m.quality === null || m.quality === undefined ? "—" : classPct(m.quality)}</strong>` +
+          `<br><span class="hint-note">CV accuracy ${classPct(s.cv_accuracy, 2)} · mốc đoán bừa ${classPct(s.majority_baseline_accuracy, 2)}</span>`;
+      } else if (key === "distance_based" && diag.distance) {
+        const d = diag.distance;
+        metric =
+          `Độ phủ <strong>${d.coverage === null || d.coverage === undefined ? "—" : classPct(d.coverage)}</strong>` +
+          `<br><span class="hint-note">${classNum(d.n_rows_with_mutual_neighbors)} / ${classNum(d.n_rows_used)} dòng có láng giềng lẫn nhau · k = ${d.k}</span>`;
+      }
+      const status = m.on
+        ? `<strong>Đang dùng</strong>`
+        : `<strong class="class-method-off">Bị loại</strong>`;
+      return `<tr>
+        <td>${escapeHtml(CLASS_METHOD_SHORT[key])}</td>
+        <td class="class-reason-cell">${metric}</td>
+        <td class="mono">${m.on && m.weight !== null && m.weight !== undefined ? m.weight.toFixed(2) : "—"}</td>
+        <td class="class-reason-cell">${status}<br><span class="hint-note">${escapeHtml(m.reason || "")}</span></td>
+        <td class="mono">${classNum(m.n_flagged_rows !== undefined ? m.n_flagged_rows : m.n_flagged)}</td>
+      </tr>`;
+    })
+    .join("");
+  return `<section class="class-more-block">
+    <h4 class="sub-title">Mức tin cậy</h4>
+    <div class="table-wrap"><table class="results-table">
+      <thead><tr><th>Phương pháp</th><th>Chỉ số tin cậy</th><th>Trọng số</th><th>Trạng thái</th><th>Tự gắn cờ</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </section>`;
+}
+
+// Danh sách riêng của 1 phương pháp: các dòng chính nó tự gắn cờ + điểm nghi của nó (phân trang).
+function classMethodListHTML(def, diag) {
+  const info = diag.methods && diag.methods[def.key];
+  if (!info) return "";
+  const list = state.classMethodFindings[def.key] || [];
+  const totalPages = Math.max(1, Math.ceil(list.length / CLASS_MORE_PER_PAGE));
+  const page = Math.min(Math.max(1, state.classMorePages[def.key] || 1), totalPages);
+  state.classMorePages[def.key] = page;
+  const start = (page - 1) * CLASS_MORE_PER_PAGE;
+  const rows = list.slice(start, start + CLASS_MORE_PER_PAGE);
+  const name = CLASS_METHOD_SHORT[def.key];
+
+  const note = info.on
+    ? ""
+    : `<p class="hint-note">Phương pháp này bị loại khỏi bộ kết hợp (${escapeHtml(info.reason || "")}), danh sách chỉ để tham khảo.</p>`;
+  const body = rows.length
+    ? `<div class="table-wrap"><table class="results-table" data-more-table="${def.key}">
+        <thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>Nhãn gợi ý</th><th>${def.score}</th></tr></thead>
+        <tbody>${rows
+          .map(
+            (f) =>
+              `<tr><td class="mono">${classRowCell(f)}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label || "—")}</td><td class="mono">${f.score === null || f.score === undefined ? "—" : f.score.toFixed(4)}</td></tr>`
+          )
+          .join("")}</tbody>
+      </table></div>`
+    : `<p class="empty-state">${escapeHtml(name)} không tự gắn cờ dòng nào.</p>`;
+  const pager =
+    totalPages > 1
+      ? `<div class="pagination">
+          <button class="btn btn-ghost btn-small" type="button" data-more-page="${def.key}" data-dir="-1"${page <= 1 ? " disabled" : ""}>← Trước</button>
+          <span class="mono">Trang ${page}/${totalPages}</span>
+          <button class="btn btn-ghost btn-small" type="button" data-more-page="${def.key}" data-dir="1"${page >= totalPages ? " disabled" : ""}>Sau →</button>
+        </div>`
+      : "";
+  return `<section class="class-more-block" data-more-method="${def.key}">
+    <h4 class="sub-title">${escapeHtml(name)} · ${classNum(list.length)} dòng tự gắn cờ</h4>
+    ${note}${body}${pager}
+  </section>`;
+}
+
+function renderClassMore() {
+  const btn = $("class-more-btn");
+  const panel = $("class-more-panel");
+  btn.setAttribute("aria-expanded", state.classMoreOpen ? "true" : "false");
+  btn.textContent = state.classMoreOpen ? "Thu gọn ▴" : "Xem thêm ▾";
+  panel.hidden = !state.classMoreOpen;
+  const diag = state.classDiagnostics;
+  if (!state.classMoreOpen || !diag) {
+    panel.innerHTML = ""; // đóng thì không dựng gì (nhẹ khi danh sách rất dài)
+    return;
+  }
+  panel.innerHTML = classTrustTableHTML(diag) + CLASS_MORE_METHODS.map((def) => classMethodListHTML(def, diag)).join("");
+}
+$("class-more-btn").addEventListener("click", () => {
+  state.classMoreOpen = !state.classMoreOpen;
+  renderClassMore();
+});
+$("class-more-panel").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-more-page]");
+  if (!btn || btn.disabled) return;
+  const key = btn.dataset.morePage;
+  state.classMorePages[key] = (state.classMorePages[key] || 1) + parseInt(btn.dataset.dir, 10);
+  renderClassMore();
+});
 
 $("class-findings-search").addEventListener(
   "input",
@@ -2911,13 +2738,24 @@ $("ch-bulk-assign-btn").addEventListener("click", () => {
   const matches = chBulkMatches();
   if (!action || matches.length === 0) return;
   chDismissConfirm();
+  // "Sửa nhãn theo gợi ý" bỏ qua dòng không có nhãn gợi ý (bộ kết hợp có thể không gợi ý được); đếm đúng số dòng THỰC SỰ gán.
+  let assigned = 0;
   matches.forEach((f) => {
     if (action === "relabel_suggested") {
-      if (f.suggested_label) classHandling.plan.set(f.row_number, { action: "relabel", newLabel: f.suggested_label });
+      if (!f.suggested_label) return;
+      classHandling.plan.set(f.row_number, { action: "relabel", newLabel: f.suggested_label });
     } else classHandling.plan.set(f.row_number, { action, newLabel: null });
+    assigned++;
   });
+  const skipped = matches.length - assigned;
   const names = { keep: "Giữ nguyên", remove_row: "Xoá dòng", relabel_suggested: "Sửa nhãn theo gợi ý" };
-  setStatusMessage($("ch-status"), `Đã gán «${names[action]}» cho ${chNum(matches.length)} dòng (chưa áp dụng).`, "ok");
+  setStatusMessage(
+    $("ch-status"),
+    `Đã gán «${names[action]}» cho ${chNum(assigned)} dòng` +
+      (skipped ? `, bỏ qua ${chNum(skipped)} dòng không có nhãn gợi ý` : "") +
+      " (chưa áp dụng).",
+    assigned ? "ok" : "error"
+  );
   chRenderTable();
   chRenderSummary();
   chRenderBulkInfo();
@@ -2960,9 +2798,8 @@ function chRenderTable() {
   classHandling.page = Math.min(classHandling.page, totalPages);
   const start = (classHandling.page - 1) * classHandling.perPage;
   const pageRows = all.slice(start, start + classHandling.perPage);
-  const labels = CLASS_SCORE_LABELS[state.classResultMethod] || CLASS_SCORE_LABELS.single_learning;
   // STT = số thứ tự trong danh sách đang hiện (đếm tiếp qua các trang); "Dòng" = số dòng trong file.
-  const head = `<thead><tr><th>STT</th><th>Dòng</th><th>Nhãn ghi</th><th>${labels.suggested}</th><th>${labels.score}</th><th>Cách xử lý</th></tr></thead>`;
+  const head = `<thead><tr><th>STT</th><th>Dòng</th><th>Nhãn ghi</th><th>${CLASS_COLUMN_LABELS.suggested}</th><th>${CLASS_COLUMN_LABELS.score}</th><th>Cách xử lý</th></tr></thead>`;
   $("ch-list-title").textContent = state.classFindings.length ? `Dòng nghi ngờ (${chNum(all.length)})` : "Dòng nghi ngờ";
   if (!pageRows.length) {
     $("ch-table").innerHTML = `${head}<tbody><tr><td colspan="6" class="empty-cell">${
@@ -3330,25 +3167,21 @@ $("ch-export-btn").addEventListener("click", async () => {
 });
 
 // ====== "Cửa" cho workspace.js gọi vào ======
-// presetDirection(dir): chọn sẵn thẻ hướng ở Bước 2 (pill "Class Noise" trên
-// header, mục "Cần cấu hình" trong menu Product) -- bấm đúng thẻ như người
-// dùng bấm, nên mọi hiệu ứng kèm theo (hiện khối chọn phương pháp, mở nút
-// Tiếp tục) đều y hệt. Nếu đã có file và đang ở Bước 2 thì thấy ngay; chưa
-// có file thì lựa chọn được nhớ sẵn, tải file lên là thấy thẻ đã chọn.
+// presetDirection(dir): chọn sẵn thẻ hướng (chỉ còn trong giao diện cũ; Denoise không có thẻ hướng nên là no-op).
 window.DenoiseFlow = {
   presetDirection(dir) {
-    const card = document.querySelector(`.direction-grid:not(#class-method-grid) .direction-card[data-direction="${dir}"]`);
+    const card = document.querySelector(`.direction-grid .direction-card[data-direction="${dir}"]`);
     if (card) card.click();
   },
   currentStep() { return state.currentStep; },
   // Nhận dữ liệu CSV từ chuỗi xử lý của 3 nhóm tool (nút "Class Noise" ở "Xong · xử lý tiếp bằng"): dựng thành File
-  // rồi coi như người dùng vừa chọn file đó ở bước 1 (có bảng xem trước, chờ chọn phương pháp + Tải lên).
+  // rồi coi như người dùng vừa chọn file đó ở bước 1 (có bảng xem trước, chờ bấm Tải lên).
   loadCsvText(text, name) {
     const file = new File([text], name, { type: "text/csv" });
     fileInput.value = "";
     goStep(1);
     handleFileSelected(file);
-    setStatusMessage($("upload-status"), "Đã nhận dữ liệu vừa xử lý. Chọn phương pháp rồi bấm Tải lên.", "ok");
+    setStatusMessage($("upload-status"), "Đã nhận dữ liệu vừa xử lý. Bấm Tải lên để tiếp tục.", "ok");
   },
 };
 

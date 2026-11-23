@@ -181,7 +181,7 @@
 
             <!-- Khối CTA đen -> mở khối Class Noise (4 bước). -->
             <a class="ws-megamenu-cta" href="#" data-section="class-noise">
-              <p class="ws-megamenu-cta-eyebrow">Nhãn có thể bị gán sai?<br>3 thuật toán, 4 bước</p>
+              <p class="ws-megamenu-cta-eyebrow">Nhãn có thể bị gán sai?<br>2 phương pháp gộp, 4 bước</p>
               <p class="ws-megamenu-cta-title">Class<br>Noise</p>
               <span class="ws-megamenu-cta-arrow">→</span>
             </a>
@@ -289,7 +289,7 @@
         <div class="hm-card"><span class="hm-card-num">/06</span><span class="hm-card-icon">⇥</span><h3>Khoảng trắng thừa</h3><p>Khoảng trắng đầu / cuối, ký tự vô hình.</p><small>Free Tools</small></div>
         <div class="hm-card"><span class="hm-card-num">/07</span><span class="hm-card-icon">⧉</span><h3>Dòng trùng</h3><p>Giữ một bản, xoá các bản còn lại.</p><small>Free Tools</small></div>
         <div class="hm-card"><span class="hm-card-num">/08</span><span class="hm-card-icon">⇄</span><h3>Rule liên cột</h3><p>Biểu thức và phụ thuộc hàm giữa các cột.</p><small>Cần cấu hình</small></div>
-        <div class="hm-card"><span class="hm-card-num">/09</span><span class="hm-card-icon">🏷</span><h3>Class noise</h3><p>Dòng có thể bị gán sai nhãn, 3 thuật toán.</p><small>Class Noise</small></div>
+        <div class="hm-card"><span class="hm-card-num">/09</span><span class="hm-card-icon">🏷</span><h3>Class noise</h3><p>Dòng có thể bị gán sai nhãn, gộp hai phương pháp.</p><small>Class Noise</small></div>
       </div>
 
       <!-- 4 ô quy trình nối liền, ô cuối nền đen (theo trang Features của CYD). -->
@@ -314,7 +314,7 @@
       <div class="hm-numbers">
         <div class="hm-number"><b>7</b><span>Loại nhiễu thuộc tính</span></div>
         <div class="hm-number"><b>2</b><span>Kiểu rule liên cột</span></div>
-        <div class="hm-number"><b>3</b><span>Thuật toán class noise</span></div>
+        <div class="hm-number"><b>2</b><span>Phương pháp gộp cho class noise</span></div>
         <div class="hm-number"><b>10</b><span>Cách xử lý</span></div>
         <div class="hm-number"><b>7</b><span>Tool chạy ngay</span></div>
         <div class="hm-number"><b>0</b><span>Dịch vụ bên thứ ba</span></div>
@@ -335,7 +335,7 @@
         <a class="hm-tool" href="#" data-convert-tool="delimiter"><span class="hm-tool-kind">Convert</span><b>Đổi delimiter CSV</b><small>Đổi dấu phân cách</small><i>→</i></a>
         <a class="hm-tool" href="#" data-convert-tool="csv-to-json"><span class="hm-tool-kind">Convert</span><b>CSV → JSON</b><small>Mỗi dòng thành 1 object</small><i>→</i></a>
         <a class="hm-tool" href="#" data-convert-tool="json-to-csv"><span class="hm-tool-kind">Convert</span><b>JSON → CSV</b><small>Làm phẳng JSON thành cột</small><i>→</i></a>
-        <a class="hm-tool is-dark" href="#" data-section="class-noise"><span class="hm-tool-kind">Class Noise</span><b>Nhãn bị gán sai</b><small>4 bước, 3 thuật toán độc lập.</small><i>→</i></a>
+        <a class="hm-tool is-dark" href="#" data-section="class-noise"><span class="hm-tool-kind">Class Noise</span><b>Nhãn bị gán sai</b><small>4 bước, gộp Confident Learning và k-NN.</small><i>→</i></a>
       </div>
 
       <!-- "VỀ DỰ ÁN" (thay cho "WHO IT'S FOR" của CYD, vì đây là khoá luận) +
@@ -353,7 +353,7 @@
         <table class="hm-spec">
           <tr><th>Backend</th><td>Flask + pandas, SQLite</td></tr>
           <tr><th>Phát hiện</th><td>7 detector + rule liên cột, tự viết</td></tr>
-          <tr><th>Class noise</th><td>Confident Learning · Mutual k-NN · Ensemble</td></tr>
+          <tr><th>Class noise</th><td>Confident Learning + Mutual k-NN, gộp một danh sách</td></tr>
           <tr><th>Xử lý</th><td>Chạy thử, hoàn tác</td></tr>
           <tr><th>Biểu thức rule</th><td>Bộ phân tích tự viết, không dùng eval()</td></tr>
           <tr><th>Giao diện</th><td>HTML / CSS / JS thuần</td></tr>
@@ -492,12 +492,12 @@
 
           <section class="tx-section" id="guide-06">
             <h2 class="tx-h2"><span>06</span>Class Noise</h2>
-            <p>Dùng khi file có một cột nhãn (vd loại khách hàng) và bạn nghi vài dòng bị gán sai nhãn. Có 4 bước:</p>
+            <p>Dùng khi file có một cột nhãn (vd loại khách hàng) và bạn nghi vài dòng bị gán sai nhãn. Denoise chạy Confident Learning (Random Forest) và Mutual k-NN rồi gộp thành một danh sách. Có 4 bước:</p>
             <ol class="tx-steps">
-              <li><b>File &amp; phương pháp.</b> Tải file lên và chọn thuật toán: Distance-based chạy nhanh nhất, Single learning-based (Random Forest) có thể mất vài phút, Ensemble-based lâu hơn Distance-based nhưng thường chính xác hơn, Bộ kết hợp (thử nghiệm) chạy cả ba rồi gộp thành một danh sách. Bấm "Tải lên &amp; tiếp tục".</li>
-              <li><b>Nhãn &amp; đặc trưng.</b> Chọn cột nhãn, rồi tick các cột SỐ dùng để dự đoán nhãn (cột chữ chưa được hỗ trợ nên bị khoá). Chọn "Giảm số cột" nếu muốn Denoise giữ cột liên quan nhất tới nhãn (mặc định không giảm). Sau đó bấm "Phát hiện Class Noise".</li>
-              <li><b>Kết quả.</b> Xem độ tin cậy (mức vượt mốc) và bước chuẩn bị dữ liệu (cột nào bị bỏ, dòng nào gộp hoặc mâu thuẫn) trước. Nếu có cảnh báo đỏ thì danh sách dòng nghi ngờ bên dưới rất khó tin, hãy chọn lại cột đặc trưng.</li>
-              <li><b>Xử lý.</b> Chưa có xử lý tự động, hiện bạn dùng danh sách dòng nghi ngờ để tự rà soát.</li>
+              <li><b>Tải file.</b> Chọn file CSV hoặc Excel rồi bấm "Tải lên &amp; tiếp tục".</li>
+              <li><b>Nhãn &amp; đặc trưng.</b> Chọn cột nhãn, rồi tick các cột SỐ dùng để dự đoán nhãn (cột chữ chưa được hỗ trợ nên bị khoá). Bấm "Phát hiện nhãn sai"; file lớn có thể mất vài phút.</li>
+              <li><b>Kết quả.</b> Đọc cảnh báo và bước chuẩn bị dữ liệu (cột nào bị bỏ, dòng nào gộp hoặc mâu thuẫn) trước. Cảnh báo đỏ nghĩa là danh sách rất khó tin, hãy chọn lại cột đặc trưng. Cột «Cùng nghi» cho biết phương pháp nào cũng gắn cờ dòng đó; bấm "Xem thêm" để xem mức tin cậy và danh sách riêng của từng phương pháp.</li>
+              <li><b>Xử lý.</b> Mỗi dòng nghi ngờ có 3 cách: giữ nguyên, xoá dòng hoặc sửa nhãn (theo gợi ý hoặc sang nhãn khác đã có). Có thể gán hàng loạt theo hướng đổi nhãn và mức đáng ngờ. "Áp dụng" chạy thử và hỏi xác nhận trước khi ghi, hoàn tác được; xong thì xuất file CSV.</li>
             </ol>
           </section>
 
@@ -703,7 +703,7 @@
     </div>
 
     <!-- ============================================================
-         KHỐI: CLASS NOISE -- 4 bước (File & phương pháp / Nhãn & đặc trưng /
+         KHỐI: CLASS NOISE -- 4 bước (Tải file / Nhãn & đặc trưng /
          Kết quả / Xử lý), chạy bằng workspace-flow.js (bản sao script.js, hướng
          cố định = "class"). Nhánh Attribute Noise của luồng cũ KHÔNG còn dùng
          (đã thay bằng 4 tool "Cần cấu hình" ở #section-config) -- các khối
@@ -716,7 +716,7 @@
         <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i><b>Class Noise</b></span>
         <span class="ft-meta">
           <span>Chạy trên<strong>Backend Flask</strong></span>
-          <span>Thuật toán<strong>4 lựa chọn</strong></span>
+          <span>Thuật toán<strong>Bộ kết hợp</strong></span>
           <span>Bản gốc<strong>Không bị sửa</strong></span>
         </span>
       </div>
@@ -726,23 +726,23 @@
            GIỮ NGUYÊN cấu trúc .stepper > .step[data-step] > .step-circle +
            .step-label vì renderStepper()/goStep() trong workspace-flow.js
            dựa vào đúng các class này. -->
-      <!-- 4 BƯỚC (Class Noise): bước "Hướng xử lý" cũ đã gộp vào bước 1 (chọn
-           phương pháp ngay cạnh ô tải file). data-step vẫn là số panel nội bộ
-           của workspace-flow.js (1, 3, 4, 5 -- panel-2 không còn dùng), chỉ
-           SỐ HIỂN THỊ là 1-4 (renderStepper() đánh lại theo thứ tự ô). -->
+      <!-- 4 BƯỚC (Class Noise): bước "Hướng xử lý" cũ đã bỏ (hướng luôn là Class Noise) và
+           KHÔNG còn bước chọn phương pháp (chỉ có 1 cách phát hiện: bộ kết hợp Confident Learning +
+           Mutual k-NN). data-step vẫn là số panel nội bộ của workspace-flow.js (1, 3, 4, 5 --
+           panel-2 không còn dùng), chỉ SỐ HIỂN THỊ là 1-4 (renderStepper() đánh lại theo thứ tự ô). -->
       <nav class="stepper" id="stepper" aria-label="Bốn bước">
         <div class="stepper-track"></div>
-        <div class="step" data-step="1"><span class="step-circle">1</span><span class="step-label">File &amp; phương pháp</span></div>
+        <div class="step" data-step="1"><span class="step-circle">1</span><span class="step-label">Tải file</span></div>
         <div class="step" data-step="3"><span class="step-circle">2</span><span class="step-label">Nhãn &amp; đặc trưng</span></div>
         <div class="step" data-step="4"><span class="step-circle">3</span><span class="step-label">Kết quả</span></div>
         <div class="step" data-step="5"><span class="step-circle">4</span><span class="step-label">Xử lý</span></div>
       </nav>
 
-      <!-- ===== Bước 1: tải file lên -- 2 khung 01/02 cùng khuôn trang tool ===== -->
+      <!-- ===== Bước 1: tải file lên -- 1 khung "01 · File của bạn" cùng khuôn trang tool ===== -->
       <section class="panel is-active" id="panel-1">
         <p class="eyebrow">[ Bước 1 / 4 ]</p>
-        <h2 class="panel-title">Tải dữ liệu &amp; chọn phương pháp</h2>
-        <p class="panel-desc">CSV hoặc Excel có một cột nhãn. Chọn thuật toán rồi bấm Tải lên.</p>
+        <h2 class="panel-title">Tải dữ liệu</h2>
+        <p class="panel-desc">CSV hoặc Excel có một cột nhãn.</p>
         <!-- Lưu ý khi vào Class Noise: nên làm sạch lỗi THUỘC TÍNH trước. Ô trống / sai định dạng làm dòng bị loại
              khỏi phép tính, giá trị bất thường làm các cột đặc trưng sai -> việc tìm nhãn sai kém tin cậy.
              2 link dùng data-section nên workspace.js tự chuyển khối (switchSection). Hai tool đó tải file kết quả
@@ -753,7 +753,7 @@
           Làm sạch bằng <a href="#" data-section="free-tools">Tự động</a> và <a href="#" data-section="config">Cần cấu hình</a>,
           rồi bấm «Class Noise» ở mục «Xong · xử lý tiếp bằng» để chuyển dữ liệu sang đây.
         </div>
-        <div class="convert-grid">
+        <div class="convert-grid convert-grid--single">
           <section class="convert-panel ft-panel">
             <div class="ft-panel-head"><span class="ft-eyebrow-tag">01 · File của bạn</span></div>
             <div class="ft-panel-body">
@@ -796,39 +796,11 @@
               </div>
             </div>
           </section>
-          <section class="convert-panel ft-panel">
-            <div class="ft-panel-head"><span class="ft-eyebrow-tag">02 · Phương pháp phát hiện</span></div>
-            <div class="ft-panel-body">
-              <!-- 3 nhóm phương pháp theo Bảng 6, Gupta & Gupta (2019). Chọn đúng 1.
-                   id/class GIỮ NGUYÊN (class-method-section/grid, .direction-card
-                   [data-method]) vì workspace-flow.js gắn listener theo đúng tên này. -->
-              <div id="class-method-section">
-                <div class="direction-grid method-grid is-stacked" id="class-method-grid">
-                  <div class="direction-card" data-method="distance_based" tabindex="0" role="button">
-                    <h3>Distance-based</h3>
-                    <p>Mutual k-NN, dựa vào khoảng cách giữa các dòng. Nhanh.</p>
-                  </div>
-                  <div class="direction-card" data-method="single_learning" tabindex="0" role="button">
-                    <h3>Single learning-based</h3>
-                    <p>Confident Learning với Random Forest. Có thể mất vài phút.</p>
-                  </div>
-                  <div class="direction-card" data-method="ensemble_based" tabindex="0" role="button">
-                    <h3>Ensemble-based</h3>
-                    <p>Ba classifier khác họ biểu quyết. Lâu hơn Distance-based nhưng thường chính xác hơn.</p>
-                  </div>
-                  <div class="direction-card" data-method="combined" tabindex="0" role="button">
-                    <h3>Bộ kết hợp <span class="hint-note">(thử nghiệm)</span></h3>
-                    <p>Chạy cả ba phương pháp rồi gộp thành một danh sách, tự bỏ mô hình học máy không hơn đoán bừa. Chưa vượt được mô hình đơn giản trong thực nghiệm.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
         </div>
       </section>
 
-      <!-- Panel 2 (hướng xử lý) KHÔNG còn dùng: hướng luôn là Class Noise, phương
-           pháp chọn ở bước 1. Giữ 1 nút ẩn vì workspace-flow.js gắn listener theo id. -->
+      <!-- Panel 2 (hướng xử lý) KHÔNG còn dùng: hướng luôn là Class Noise và chỉ có 1 cách phát hiện.
+           Giữ 1 nút ẩn vì workspace-flow.js gắn listener theo id. -->
       <section class="panel" id="panel-2"><button id="continue-step2-btn" type="button" hidden></button></section>
 
       <!-- ===== Bước 3: cấu hình ===== -->
@@ -879,22 +851,14 @@
         <div id="panel-3-class" hidden>
           <p class="panel-desc" id="panel-3-class-desc">
             Chọn một cột làm <strong>nhãn</strong> và các cột <strong>số</strong> làm đặc trưng (cột chữ chưa được hỗ trợ).
-            Với Distance-based và Ensemble-based, cột số được cap outlier và biến đổi logarit trước khi chạy.
+            Denoise chạy Confident Learning và Mutual k-NN rồi gộp thành một danh sách dòng nghi sai nhãn.
+            Trước đó nó tự bỏ cột hằng, cột gần như toàn ô trống, cột định danh và cột trùng thông tin (không dùng nhãn);
+            cột số còn lại được cap outlier và biến đổi logarit trước khi chạy Mutual k-NN.
           </p>
 
           <div class="field field-grow">
             <label>Cột nhãn (label)</label>
             <select class="select" id="class-label-select"></select>
-          </div>
-
-          <div class="sub-section">
-            <h3 class="sub-title">Giảm số cột</h3>
-            <p class="panel-desc">Dù chọn gì, Denoise vẫn tự bỏ cột hằng, cột gần như toàn ô trống, cột định danh và cột trùng thông tin (không dùng nhãn).</p>
-            <div class="reduce-choice" id="class-reduce-choice">
-              <label class="switch-row"><input type="radio" name="class-reduce" value="no" checked /> <span>Không giảm số cột</span> <span class="hint-note">giữ các cột đã tick (mặc định)</span></label>
-              <label class="switch-row"><input type="radio" name="class-reduce" value="yes" /> <span>Giảm số cột</span> <span class="hint-note">giữ cột liên quan nhất tới nhãn</span></label>
-            </div>
-            <p class="hint-note" id="class-reduce-hint" hidden>Chọn cột theo nhãn nên nếu nhãn sai nhiều thì lựa chọn này kém tin cậy; Denoise sẽ cảnh báo ở phần kết quả khi mô hình hầu như không hơn đoán bừa hoặc lớp hiếm quá ít dòng.</p>
           </div>
 
           <div class="sub-section">
@@ -908,62 +872,10 @@
             <div class="feature-check-list" id="class-feature-list"></div>
           </div>
 
-          <div class="sub-section" id="class-params-single">
-            <h3 class="sub-title">Tham số nâng cao (tuỳ chọn)</h3>
-            <div class="field-row">
-              <div class="field">
-                <label>Số cây (n_estimators)</label>
-                <input type="number" class="input" id="class-n-estimators" value="300" min="10" step="10" />
-              </div>
-              <div class="field">
-                <label>Số fold (cv_folds)</label>
-                <input type="number" class="input" id="class-cv-folds" value="5" min="2" max="10" />
-              </div>
-            </div>
-          </div>
-
-          <div class="sub-section" id="class-params-distance" hidden>
-            <h3 class="sub-title">Tham số nâng cao (tuỳ chọn)</h3>
-            <div class="field-row">
-              <div class="field">
-                <label>Số láng giềng (k)</label>
-                <input type="number" class="input" id="class-k-neighbors" value="5" min="1" max="50" placeholder="tự động" />
-              </div>
-            </div>
-            <p class="panel-desc">Để trống để tự chọn k theo độ phủ (k nhỏ nhất trong 3, 5, 7, 9, 11, 15 mà ít nhất 90% dòng có láng giềng lẫn nhau). Không train model nên thường nhanh hơn.</p>
-          </div>
-
-          <div class="sub-section" id="class-params-combined" hidden>
-            <h3 class="sub-title">Tham số nâng cao (tuỳ chọn)</h3>
-            <div class="field-row">
-              <div class="field">
-                <label>Cách kết hợp</label>
-                <select class="select" id="class-combined-alpha">
-                  <option value="0">Công tắc: các phương pháp còn dùng được tin ngang nhau</option>
-                  <option value="0.5">Pha trộn: phương pháp có mức vượt mốc cao được tin hơn</option>
-                </select>
-              </div>
-            </div>
-            <p class="panel-desc">Chạy cả ba phương pháp nên lâu hơn từng phương pháp riêng. Số dòng trả về lấy theo phương pháp được tin nhất.</p>
-          </div>
-
-          <div class="sub-section" id="class-params-ensemble" hidden>
-            <h3 class="sub-title">Tham số nâng cao (tuỳ chọn)</h3>
-            <div class="field-row">
-              <div class="field">
-                <label>Số fold (cv_folds)</label>
-                <input type="number" class="input" id="class-ensemble-cv-folds" value="5" min="2" max="10" />
-              </div>
-            </div>
-            <p class="panel-desc">Dòng bị ít nhất 2/3 classifier dự đoán khác nhãn ghi thì bị gắn cờ.</p>
-          </div>
-
-          <p class="hint-note" id="class-wait-hint">Có thể mất vài phút tuỳ kích thước file. Đừng tắt tab.</p>
-
           <p class="status-text" id="class-source-note" hidden></p>
 
           <div class="panel-actions">
-            <button class="btn btn-primary" id="class-detect-btn" type="button">Phát hiện Class Noise →</button>
+            <button class="btn btn-primary" id="class-detect-btn" type="button">Phát hiện nhãn sai →</button>
             <span class="status-text" id="class-detect-status"></span>
           </div>
         </div>
@@ -1024,7 +936,7 @@
 
         <!-- Nhánh CLASS NOISE -->
         <div id="panel-4-class" hidden>
-          <p class="panel-desc">Xem độ tin cậy trước khi tin danh sách bên dưới.</p>
+          <p class="panel-desc">Danh sách gộp từ Confident Learning và Mutual k-NN. Đọc cảnh báo trước khi tin danh sách bên dưới.</p>
 
           <div class="stats-grid" id="class-stats-grid"></div>
 
@@ -1032,21 +944,7 @@
 
           <div class="chart-card" id="class-preprocess-card" hidden></div>
 
-          <div class="chart-card" id="class-report-card">
-            <h3 class="sub-title" id="class-report-title">Precision / Recall / F1 từng lớp</h3>
-            <div class="table-wrap">
-              <table class="results-table" id="class-report-table"></table>
-            </div>
-          </div>
-
-          <div class="chart-card" id="class-confusion-card">
-            <h3 class="sub-title" id="class-confusion-title">Ma trận đếm (hàng = nhãn ghi, cột = nhãn model tự tin)</h3>
-            <div class="table-wrap">
-              <table class="results-table" id="class-confusion-table"></table>
-            </div>
-          </div>
-
-          <h3 class="sub-title">Danh sách dòng nghi ngờ (mức đáng ngờ giảm dần)</h3>
+          <h3 class="sub-title">Danh sách dòng nghi ngờ (điểm kết hợp giảm dần)</h3>
           <div class="toolbar">
             <input type="search" class="input search-input" id="class-findings-search" placeholder="Tìm theo số dòng hoặc nhãn…" />
           </div>
@@ -1057,6 +955,13 @@
             <button class="btn btn-ghost btn-small" id="class-page-prev" type="button">← Trước</button>
             <span id="class-page-indicator" class="mono"></span>
             <button class="btn btn-ghost btn-small" id="class-page-next" type="button">Sau →</button>
+          </div>
+
+          <!-- "Xem thêm" (mặc định ĐÓNG): mức tin cậy + danh sách RIÊNG của Confident Learning và Mutual k-NN.
+               Nội dung do workspace-flow.js dựng (renderClassMore) khi mở. -->
+          <div class="class-more">
+            <button class="btn btn-ghost" id="class-more-btn" type="button" aria-expanded="false" aria-controls="class-more-panel">Xem thêm ▾</button>
+            <div class="class-more-panel" id="class-more-panel" hidden></div>
           </div>
 
           <div class="panel-actions">

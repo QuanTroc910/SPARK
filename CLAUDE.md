@@ -199,7 +199,12 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     API: `MethodOutput`, `from_single/from_distance/from_ensemble`, `combine_methods(outputs, alpha, recorded_labels)` (gộp từ điểm đã lưu,
     không chạy lại), `detect_class_noise_combined(df, config, alpha, k_neighbors, prepare_features)` (chạy cả 3 rồi gộp; `prepare_features`
     = cap + log chỉ cho Distance và Ensemble). **Cách hiểu "công tắc / pha trộn" là của mình (kế hoạch chỉ ghi 1 dòng) — đối chiếu lại với thầy.**
-    α KHÔNG chọn ở đây (việc của mục 5: chọn trên 1 seed rồi giữ cố định). Chưa nối vào `app.py`/giao diện (mục 6).
+    α KHÔNG chọn ở đây (việc của mục 5: chọn trên 1 seed rồi giữ cố định). Đã nối vào web ở mục 45.
+    **[CẬP NHẬT 23/11/2026, mục 48]** trên web bộ kết hợp CHỈ gộp Confident Learning + Mutual k-NN: `detect_class_noise_combined(..., methods=DEFAULT_METHODS)` với
+    `DEFAULT_METHODS = ("single_learning", "distance_based")` (nhận cả tên gọi tắt "single" / "distance" / "ensemble", `normalize_methods()` kiểm + xếp theo `METHOD_ORDER`);
+    Ensemble KHÔNG chạy nếu không chọn nhưng vẫn gộp được (dùng cho thực nghiệm). Phần "gộp điểm + chọn K" tách riêng thành `merge_scores_and_select_k()` (công thức + luật K
+    KHÔNG đổi, chờ thực nghiệm; đối chiếu bản cũ trên 600 cấu hình ngẫu nhiên = từng trường giống hệt). Thêm `MethodFinding` + `method_findings(output, recorded)` (dòng MÀ CHÍNH 1 phương pháp tự gắn cờ, xếp
+    theo điểm nghi của nó), và `CombinedResult.method_outputs` / `.recorded_labels`.
     **THỰC NGHIỆM ĐẦY ĐỦ (mục 5) KHÔNG ỦNG HỘ bộ kết hợp:** thua đối chứng `naive_cv`, không hơn cách chỉ cắt top-K theo điểm của Confident Learning, α gần như vô nghĩa; xem mục 5 trước khi trích dẫn.
   - `ensemble_diverse.py` — **MỚI (22/11/2026, kế hoạch mục 7) — ENSEMBLE 5 HỌ**, làm lại `ensemble_based.py` (bản cũ GIỮ NGUYÊN làm đối chứng):
     `detect_class_noise_ensemble_diverse(df, config, cv_folds=5, random_state=42, min_votes=3, balance_thresholds=True)` -> `EnsembleDiverseResult(findings, diagnostics, scores)`.
@@ -244,7 +249,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     là 300 cây con cộng lại (mỗi cây phải mọc qua nhiều bước chia nhánh tốn
     kém), còn 3 classifier kia đều là bài toán tối ưu LỒI (hoặc không cần
     tối ưu gì như GaussianNB) nên hội tụ rất nhanh dù "có train".
-  - `web_adapter.py` — **MỚI (mục 45)**: hàm phụ cho route Class Noise của web (`expand_findings`, `quality_assessment` theo MỨC VƯỢT MỐC, `preprocess_info`, `string_frame`, `finite`); thuần Python, không phụ thuộc Flask.
+  - `web_adapter.py` — **MỚI (mục 45)**: hàm phụ cho route Class Noise của web (`expand_findings`, `quality_assessment` theo MỨC VƯỢT MỐC, `preprocess_info`, `string_frame`, `finite`; mục 48 thêm
+    `method_list_json()` = danh sách riêng 1 phương pháp ở dạng JSON đã mở ra cả nhóm dòng trùng, và `COMPONENT_LABELS`); thuần Python, không phụ thuộc Flask.
   - `feature_selection.py` — **MỚI, GIẢM SỐ CỘT trước khi chạy Confident
     Learning** (theo yêu cầu thầy sau buổi báo cáo — xem mục 9 dưới đây để
     biết đầy đủ lý do/lịch sử quyết định): `rank_by_importance()` (Bước 1 —
@@ -355,7 +361,9 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     code vì không sai gì, không có gì phải xoá.
   - `GET /api/download/<download_id>` — trả file CSV (lưu tạm trong
     `CLEANED_FILES`, tách riêng khỏi `UPLOADED_FILES`/`WORKING_FILES`).
-  - `POST /api/class-noise/detect` — **hướng Class noise (mục 10+11):
+  - `POST /api/class-noise/detect` — **[CẬP NHẬT mục 48: giao diện Denoise CHỈ còn gọi `method="combined"` (Confident Learning + Mutual k-NN), không gửi k / alpha / n_estimators /
+    cv_folds, `reduce_columns=false`; backend dùng mặc định k = 5, alpha = 0, n_estimators = 100, cv_folds = 5. Các method khác + `reduce_columns` + `k` / `alpha` vẫn được route nhận.]**
+    **Hướng Class noise (mục 10+11):
     field `method`** dispatch sang 1 trong **ĐỦ CẢ 3** thuật toán DETECT
     (`"single_learning"` mặc định = Confident Learning, `"distance_based"`
     = Mutual k-NN N13, `"ensemble_based"` = N29 — **MỚI, mục 11, vừa nối
@@ -553,8 +561,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     ô cách xử lý mặc định "— Chọn cách xử lý —" và cột chưa chọn thì KHÔNG bị đụng (tránh
     xoá nhầm hàng loạt, cùng bài học mục 13).
   - `workspace-flow.js` (IIFE, copy từ `script.js`, API `window.DenoiseFlow`): trong
-    Denoise chỉ nhánh **Class Noise 4 bước** được dùng (File & phương pháp → Nhãn & đặc
-    trưng → Kết quả → Xử lý, đã làm ở mục 37). Phần logic Attribute 5 bước còn nằm trong file
+    Denoise chỉ nhánh **Class Noise 4 bước** được dùng (Tải file → Nhãn & đặc
+    trưng → Kết quả → Xử lý, đã làm ở mục 37; từ mục 48 KHÔNG còn bước chọn phương pháp). Phần logic Attribute 5 bước còn nằm trong file
     nhưng giao diện Denoise không còn mở nó (thay bằng 3 nhóm tool).
   - `workspace.css`: biến CSS bề rộng khung; class dùng chung `.cyd-table*`, `.convert-*`,
     `.ft-*`, `.cf-form*`, `.cf-sum*`, `.cf-method-*`; `@container` cho bảng lỗi theo cột.
@@ -1969,7 +1977,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **File mới `class_noise/web_adapter.py`** (thuần Python): `string_frame`, `expand_findings`, `quality_assessment`, `preprocess_info`, `finite` — tách khỏi `app.py` để `app.py` chỉ "phiên dịch" JSON. Ngưỡng cảnh báo `LOW_EXCESS` = 0,2 lấy chung với
       `PreprocessConfig.low_margin_warning` (con số TỰ ĐỀ XUẤT, chưa có căn cứ thống kê). **Khác yêu cầu gốc:** yêu cầu ghi cảnh báo khi mức vượt mốc "<= 0"; mình cảnh báo thêm mức vàng cho < 20% (đỏ vẫn là <= 0).
     - **Sửa lỗi tìm thấy khi chạy thử:** `preprocess.py::_margin_over_baseline` báo "classes ... are not in class_weight" với nhãn dạng chuỗi trên scikit-learn 1.9 (cross_val_predict + class_weight="balanced") → mã hoá nhãn bằng `LabelEncoder` trước khi đưa vào.
-    - **Giao diện (`workspace.html`, `workspace-flow.js`, `workspace.css`):** thẻ phương pháp thứ 4 "Bộ kết hợp (thử nghiệm)"; khối "Giảm số cột" = 2 ô chọn (radio) thay nút "Chạy giảm cột tự động" (route cũ `/api/class-noise/reduce-features` VẪN CÒN trong `app.py` nhưng giao diện không gọi nữa);
+    - **[PHẦN GIAO DIỆN NÀY ĐÃ ĐƯỢC THAY Ở MỤC 48: không còn 4 thẻ phương pháp, 2 ô Giảm số cột, ô tham số; chỉ còn 1 nút "Phát hiện nhãn sai"]** **Giao diện (`workspace.html`, `workspace-flow.js`, `workspace.css`):** thẻ phương pháp thứ 4 "Bộ kết hợp (thử nghiệm)"; khối "Giảm số cột" = 2 ô chọn (radio) thay nút "Chạy giảm cột tự động" (route cũ `/api/class-noise/reduce-features` VẪN CÒN trong `app.py` nhưng giao diện không gọi nữa);
       ô tham số "Cách kết hợp" (công tắc / pha trộn); thẻ `#class-preprocess-card` ở bước Kết quả (cột bị bỏ + luật, dòng gộp / mâu thuẫn, xếp hạng khi giảm theo nhãn, cảnh báo); thẻ chỉ số Single có Mức vượt mốc, MCC, PR-AUC, ước lượng nhãn sai;
       khung cảnh báo `#class-warning-card` dùng `diag.quality` (đỏ khi `none`, vàng khi `low`); bảng danh sách của Bộ kết hợp có cột "Cùng nghi" (2 dòng: phương pháp cùng gắn cờ + chỉ số thành phần); bảng ghi chú "trùng dòng X" cho dòng thêm từ nhóm trùng;
       nhãn gợi ý rỗng (Bộ kết hợp có thể không có gợi ý) được xử lý ở bước Xử lý (không có lựa chọn "gợi ý", gán hàng loạt bỏ qua dòng đó); Guide + dòng "Thuật toán 4 lựa chọn" cập nhật.
@@ -2010,6 +2018,38 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Còn lại và bị ảnh hưởng:** `analyze_class_noise_same_k.py` import từ `evaluate_class_noise_multiseed` (đã xoá) nên KHÔNG chạy được nữa; `summarize_class_noise_multiseed.py` chỉ đọc file `data/class_noise_multiseed_v2.jsonl` nên vẫn chạy.
       Các file kết quả vẫn giữ: `data/class_noise_multiseed_v2.jsonl`, `data/class_noise_experiment_summary.md`, `data/creditcard_noise_experiment_results.jsonl` (2 file `cl_rf_vs_lightgbm_*` của mục 46 đã xoá theo ý user).
     - **Sau đó user bảo xoá luôn** `data/demo_attribute_noise_2000.csv/.xlsx/_ground_truth.csv` + `data/DEMO_ATTRIBUTE_2000.md` (bộ DEMO bảo vệ, mục 39): ĐÃ XOÁ. Muốn có lại thì sinh lại bằng `SCALE=3.62 OUT_NAME=demo_attribute_noise_2000 python3 data/generate_test_attribute_noise.py` (script còn, hạt giống cố định nên ra đúng file cũ; tài liệu `DEMO_ATTRIBUTE_2000.md` thì lấy từ lịch sử git). Các mục 39, 46 và mục `data/` ở đầu file nhắc tới các file này chỉ còn là lịch sử.
+
+48. **Class Noise trên web chỉ còn MỘT cách phát hiện: "Phát hiện nhãn sai" = bộ kết hợp Confident Learning + Mutual k-NN — ĐÃ XONG (23/11/2026), ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user chốt "sửa bước PHÁT HIỆN của Class Noise trên web thành MỘT lựa chọn duy nhất 'Bộ kết hợp'" (4 việc: giao diện chọn phương pháp, backend, màn hình kết quả, chữ hướng dẫn).
+      Công thức gộp điểm và luật chọn K CHƯA chốt (sẽ chốt sau thực nghiệm) nên KHÔNG đổi lần này, chỉ tách ra 1 hàm để sau đổi dễ.
+    - **Giao diện bước chọn (`workspace.html`, `workspace-flow.js`, `workspace.css`):** bỏ 4 thẻ phương pháp + khung "02 · Phương pháp phát hiện" (bước 1 còn đúng 1 khung "01 · File của bạn", lớp `.convert-grid--single` cho khung trải hết hàng;
+      nhãn thanh bước 1 = "Tải file", tiêu đề "Tải dữ liệu"; tải lên KHÔNG còn đòi chọn phương pháp); bỏ khối 2 nút "Giảm số cột / Không giảm số cột" và 4 khối tham số (k, "Cách kết hợp", số cây, fold) + dòng
+      "có thể mất vài phút" tĩnh; nút `#class-detect-btn` = "Phát hiện nhãn sai →" luôn gửi `{method:"combined", reduce_columns:false}` (KHÔNG gửi k / alpha / n_estimators). Lúc chạy hiện đúng câu
+      "Đang chạy Mutual k-NN và Confident Learning, có thể mất vài phút với file lớn…" (chạy ĐỒNG BỘ, chưa có chạy nền / thanh tiến độ). Bước chuẩn bị chung (không dùng nhãn) vẫn chạy ở backend và vẫn có thẻ báo cáo.
+      Đã xoá hẳn khỏi JS (còn trong git, commit `ce34446`): `state.classMethod`, `state.classResultMethod`, các hàm hiển thị riêng Distance / Ensemble / Single learning, `CLASS_SCORE_LABELS`, `classReduceChosen`, `CLASS_METHOD_LABELS`;
+      khỏi CSS: các luật `.method-grid`, `.reduce-choice`.
+    - **Backend:** `class_noise/combined.py` (xem bullet kiến trúc: `methods`, `merge_scores_and_select_k`, `method_findings`); `class_noise/web_adapter.py` (`method_list_json`, `COMPONENT_LABELS`); `app.py`: nhánh `combined` dùng mặc định
+      k = 5 (`_neighbors_from_payload()`, dùng chung với nhánh `distance_based`: không gửi `k` = 5, `null` / `""` / `"auto"` = tự chọn theo độ phủ), alpha = 0, n_estimators = 100, KHÔNG chạy Ensemble. KHÔNG xoá `ensemble_based.py`,
+      `ensemble_diverse.py`, các nhánh `single_learning` / `distance_based` / `ensemble_based` của route (mặc định khi không gửi `method` vẫn là `single_learning` như cũ), route `/api/class-noise/reduce-features`.
+    - **Response mới của `combined`:** `method_findings` = {`single_learning`: [...], `distance_based`: [...]} — danh sách RIÊNG của từng phương pháp (dòng chính nó tự gắn cờ, mỗi dòng `row_number`, `recorded_label`,
+      `suggested_label`, `score` = điểm nghi của chính nó: Confident Learning = 1 − xác suất mô hình cho nhãn ghi, Mutual k-NN = tỉ lệ láng giềng lẫn nhau khác nhãn; xếp giảm dần; đã mở ra cả nhóm dòng trùng như danh sách kết hợp, có
+      `duplicate_of`); `diagnostics.methods[m].n_flagged_rows` (số dòng đó tính cả bản trùng; `n_flagged` giữ nghĩa cũ); `diagnostics.quality` = None nếu bộ không có mô hình nào; câu nhận xét khi Confident Learning bị loại ghi tên
+      "Confident Learning (Random Forest)" và "chỉ dựa vào Mutual k-NN". `diagnostics.ensemble` / `ensemble_disagreement` chỉ có khi gọi `detect_class_noise_combined` với Ensemble (web không gọi).
+    - **Màn hình kết quả (bước 3/4):** phần chính = 2 thẻ (dòng dùng được, dòng nghi sai nhãn) + khung cảnh báo (GIỮ NHƯ CŨ, gồm dòng "Bộ kết hợp là phương pháp thử nghiệm…" + nhận xét theo mức vượt mốc + cảnh báo của backend) + thẻ báo cáo bước chuẩn bị
+      (giữ như cũ) + bảng danh sách kết hợp (Dòng / Nhãn ghi / Nhãn gợi ý / Điểm kết hợp / Cùng nghi). Bỏ bảng precision/recall và ma trận đếm. Nút `#class-more-btn` "Xem thêm ▾" (mặc định ĐÓNG, `aria-expanded`, đóng thì không dựng gì)
+      mở `#class-more-panel` gồm: (a) bảng "Mức tin cậy" (mỗi phương pháp: mức vượt mốc + CV accuracy + mốc đoán bừa của Confident Learning, độ phủ + k của Mutual k-NN, trọng số, Đang dùng / Bị loại + lý do, số dòng tự gắn cờ);
+      (b) danh sách riêng Confident Learning; (c) danh sách riêng Mutual k-NN — mỗi danh sách 10 dòng/trang, có cột điểm nghi của chính phương pháp, phương pháp bị loại có ghi chú "chỉ để tham khảo". Thứ tự: bảng chính → Xem thêm → "Tiếp tục".
+    - **Bước Xử lý:** dùng danh sách KẾT HỢP (không đổi); cột hiện "Nhãn gợi ý" / "Điểm kết hợp". Dòng không có nhãn gợi ý: không có lựa chọn "(gợi ý)", gán hàng loạt "Sửa nhãn theo gợi ý" bỏ qua (như mục 45). **Sửa kèm:** lời báo sau khi gán hàng loạt
+      trước đây ghi tổng số dòng khớp dù đã bỏ qua dòng không có gợi ý; nay ghi đúng số đã gán + "bỏ qua N dòng không có nhãn gợi ý" (báo lỗi nếu gán được 0 dòng).
+    - **Chữ hướng dẫn:** trang chủ ("2 phương pháp gộp", "gộp hai phương pháp", bảng thông số), menu, Guide mục 06 viết lại 4 bước (Tải file → Nhãn & đặc trưng → Kết quả có "Xem thêm" → Xử lý); **sửa kèm** câu sai từ trước
+      "Xử lý: chưa có xử lý tự động" (bước Xử lý đã có từ mục 37).
+    - **Kiểm chứng (script ở thư mục tạm, KHÔNG nằm trong repo):** (1) `combine_methods` mới = bản cũ (lấy từ git) từng trường trên 600 cấu hình ngẫu nhiên (có NaN, hoà điểm, cổng bật/tắt, alpha 0 / 0,25 / 0,5 / 1, có / không nhãn ghi) và
+      `detect_class_noise_combined` 3 phương pháp trên Car 5% = bản cũ từng dòng; mặc định = gộp tay Confident Learning + Mutual k-NN; Ensemble không chạy khi không chọn (38 kiểm tra đạt); (2) Flask test client 64 kiểm tra (cấu trúc response,
+      mặc định k = 5 / alpha = 0 / n_estimators = 100, `k=null` → auto, các method khác vẫn 200, file có dòng trùng, đặc trưng vô nghĩa → Confident Learning bị loại + cảnh báo đỏ, `_combined_json` với 3 / 1 phương pháp, JSON không NaN);
+      (3) Playwright trình duyệt thật 98 kiểm tra (không còn thẻ / ô tham số, request đúng, lời báo đang chạy, bảng chính, "Xem thêm" mở / đóng / phân trang / điểm khớp response, dòng không có gợi ý, cảnh báo đỏ, chạy lại không giữ Xem thêm cũ,
+      bước Xử lý đổi nhãn + xác nhận + hoàn tác + xoá + xuất CSV đúng số dòng, chuyển dữ liệu từ chuỗi tool sang Class Noise); (4) chụp ảnh xem bố cục các bước 1–4. Không lỗi JS.
+    - **Giới hạn / việc nợ:** chạy đồng bộ, chưa chạy nền / thanh tiến độ; danh sách riêng trả về ĐẦY ĐỦ trong response (file rất nhiễu có thể hàng chục nghìn dòng mỗi danh sách); dòng cảnh báo "thử nghiệm" vẫn còn trên màn kết quả
+      (hỏi user có muốn bỏ không); công thức gộp điểm + luật chọn K chưa chốt (`merge_scores_and_select_k`); mục "Giảm số cột theo nhãn" chỉ còn là tham số của route (`reduce_columns`), giao diện không dùng.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
