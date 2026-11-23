@@ -15,6 +15,7 @@ import math
 import os
 import re
 import threading
+import time
 import uuid
 from dataclasses import replace
 from functools import wraps
@@ -116,13 +117,46 @@ from converters.transform import (
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 
 # secret_key: Flask dùng để KÝ (sign) cookie session, chống giả mạo/sửa nội
-# dung cookie phía trình duyệt. Đọc từ biến môi trường SPARK_SECRET_KEY nếu
-# có (để cố định qua các lần restart), không có thì tự sinh ngẫu nhiên mỗi
-# lần khởi động -- GIỚI HẠN ĐÃ BIẾT (demo 1 người dùng): restart server là
-# mọi người đang đăng nhập bị đăng xuất (cookie cũ ký bằng key cũ không còn
-# hợp lệ) -- chấp nhận được cho quy mô khoá luận, giống tinh thần các giới
-# hạn đã ghi nhận ở Bước 5 an toàn (CLAUDE.md mục 13).
-app.secret_key = os.environ.get("SPARK_SECRET_KEY") or os.urandom(32)
+# dung cookie phía trình duyệt. Thứ tự lấy key: (1) biến môi trường
+# SPARK_SECRET_KEY nếu có; (2) file `.spark_secret_key` ở gốc repo (tự tạo ở
+# lần chạy đầu, KHÔNG commit -- xem .gitignore) để key GIỮ NGUYÊN qua các lần
+# khởi động lại server; (3) không ghi được file thì tự sinh ngẫu nhiên.
+# LÝ DO có (2): trước đây key đổi mỗi lần server khởi động lại, mà Flask chạy
+# debug=True nên tự khởi động lại mỗi khi 1 file .py đổi (vd sau `git pull`) ->
+# cookie đăng nhập cũ hết hiệu lực -> lần tải file đầu tiên sau đó báo "Cần đăng
+# nhập trước" và phải đăng nhập + tải lại lần 2 mới được.
+SECRET_KEY_FILE = Path(__file__).resolve().parent / ".spark_secret_key"
+
+
+def _load_secret_key():
+    env_key = os.environ.get("SPARK_SECRET_KEY")
+    if env_key:
+        return env_key
+    try:
+        # O_EXCL: chỉ 1 tiến trình tạo được file (Flask debug chạy 2 tiến trình
+        # cùng nạp app.py); tiến trình đến sau sẽ rơi xuống nhánh đọc bên dưới.
+        fd = os.open(SECRET_KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        new_key = os.urandom(32).hex()
+        with os.fdopen(fd, "w") as f:
+            f.write(new_key)
+        return new_key
+    except FileExistsError:
+        pass
+    except OSError:
+        return os.urandom(32)  # thư mục chỉ-đọc...: dùng key tạm như trước
+    # File đã có: đọc lại (chờ ngắn phòng khi tiến trình kia mới tạo, chưa kịp ghi xong).
+    for _ in range(20):
+        try:
+            saved = SECRET_KEY_FILE.read_text(encoding="utf-8").strip()
+        except OSError:
+            break
+        if len(saved) >= 32:
+            return saved
+        time.sleep(0.05)
+    return os.urandom(32)
+
+
+app.secret_key = _load_secret_key()
 
 # CORS: cho phép trình duyệt gọi API này dù frontend chạy ở 1 origin khác.
 # Giờ frontend đã được phục vụ CÙNG origin (xem trên) nên về lý thuyết không

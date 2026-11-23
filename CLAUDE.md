@@ -2055,6 +2055,18 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Giới hạn / việc nợ:** chạy đồng bộ, chưa chạy nền / thanh tiến độ; danh sách riêng trả về ĐẦY ĐỦ trong response (file rất nhiễu có thể hàng chục nghìn dòng mỗi danh sách); dòng cảnh báo "thử nghiệm" vẫn còn trên màn kết quả
       (hỏi user có muốn bỏ không); công thức gộp điểm + luật chọn K chưa chốt (`merge_scores_and_select_k`); mục "Giảm số cột theo nhãn" chỉ còn là tham số của route (`reduce_columns`), giao diện không dùng.
 
+49. **Lỗi "mới chạy web phải tải file lần thứ 2 mới được" — ĐÃ TÌM RA NGUYÊN NHÂN VÀ SỬA (23/11/2026, chưa commit lúc ghi):**
+    - **Nguyên nhân (tái hiện được bằng Playwright):** `app.secret_key` trước đây `os.urandom(32)` mỗi lần khởi động, mà `app.run(debug=True)` TỰ KHỞI ĐỘNG LẠI mỗi khi 1 file `.py` đổi (vd sau `git pull`)
+      hoặc khi user bật lại `python3 app.py` -> cookie đăng nhập cũ hết hiệu lực. Trang đang mở / cookie cũ gọi `/api/upload` ra 401 "Cần đăng nhập trước" chỉ hiện chữ dưới nút, KHÔNG hiện form đăng nhập
+      (frontend không xử lý 401 ở đâu cả) nên phải tải lại trang + đăng nhập rồi tải lần 2. Đây là "giới hạn đã biết" ghi ở mục 14 nhưng hoá ra gây khó chịu thật.
+    - **Sửa 3 chỗ:** (1) `app.py::_load_secret_key()`: lấy từ `SPARK_SECRET_KEY`, không có thì từ file `.spark_secret_key` ở gốc repo (tự tạo lần đầu bằng `O_EXCL` vì Flask debug nạp app.py ở 2 tiến trình; quyền 600;
+      đã thêm vào `.gitignore`), không ghi được file thì key ngẫu nhiên như cũ -> đăng nhập GIỮ qua các lần restart. (2) `workspace.js`: bọc `window.fetch` (dùng chung cả `workspace-flow.js`): gặp 401 ở `/api/*` (trừ `/api/auth/*`)
+      khi đang đăng nhập thì `handleSessionExpired()` đưa về form đăng nhập kèm lời "Phiên đăng nhập đã hết hạn (có thể do server vừa khởi động lại)", đăng nhập xong quay lại đúng khối, file đã chọn vẫn còn.
+      (3) `workspace-flow.js::updateUploadButtonState()`: nút "Tải lên & tiếp tục" của Class Noise chỉ cần đã chọn file (trước còn đòi `backendAvailable` từ lần kiểm tra kết nối chờ tối đa 1,5 giây -> server chậm lúc mới bật thì nút bị khoá).
+    - **Còn lại (không sửa):** dữ liệu file nằm trong RAM nên restart server vẫn mất `file_id` đang làm dở (các bước sau báo không tìm thấy file, phải tải lại); đổi mật khẩu/`SPARK_SECRET_KEY` hoặc xoá `.spark_secret_key` sẽ đăng xuất mọi người (đúng ý).
+    - **Kiểm chứng:** Playwright: (a) mở trang + chọn file, restart server, bấm Tải lên: trước sửa 401 không form, sau sửa tải lên thành công ngay lần đầu; (b) ép đổi key bằng biến môi trường: hiện form + lời giải thích, đăng nhập lại về Class Noise,
+      file vẫn chọn, tải lên được; (c) luồng khách -> đăng ký -> Free Tools chạy lần đầu bình thường; chạy lại bộ kiểm tra giao diện Class Noise 96 đạt (2 mục "lỗi" còn lại do bài kiểm tra cũ vẫn mong chữ đã bỏ).
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có

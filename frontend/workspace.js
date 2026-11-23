@@ -228,6 +228,29 @@ function onLoggedOut() {
   authState.afterLogin = null;
   applyAuthView();
 }
+
+// Phiên đăng nhập hết hiệu lực giữa chừng (vd server vừa khởi động lại): mọi API khác /api/auth/*
+// trả 401. Trước đây chỉ hiện chữ "Cần đăng nhập trước" dưới nút, form đăng nhập KHÔNG hiện nên người
+// dùng phải tải lại trang mới đăng nhập được (thấy như "tải file lần 2 mới được"). Giờ bọc fetch dùng
+// chung cho cả workspace.js lẫn workspace-flow.js: gặp 401 thì đưa về form đăng nhập kèm lời giải thích,
+// đăng nhập xong quay lại đúng khối đang làm (file đã chọn vẫn còn trong trang, không phải chọn lại).
+function handleSessionExpired() {
+  if (!authState.user) return; // đã ở trạng thái chưa đăng nhập: form đăng nhập đã có sẵn
+  const back = state.section;
+  onLoggedOut();
+  setAuthMode("login"); // setAuthMode xoá lời báo lỗi cũ nên đặt lời báo SAU nó
+  authState.afterLogin = back;
+  setError($("ws-auth-error"), "Phiên đăng nhập đã hết hạn (có thể do server vừa khởi động lại). Hãy đăng nhập lại.");
+}
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async function (input, init) {
+  const res = await nativeFetch(input, init);
+  if (res.status === 401) {
+    const url = typeof input === "string" ? input : (input && input.url) || "";
+    if (/^\/api\//.test(url) && !url.startsWith("/api/auth/")) handleSessionExpired();
+  }
+  return res;
+};
 // 1 form dùng cho cả 2 chế độ -- chỉ đổi chữ (tiêu đề, nút, dòng chuyển chế
 // độ, gợi ý độ dài) để không phải nhân đôi HTML.
 function setAuthMode(mode) {

@@ -225,7 +225,9 @@ function renderBackendStatus() {
     : `Không kết nối được backend. Hãy chạy "python3 app.py" rồi thử lại.`;
 }
 function updateUploadButtonState() {
-  $("upload-btn").disabled = !(state.selectedFile && state.backendAvailable);
+  // Chỉ cần đã chọn file. Trước đây còn đòi state.backendAvailable (kiểm tra kết nối chờ tối đa 1,5 giây):
+  // server chậm lúc mới bật thì nút bị khoá và phải chọn file lần 2. Mất kết nối thật thì bấm tải lên sẽ báo lỗi rõ.
+  $("upload-btn").disabled = !state.selectedFile;
 }
 async function checkBackendHealth() {
   try {
