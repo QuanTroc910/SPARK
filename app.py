@@ -520,6 +520,13 @@ def upload_file():
     file.save(save_path)
     try:
         df = load_data(str(save_path))  # hàm có sẵn trong attribute_noise/pipeline.py
+    except Exception as exc:
+        # File sai định dạng / rỗng / hỏng: báo 400 kèm lý do tiếng Việt (trước đây ra lỗi 500 không có nội dung,
+        # giao diện chỉ hiện câu chung chung). Giống cách _read_df_for_noise_tool() của các tool khác.
+        msg = str(exc)
+        if "No columns to parse" in msg:
+            return jsonify({"error": "File rỗng: không có tên cột hay dòng dữ liệu nào."}), 400
+        return jsonify({"error": f"Không đọc được file: {msg}"}), 400
     finally:
         # Đọc xong là xoá tệp trên đĩa (giống _read_df_for_noise_tool): bảng chỉ còn nằm trong bộ nhớ,
         # đúng như trang Guide/Privacy mô tả ("không ghi ra đĩa", "khởi động lại server là file biến mất").

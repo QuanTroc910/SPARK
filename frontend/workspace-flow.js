@@ -62,10 +62,10 @@ const NOISE_TYPE_META = {
   inconsistent_category: { label: "Không nhất quán", family: "teal" },
   whitespace_noise: { label: "Khoảng trắng thừa", family: "rose" },
   duplicate_row: { label: "Trùng dòng", family: "maroon" },
-  "rule:compare": { label: "Rule so sánh", family: "indigo" },
-  "rule:conditional": { label: "Rule điều kiện", family: "brown" },
-  "rule:formula": { label: "Rule công thức", family: "orange" },
-  "rule:functional_dependency": { label: "Rule phụ thuộc hàm", family: "green" },
+  "rule:compare": { label: "Quy tắc so sánh", family: "indigo" },
+  "rule:conditional": { label: "Quy tắc điều kiện", family: "brown" },
+  "rule:formula": { label: "Quy tắc công thức", family: "orange" },
+  "rule:functional_dependency": { label: "Quy tắc phụ thuộc hàm", family: "green" },
 };
 function noiseMeta(noiseType) {
   return NOISE_TYPE_META[noiseType] || { label: noiseType, family: "slate" };
@@ -86,7 +86,7 @@ const COLUMN_TYPES = {
   email: { label: "Email", noises: ["missing_value", "format_noise"] },
   phone: { label: "Số điện thoại", noises: ["missing_value", "format_noise"] },
   date: { label: "Ngày tháng (date)", noises: ["missing_value", "format_noise"] },
-  category: { label: "Phân loại (category)", noises: ["missing_value", "format_noise", "inconsistent_category"] },
+  category: { label: "Phân loại", noises: ["missing_value", "format_noise", "inconsistent_category"] },
 };
 
 // dtype mặc định ĐƯỢC BACKEND ĐOÁN SẴN (guess_column_dtype(), xem
@@ -334,7 +334,7 @@ $("upload-btn").addEventListener("click", async () => {
   const file = state.selectedFile;
   if (!file) return;
 
-  setButtonLoading($("upload-btn"), true, "Đang upload...", "Tải lên & tiếp tục");
+  setButtonLoading($("upload-btn"), true, "Đang tải lên…", "Tải lên & tiếp tục");
 
   const formData = new FormData();
   formData.append("file", file);
@@ -344,13 +344,13 @@ $("upload-btn").addEventListener("click", async () => {
     response = await fetch(`${API_BASE}/api/upload`, { method: "POST", body: formData });
   } catch (err) {
     setStatusMessage($("upload-status"), "Không gọi được backend. Kiểm tra xem python3 app.py có đang chạy không.", "error");
-    setButtonLoading($("upload-btn"), false, "Đang upload...", "Tải lên & tiếp tục");
+    setButtonLoading($("upload-btn"), false, "Đang tải lên…", "Tải lên & tiếp tục");
     return;
   }
-  setButtonLoading($("upload-btn"), false, "Đang upload...", "Tải lên & tiếp tục");
+  setButtonLoading($("upload-btn"), false, "Đang tải lên…", "Tải lên & tiếp tục");
 
   if (!response.ok) {
-    let msg = "Upload thất bại, kiểm tra lại file hoặc log của backend.";
+    let msg = "Tải lên thất bại, hãy kiểm tra lại file.";
     try { const err = await response.json(); if (err && err.error) msg = err.error; } catch (e) { /* giữ msg mặc định */ }
     setStatusMessage($("upload-status"), msg, "error");
     return;
@@ -1877,7 +1877,7 @@ $("reset-btn").addEventListener("click", () => {
   const box = $("history-confirm");
   const count = state.history.entries.length;
   box.innerHTML = `
-    <span class="handling-confirm-text">⚠ Bỏ toàn bộ <strong>${count}</strong> bước xử lý và quay về dữ liệu gốc đã upload?</span>
+    <span class="handling-confirm-text">⚠ Bỏ toàn bộ <strong>${count}</strong> bước xử lý và quay về dữ liệu gốc đã tải lên?</span>
     <button type="button" class="btn btn-danger btn-small" id="reset-confirm-yes">Xác nhận</button>
     <button type="button" class="btn btn-ghost btn-small" id="reset-confirm-no">Huỷ</button>
   `;
@@ -3125,7 +3125,7 @@ $("ch-reset-btn").addEventListener("click", () => {
   if (classHandling.busy) return;
   const box = $("ch-reset-confirm");
   box.innerHTML = `
-    <span class="handling-confirm-text">⚠ Bỏ toàn bộ <strong>${classHandling.history.entries.length}</strong> bước xử lý và quay về dữ liệu gốc đã upload?</span>
+    <span class="handling-confirm-text">⚠ Bỏ toàn bộ <strong>${classHandling.history.entries.length}</strong> bước xử lý và quay về dữ liệu gốc đã tải lên?</span>
     <button type="button" class="btn btn-danger btn-small" id="ch-reset-yes">Xác nhận</button>
     <button type="button" class="btn btn-ghost btn-small" id="ch-reset-no">Huỷ</button>`;
   box.hidden = false;

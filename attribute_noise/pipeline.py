@@ -26,7 +26,7 @@ def load_data(file_path: str) -> pd.DataFrame:
         return pd.read_csv(path, dtype=str, keep_default_na=False, na_filter=False)
     if suffix in (".xlsx", ".xls"):
         return pd.read_excel(path, dtype=str).fillna("")
-    raise ValueError(f"Unsupported file type: {suffix}")
+    raise ValueError(f"Định dạng file không được hỗ trợ ({suffix or 'không có đuôi'}). Chỉ nhận CSV hoặc Excel (.xlsx, .xls).")
 
 
 # Vài định dạng ngày phổ biến hay gặp trong file CSV/Excel -- thử lần lượt,

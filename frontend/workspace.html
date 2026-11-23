@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Denoise — Workspace</title>
+  <title>Denoise — Làm sạch dữ liệu</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;650;700;800&display=swap" rel="stylesheet" />
@@ -71,7 +71,7 @@
       </div>
       <div class="ws-auth-footer">
         <a href="#" data-section="home">Trang chủ</a>
-        <a href="#" data-section="guide">Guide</a>
+        <a href="#" data-section="guide">Hướng dẫn</a>
         <a href="#" data-section="security">Bảo mật</a>
       </div>
     </div>
@@ -107,13 +107,13 @@
       <nav class="ws-nav">
         <!-- "Home": về khối trang chủ tại chỗ (data-section). Luôn hiện, cả khi chưa lẫn đã đăng nhập;
              viền màu nhấn (.is-current) khi đang ở trang chủ -- switchSection() tự gắn. -->
-        <a class="ws-nav-pill" href="#" id="ws-nav-home" data-section="home">Home</a>
+        <a class="ws-nav-pill" href="#" id="ws-nav-home" data-section="home">Trang chủ</a>
         <!-- "Product ▾": mega menu 3 cột + 1 khối CTA đen, bố cục theo dropdown của
              CYD, nội dung là 3 nhóm tính năng thật của Denoise. Viền màu nhấn
              (.is-current) vì Free Tools/Convert đều thuộc nhóm này. -->
         <div class="ws-has-dropdown" id="ws-product-wrap">
           <button type="button" class="ws-nav-pill is-current" id="ws-product-btn" aria-expanded="false">
-            Product <span class="ws-caret">⌄</span>
+            Sản phẩm <span class="ws-caret">⌄</span>
           </button>
           <div class="ws-megamenu" id="ws-product-menu" hidden>
             <!-- Cột 1: 4 tool CẦN NHẬP TAY tham số -- mỗi mục mở đúng tab của khối
@@ -134,16 +134,16 @@
               </a>
               <a class="ws-megamenu-item" href="#" data-config-tool="cross-rule">
                 <span class="ws-megamenu-icon">⋈</span>
-                <span class="ws-megamenu-item-text"><strong>Rule liên cột</strong><small>Biểu thức · phụ thuộc hàm</small></span>
+                <span class="ws-megamenu-item-text"><strong>Quy tắc liên cột</strong><small>Biểu thức · phụ thuộc hàm</small></span>
               </a>
             </div>
 
             <!-- Cột 2: Convert -- chuyển khối tại chỗ (data-convert-tool, xem workspace.js). -->
             <div class="ws-megamenu-col">
-              <span class="ws-megamenu-label">Convert</span>
+              <span class="ws-megamenu-label">Chuyển đổi</span>
               <a class="ws-megamenu-item" href="#" data-convert-tool="delimiter">
                 <span class="ws-megamenu-icon">⇄</span>
-                <span class="ws-megamenu-item-text"><strong>Đổi delimiter CSV</strong><small>Đổi dấu phân cách</small></span>
+                <span class="ws-megamenu-item-text"><strong>Đổi dấu phân cách CSV</strong><small>Đổi dấu phân cách</small></span>
               </a>
               <a class="ws-megamenu-item" href="#" data-convert-tool="csv-to-json">
                 <span class="ws-megamenu-icon">{ }</span>
@@ -157,7 +157,7 @@
 
             <!-- Cột 3: Free Tools -- chuyển khối tại chỗ (data-tool). -->
             <div class="ws-megamenu-col">
-              <span class="ws-megamenu-label">Tự động · Free Tools</span>
+              <span class="ws-megamenu-label">Tự động</span>
               <a class="ws-megamenu-item" href="#" data-tool="remove-duplicates">
                 <span class="ws-megamenu-icon">⧉</span>
                 <span class="ws-megamenu-item-text"><strong>Xoá dòng trùng</strong><small>Giữ 1 bản cho mỗi dòng</small></span>
@@ -189,7 +189,7 @@
              Guide: chuyển sang khối Guide tại chỗ. Viền màu nhấn (.is-current)
              do switchSection() tự gắn cho pill của khối đang mở. -->
         <a class="ws-nav-pill" href="#" id="ws-nav-class" data-section="class-noise">Class Noise</a>
-        <a class="ws-nav-pill" href="#" id="ws-nav-guide" data-section="guide">Guide</a>
+        <a class="ws-nav-pill" href="#" id="ws-nav-guide" data-section="guide">Hướng dẫn</a>
       </nav>
 
       <div class="ws-header-right">
@@ -264,8 +264,8 @@
            nhau bằng chấm vuông màu nhấn. Nội dung lặp 2 lần để cuộn liền mạch. -->
       <div class="hm-ticker" aria-hidden="true">
         <div class="hm-ticker-track">
-          <span>Thiếu giá trị</span><i></i><span>Sai định dạng</span><i></i><span>Ngoài khoảng</span><i></i><span>Giá trị bất thường</span><i></i><span>Không nhất quán</span><i></i><span>Khoảng trắng thừa</span><i></i><span>Dòng trùng</span><i></i><span>Rule liên cột</span><i></i><span>Class noise</span><i></i>
-          <span>Thiếu giá trị</span><i></i><span>Sai định dạng</span><i></i><span>Ngoài khoảng</span><i></i><span>Giá trị bất thường</span><i></i><span>Không nhất quán</span><i></i><span>Khoảng trắng thừa</span><i></i><span>Dòng trùng</span><i></i><span>Rule liên cột</span><i></i><span>Class noise</span><i></i>
+          <span>Thiếu giá trị</span><i></i><span>Sai định dạng</span><i></i><span>Ngoài khoảng</span><i></i><span>Giá trị bất thường</span><i></i><span>Không nhất quán</span><i></i><span>Khoảng trắng thừa</span><i></i><span>Dòng trùng</span><i></i><span>Quy tắc liên cột</span><i></i><span>Class noise</span><i></i>
+          <span>Thiếu giá trị</span><i></i><span>Sai định dạng</span><i></i><span>Ngoài khoảng</span><i></i><span>Giá trị bất thường</span><i></i><span>Không nhất quán</span><i></i><span>Khoảng trắng thừa</span><i></i><span>Dòng trùng</span><i></i><span>Quy tắc liên cột</span><i></i><span>Class noise</span><i></i>
         </div>
       </div>
 
@@ -284,7 +284,7 @@
         <div class="hm-card"><span class="hm-card-num">/05</span><span class="hm-card-icon">Aa</span><h3>Không nhất quán</h3><p>"Nam", "nam", "NAM" về một giá trị chuẩn.</p></div>
         <div class="hm-card"><span class="hm-card-num">/06</span><span class="hm-card-icon">⇥</span><h3>Khoảng trắng thừa</h3><p>Khoảng trắng đầu / cuối, ký tự vô hình.</p></div>
         <div class="hm-card"><span class="hm-card-num">/07</span><span class="hm-card-icon">⧉</span><h3>Dòng trùng</h3><p>Giữ một bản, xoá các bản còn lại.</p></div>
-        <div class="hm-card"><span class="hm-card-num">/08</span><span class="hm-card-icon">⇄</span><h3>Rule liên cột</h3><p>Biểu thức và phụ thuộc hàm giữa các cột.</p></div>
+        <div class="hm-card"><span class="hm-card-num">/08</span><span class="hm-card-icon">⇄</span><h3>Quy tắc liên cột</h3><p>Biểu thức và phụ thuộc hàm giữa các cột.</p></div>
         <div class="hm-card"><span class="hm-card-num">/09</span><span class="hm-card-icon">🏷</span><h3>Class noise</h3><p>Dòng có thể bị gán sai nhãn, gộp hai phương pháp.</p></div>
       </div>
 
@@ -308,7 +308,7 @@
       </div>
       <div class="hm-numbers">
         <div class="hm-number"><b>7</b><span>Loại nhiễu thuộc tính</span></div>
-        <div class="hm-number"><b>2</b><span>Kiểu rule liên cột</span></div>
+        <div class="hm-number"><b>2</b><span>Kiểu quy tắc liên cột</span></div>
         <div class="hm-number"><b>2</b><span>Phương pháp gộp cho class noise</span></div>
         <div class="hm-number"><b>10</b><span>Cách xử lý</span></div>
         <div class="hm-number"><b>7</b><span>Tool chạy ngay</span></div>
@@ -322,13 +322,13 @@
         <h2 class="ft-h2">Bắt đầu từ một tool nhỏ</h2>
       </div>
       <div class="hm-tools-grid">
-        <a class="hm-tool" href="#" data-tool="remove-duplicates"><span class="hm-tool-kind">Free Tools</span><b>Xoá dòng trùng</b><i>→</i></a>
-        <a class="hm-tool" href="#" data-tool="trim-whitespace"><span class="hm-tool-kind">Free Tools</span><b>Cắt khoảng trắng</b><i>→</i></a>
-        <a class="hm-tool" href="#" data-tool="blanks"><span class="hm-tool-kind">Free Tools</span><b>Ô trống</b><i>→</i></a>
-        <a class="hm-tool" href="#" data-tool="format-noise"><span class="hm-tool-kind">Free Tools</span><b>Sai định dạng</b><i>→</i></a>
-        <a class="hm-tool" href="#" data-convert-tool="delimiter"><span class="hm-tool-kind">Convert</span><b>Đổi delimiter CSV</b><i>→</i></a>
-        <a class="hm-tool" href="#" data-convert-tool="csv-to-json"><span class="hm-tool-kind">Convert</span><b>CSV → JSON</b><i>→</i></a>
-        <a class="hm-tool" href="#" data-convert-tool="json-to-csv"><span class="hm-tool-kind">Convert</span><b>JSON → CSV</b><i>→</i></a>
+        <a class="hm-tool" href="#" data-tool="remove-duplicates"><span class="hm-tool-kind">Tự động</span><b>Xoá dòng trùng</b><i>→</i></a>
+        <a class="hm-tool" href="#" data-tool="trim-whitespace"><span class="hm-tool-kind">Tự động</span><b>Cắt khoảng trắng</b><i>→</i></a>
+        <a class="hm-tool" href="#" data-tool="blanks"><span class="hm-tool-kind">Tự động</span><b>Ô trống</b><i>→</i></a>
+        <a class="hm-tool" href="#" data-tool="format-noise"><span class="hm-tool-kind">Tự động</span><b>Sai định dạng</b><i>→</i></a>
+        <a class="hm-tool" href="#" data-convert-tool="delimiter"><span class="hm-tool-kind">Chuyển đổi</span><b>Đổi dấu phân cách CSV</b><i>→</i></a>
+        <a class="hm-tool" href="#" data-convert-tool="csv-to-json"><span class="hm-tool-kind">Chuyển đổi</span><b>CSV → JSON</b><i>→</i></a>
+        <a class="hm-tool" href="#" data-convert-tool="json-to-csv"><span class="hm-tool-kind">Chuyển đổi</span><b>JSON → CSV</b><i>→</i></a>
         <a class="hm-tool is-dark" href="#" data-section="class-noise"><span class="hm-tool-kind">Class Noise</span><b>Nhãn bị gán sai</b><i>→</i></a>
       </div>
 
@@ -346,10 +346,10 @@
         </div>
         <table class="hm-spec">
           <tr><th>Backend</th><td>Flask + pandas, SQLite</td></tr>
-          <tr><th>Phát hiện</th><td>7 detector + rule liên cột, tự viết</td></tr>
+          <tr><th>Phát hiện</th><td>7 detector + quy tắc liên cột, tự viết</td></tr>
           <tr><th>Class noise</th><td>Confident Learning + Mutual k-NN, gộp một danh sách</td></tr>
           <tr><th>Xử lý</th><td>Chạy thử, hoàn tác</td></tr>
-          <tr><th>Biểu thức rule</th><td>Bộ phân tích tự viết, không dùng eval()</td></tr>
+          <tr><th>Biểu thức quy tắc</th><td>Bộ phân tích tự viết, không dùng eval()</td></tr>
           <tr><th>Giao diện</th><td>HTML / CSS / JS thuần</td></tr>
         </table>
       </div>
@@ -363,7 +363,7 @@
          ============================================================ -->
     <div id="section-guide" hidden>
       <div class="ft-topbar">
-        <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i><b>Guide</b></span>
+        <span class="ft-crumb"><a href="#" data-section="home">Trang chủ</a><i>/</i><b>Hướng dẫn</b></span>
         <span class="ft-meta">
           <span>Đọc trong<strong>≈ 5 phút</strong></span>
           <span>Cập nhật<strong>11 / 2026</strong></span>
@@ -398,12 +398,12 @@
       </section>
 
       <div class="tx-layout">
-        <nav class="tx-toc" aria-label="Mục lục Guide">
+        <nav class="tx-toc" aria-label="Mục lục Hướng dẫn">
           <span class="tx-toc-label">Trên trang này</span>
           <a href="#guide-01"><i>01</i>Bắt đầu nhanh</a>
           <a href="#guide-02"><i>02</i>Chuẩn bị file</a>
-          <a href="#guide-03"><i>03</i>Free Tools</a>
-          <a href="#guide-04"><i>04</i>Convert</a>
+          <a href="#guide-03"><i>03</i>Tự động</a>
+          <a href="#guide-04"><i>04</i>Chuyển đổi</a>
           <a href="#guide-05"><i>05</i>Tool cần cấu hình</a>
           <a href="#guide-06"><i>06</i>Class Noise</a>
           <a href="#guide-07"><i>07</i>Nối tiếp và hoàn tác</a>
@@ -415,7 +415,7 @@
             <p>Làm sạch một file chỉ cần 4 bước:</p>
             <ol class="tx-steps">
               <li><b>Đăng nhập.</b> Bấm "Bắt đầu" ở góc phải trên cùng để tạo tài khoản, chỉ cần tên đăng nhập và mật khẩu.</li>
-              <li><b>Chọn tool.</b> Mở menu <b>Product</b> ở đầu trang rồi bấm tool bạn cần.</li>
+              <li><b>Chọn tool.</b> Mở menu <b>Sản phẩm</b> ở đầu trang rồi bấm tool bạn cần.</li>
               <li><b>Đưa file vào.</b> Ở khung <b>01 · Đầu vào</b>, kéo thả file hoặc bấm "Dán text" để dán nội dung.</li>
               <li><b>Chạy rồi tải về.</b> Bấm nút chạy, xem bảng ở khung <b>02 · Kết quả</b>, rồi bấm "Tải xuống CSV".</li>
             </ol>
@@ -427,16 +427,16 @@
               <li><b>Email, số điện thoại, ngày sai khuôn</b> → Sai định dạng</li>
               <li><b>Số vô lý như tuổi 210</b> → Ngoài khoảng (nếu biết khoảng đúng) hoặc Giá trị bất thường (nếu chưa biết)</li>
               <li><b>"Nam", "nam", "NAM" lẫn lộn</b> → Không nhất quán</li>
-              <li><b>Hai cột mâu thuẫn nhau</b> (ngày nghỉ trước ngày vào...) → Rule liên cột</li>
+              <li><b>Hai cột mâu thuẫn nhau</b> (ngày nghỉ trước ngày vào...) → Quy tắc liên cột</li>
               <li><b>Nghi nhãn phân loại bị gán sai</b> → Class Noise</li>
-              <li><b>Cần đổi định dạng file</b> → Convert</li>
+              <li><b>Cần đổi định dạng file</b> → Chuyển đổi</li>
             </ul>
           </section>
 
           <section class="tx-section" id="guide-02">
             <h2 class="tx-h2"><span>02</span>Chuẩn bị file</h2>
             <ul class="tx-list">
-              <li>Dùng file CSV hoặc Excel (.xlsx, .xls). Riêng Convert JSON → CSV nhận .json và .jsonl.</li>
+              <li>Dùng file CSV hoặc Excel (.xlsx, .xls). Riêng Chuyển đổi JSON → CSV nhận .json và .jsonl.</li>
               <li>Dòng đầu tiên phải là tên cột.</li>
               <li>CSV nên lưu bằng mã UTF-8 để chữ có dấu không bị lỗi.</li>
               <li>Denoise đọc mọi giá trị dưới dạng chữ, nên "007" vẫn là "007", không bị đổi thành 7.</li>
@@ -444,7 +444,7 @@
           </section>
 
           <section class="tx-section" id="guide-03">
-            <h2 class="tx-h2"><span>03</span>Free Tools</h2>
+            <h2 class="tx-h2"><span>03</span>Tự động</h2>
             <p>Nhóm này không cần khai cột hay tham số. Chọn file, chỉnh vài tuỳ chọn, bấm <b>Chạy</b>.</p>
             <ul class="tx-list">
               <li><b>Xoá dòng trùng:</b> để trống ô "Chỉ so theo các cột này" thì so cả dòng, hoặc gõ tên cột (vd <code>email</code>). Chọn giữ bản đầu tiên hay cuối cùng. Chạy xong bấm "Xem các dòng trùng" để kiểm tra.</li>
@@ -456,11 +456,11 @@
           </section>
 
           <section class="tx-section" id="guide-04">
-            <h2 class="tx-h2"><span>04</span>Convert</h2>
+            <h2 class="tx-h2"><span>04</span>Chuyển đổi</h2>
             <ul class="tx-list">
-              <li><b>Đổi delimiter CSV:</b> chọn "Delimiter gốc" (hoặc Tự nhận diện) và "Delimiter mới", bấm Convert.</li>
-              <li><b>CSV → JSON:</b> chọn dòng đầu có phải header không, kiểu kết quả Objects hoặc Arrays, bấm Convert. Kết quả JSON hiện dạng chữ.</li>
-              <li><b>JSON → CSV:</b> dán JSON hoặc thả file .json / .jsonl, chọn delimiter đầu ra, bấm Convert. Object lồng nhau thành cột "cha.con".</li>
+              <li><b>Đổi dấu phân cách CSV:</b> chọn "Dấu phân cách gốc" (hoặc Tự nhận diện) và "Dấu phân cách mới", bấm Chuyển đổi.</li>
+              <li><b>CSV → JSON:</b> chọn dòng đầu có phải tên cột không, kiểu kết quả Objects hoặc Arrays, bấm Chuyển đổi. Kết quả JSON hiện dạng chữ.</li>
+              <li><b>JSON → CSV:</b> dán JSON hoặc thả file .json / .jsonl, chọn dấu phân cách đầu ra, bấm Chuyển đổi. Object lồng nhau thành cột "cha.con".</li>
             </ul>
             <p>Kết quả tải về bằng nút "Tải xuống" ở góc khung 02.</p>
           </section>
@@ -478,8 +478,8 @@
               <li><b>Ngoài khoảng:</b> gõ giá trị nhỏ nhất và lớn nhất hợp lệ (vd tuổi từ 18 đến 65). Có thể kéo về biên, điền lại hoặc xoá dòng.</li>
               <li><b>Giá trị bất thường:</b> chọn IQR và / hoặc Z-score (mặc định 1.5 và 3). Cột mà đa số ô cùng một giá trị sẽ có cảnh báo vàng.</li>
               <li><b>Không nhất quán:</b> gõ danh sách giá trị chuẩn, cách nhau bởi dấu phẩy (vd <code>Nam, Nữ</code>). Các biến thể như "nam", " NAM " được đưa về giá trị chuẩn.</li>
-              <li><b>Rule liên cột, tab Biểu thức:</b> bấm tên cột và các nút để ghép điều kiện mọi dòng phải thoả, vd <code>tuoi &gt;= 18 và tuoi &lt;= 65</code> hoặc <code>phong_ban = "Sales" =&gt; luong &gt;= 10000000</code> (nút "thì =&gt;" nghĩa là "nếu … thì …"). Dòng chữ xanh hoặc đỏ dưới ô cho biết biểu thức đúng hay sai ngay khi gõ.</li>
-              <li><b>Rule liên cột, tab Phụ thuộc hàm:</b> chọn cột xác định A và các cột phụ thuộc (vd mã nhân viên → tên). Denoise gợi ý ô nào nghi sai, rồi bạn chọn sửa về giá trị phổ biến, xoá dòng nghi sai, xoá cả dòng hoặc giữ nguyên.</li>
+              <li><b>Quy tắc liên cột, tab Biểu thức:</b> bấm tên cột và các nút để ghép điều kiện mọi dòng phải thoả, vd <code>tuoi &gt;= 18 và tuoi &lt;= 65</code> hoặc <code>phong_ban = "Sales" =&gt; luong &gt;= 10000000</code> (nút "thì =&gt;" nghĩa là "nếu … thì …"). Dòng chữ xanh hoặc đỏ dưới ô cho biết biểu thức đúng hay sai ngay khi gõ.</li>
+              <li><b>Quy tắc liên cột, tab Phụ thuộc hàm:</b> chọn cột xác định A và các cột phụ thuộc (vd mã nhân viên → tên). Denoise gợi ý ô nào nghi sai, rồi bạn chọn sửa về giá trị phổ biến, xoá dòng nghi sai, xoá cả dòng hoặc giữ nguyên.</li>
             </ul>
             <div class="tx-note"><span class="tx-note-tag">Lưu ý</span><p>Nếu bạn đổi cấu hình sau khi Phát hiện, nút Áp dụng bị khoá cho tới khi bấm Phát hiện lại.</p></div>
           </section>
@@ -575,7 +575,7 @@
           <a href="#sec-02"><i>02</i>Mật khẩu</a>
           <a href="#sec-03"><i>03</i>Phiên đăng nhập</a>
           <a href="#sec-04"><i>04</i>Quyền sở hữu file</a>
-          <a href="#sec-05"><i>05</i>Biểu thức rule liên cột</a>
+          <a href="#sec-05"><i>05</i>Biểu thức quy tắc liên cột</a>
           <a href="#sec-06"><i>06</i>Giới hạn đã biết</a>
         </nav>
         <article class="tx-content">
@@ -584,7 +584,7 @@
             <p>File được đọc vào bộ nhớ của backend, không ghi ra đĩa và không gửi tới dịch vụ bên ngoài.</p>
             <ul class="tx-list">
               <li>Bản gốc không bao giờ bị sửa.</li>
-              <li>Free Tools và Convert không giữ lại gì sau khi trả kết quả.</li>
+              <li>Tự động và Chuyển đổi không giữ lại gì sau khi trả kết quả.</li>
               <li>Khởi động lại server là file trong bộ nhớ biến mất.</li>
             </ul>
           </section>
@@ -605,7 +605,7 @@
             <p>Mỗi file gắn với tài khoản đã tải lên. File của tài khoản khác được trả lời như file không tồn tại.</p>
           </section>
           <section class="tx-section" id="sec-05">
-            <h2 class="tx-h2"><span>05</span>Biểu thức rule liên cột</h2>
+            <h2 class="tx-h2"><span>05</span>Biểu thức quy tắc liên cột</h2>
             <p>Biểu thức được đọc bằng bộ phân tích tự viết, chỉ hiểu so sánh, phép tính và vài hàm cố định. Không dùng <code>eval()</code>.</p>
           </section>
           <section class="tx-section" id="sec-06">
@@ -819,13 +819,13 @@
           </div>
 
           <div class="sub-section">
-            <h3 class="sub-title">Rule liên cột (tuỳ chọn)</h3>
+            <h3 class="sub-title">Quy tắc liên cột (tuỳ chọn)</h3>
             <p class="panel-desc">
               Kiểm tra mâu thuẫn logic giữa hai cột, ví dụ "ngày bắt đầu phải trước ngày kết thúc" hay "mã nhân viên luôn gắn với đúng một tên".
               Bạn tự chọn cột và quan hệ vì mỗi file có ý nghĩa khác nhau.
             </p>
             <div class="rules-list" id="rules-list"></div>
-            <button class="btn btn-ghost" id="add-rule-btn" type="button">+ Thêm rule</button>
+            <button class="btn btn-ghost" id="add-rule-btn" type="button">+ Thêm quy tắc</button>
           </div>
 
           <div class="panel-actions">
@@ -964,7 +964,7 @@
           <p class="panel-desc">
             Bấm tên mỗi nhóm để xem từng dòng, tick dòng muốn xử lý, chọn cách xử lý cho từng dòng rồi bấm "Áp dụng".
             Không cần xử lý hết các nhóm cùng lúc. Xoá dòng luôn được chạy thử và hỏi lại; mọi bước đều hoàn tác được.
-            Rule liên cột chưa hỗ trợ xử lý tự động. Xong thì bấm "Xuất file CSV" ở cuối trang.
+            Quy tắc liên cột chưa hỗ trợ xử lý tự động. Xong thì bấm "Xuất file CSV" ở cuối trang.
           </p>
 
           <div class="history-bar" id="history-bar">
@@ -1160,7 +1160,7 @@
         <button type="button" class="convert-tab is-active" data-tool="out-of-range">Ngoài khoảng</button>
         <button type="button" class="convert-tab" data-tool="outlier">Giá trị bất thường</button>
         <button type="button" class="convert-tab" data-tool="inconsistent-category">Không nhất quán</button>
-        <button type="button" class="convert-tab" data-tool="cross-rule">Rule liên cột</button>
+        <button type="button" class="convert-tab" data-tool="cross-rule">Quy tắc liên cột</button>
       </div>
 
       <!-- Dải "đang nối tiếp" dùng chung cho cả 3 nhóm tool (state.pipe). -->
@@ -1317,7 +1317,7 @@
            BROWSER · PRICE / FREE · SIGN-UP / NOT NEEDED"; Denoise ghi đúng sự
            thật của mình (xử lý qua backend, bắt đăng nhập). -->
       <div class="ft-topbar">
-        <span class="ft-crumb">Trang chủ<i>/</i>Free Tools<i>/</i><b id="ft-crumb-tool">Xoá dòng trùng</b></span>
+        <span class="ft-crumb">Trang chủ<i>/</i>Tự động<i>/</i><b id="ft-crumb-tool">Xoá dòng trùng</b></span>
       </div>
 
       <!-- Tiêu đề + mô tả + hình trước/sau -- đổ vào bằng JS (renderFtToolHero()). -->
@@ -1532,13 +1532,13 @@
          ============================================================ -->
     <div id="section-convert" hidden>
       <div class="ft-topbar">
-        <span class="ft-crumb">Trang chủ<i>/</i>Convert<i>/</i><b id="cv-crumb-tool">Đổi delimiter CSV</b></span>
+        <span class="ft-crumb">Trang chủ<i>/</i>Chuyển đổi<i>/</i><b id="cv-crumb-tool">Đổi dấu phân cách CSV</b></span>
       </div>
 
       <div id="cv-hero"></div>
 
       <div class="convert-tabs" id="convert-tabs">
-        <button type="button" class="convert-tab is-active" data-tool="delimiter">Đổi delimiter CSV</button>
+        <button type="button" class="convert-tab is-active" data-tool="delimiter">Đổi dấu phân cách CSV</button>
         <button type="button" class="convert-tab" data-tool="csv-to-json">CSV → JSON</button>
         <button type="button" class="convert-tab" data-tool="json-to-csv">JSON → CSV</button>
       </div>
@@ -1596,7 +1596,7 @@
           <div class="convert-options" id="convert-options-delimiter">
             <div class="field-row">
               <div class="field">
-                <label>Delimiter gốc (FROM)</label>
+                <label>Dấu phân cách gốc</label>
                 <select class="select" id="opt-from-delim">
                   <option value="auto">Tự nhận diện</option>
                   <option value=",">Dấu phẩy (,)</option>
@@ -1606,7 +1606,7 @@
                 </select>
               </div>
               <div class="field">
-                <label>Delimiter mới (TO)</label>
+                <label>Dấu phân cách mới</label>
                 <select class="select" id="opt-to-delim">
                   <option value=",">Dấu phẩy (,)</option>
                   <option value=";" selected>Dấu chấm phẩy (;)</option>
@@ -1618,9 +1618,9 @@
           </div>
 
           <div class="convert-options" id="convert-options-csv-to-json" hidden>
-            <label class="switch-row"><input type="checkbox" id="opt-has-header-c2j" checked /> Dòng đầu là header</label>
+            <label class="switch-row"><input type="checkbox" id="opt-has-header-c2j" checked /> Dòng đầu là tên cột</label>
             <div class="field">
-              <label>Delimiter của CSV đầu vào</label>
+              <label>Dấu phân cách của CSV đầu vào</label>
               <select class="select" id="opt-delim-c2j">
                 <option value="auto">Tự nhận diện</option>
                 <option value=",">Dấu phẩy (,)</option>
@@ -1646,7 +1646,7 @@
 
           <div class="convert-options" id="convert-options-json-to-csv" hidden>
             <div class="field">
-              <label>Delimiter đầu ra</label>
+              <label>Dấu phân cách đầu ra</label>
               <select class="select" id="opt-out-delim">
                 <option value="," selected>Dấu phẩy (,)</option>
                 <option value=";">Dấu chấm phẩy (;)</option>
@@ -1659,7 +1659,7 @@
 
           <p class="form-error" id="convert-error" hidden></p>
           <div class="panel-actions">
-            <button class="btn btn-primary" id="convert-run-btn" type="button">Convert</button>
+            <button class="btn btn-primary" id="convert-run-btn" type="button">Chuyển đổi</button>
             <span class="status-text" id="convert-status"></span>
           </div>
           </div>
@@ -1681,7 +1681,7 @@
                 </div>
                 <p class="ft-result-skeleton-sub">Không lưu file gốc</p>
               </div>
-              <p class="ft-result-skeleton-caption">Bấm "Convert" để xem kết quả.</p>
+              <p class="ft-result-skeleton-caption">Bấm "Chuyển đổi" để xem kết quả.</p>
             </div>
             <!-- Kết quả dạng BẢNG (đổi delimiter, JSON → CSV) -->
             <div class="cyd-table" id="convert-result-card" hidden>
@@ -1748,21 +1748,21 @@
           <a href="#" data-section="class-noise">Class Noise</a>
         </div>
         <div class="ws-footer-col">
-          <h4>Free Tools</h4>
+          <h4>Tự động</h4>
           <a href="#" data-tool="remove-duplicates">Xoá dòng trùng</a>
           <a href="#" data-tool="trim-whitespace">Cắt khoảng trắng</a>
           <a href="#" data-tool="blanks">Ô trống</a>
           <a href="#" data-tool="format-noise">Sai định dạng</a>
         </div>
         <div class="ws-footer-col">
-          <h4>Convert</h4>
-          <a href="#" data-convert-tool="delimiter">Đổi delimiter CSV</a>
+          <h4>Chuyển đổi</h4>
+          <a href="#" data-convert-tool="delimiter">Đổi dấu phân cách CSV</a>
           <a href="#" data-convert-tool="csv-to-json">CSV → JSON</a>
           <a href="#" data-convert-tool="json-to-csv">JSON → CSV</a>
         </div>
         <div class="ws-footer-col">
           <h4>Tin cậy</h4>
-          <a href="#" data-section="guide">Guide</a>
+          <a href="#" data-section="guide">Hướng dẫn</a>
           <a href="#" data-section="security">Bảo mật</a>
           <a href="#" data-section="privacy">Quyền riêng tư</a>
         </div>

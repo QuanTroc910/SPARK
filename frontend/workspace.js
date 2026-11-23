@@ -546,16 +546,16 @@ const TOOL_TAB_LABEL = {
   "blanks": "Ô trống",
   "format-noise": "Sai định dạng",
 };
-const CV_TAB_LABEL = { delimiter: "Đổi delimiter CSV", "csv-to-json": "CSV → JSON", "json-to-csv": "JSON → CSV" };
+const CV_TAB_LABEL = { delimiter: "Đổi dấu phân cách CSV", "csv-to-json": "CSV → JSON", "json-to-csv": "JSON → CSV" };
 const CF_TAB_LABEL = {
   "out-of-range": "Ngoài khoảng",
   outlier: "Giá trị bất thường",
   "inconsistent-category": "Không nhất quán",
-  "cross-rule": "Rule liên cột",
+  "cross-rule": "Quy tắc liên cột",
 };
 const DTYPE_LABELS = {
   integer: "Số nguyên", float: "Số thực", text: "Văn bản", email: "Email",
-  phone: "Số điện thoại", date: "Ngày tháng", category: "Nhóm (category)",
+  phone: "Số điện thoại", date: "Ngày tháng", category: "Nhóm",
 };
 // Khớp HandlingAction ở attribute_handling.py -- backend trả danh sách hợp lệ
 // theo cặp kiểu cột × loại lỗi, FE chỉ dịch sang chữ.
@@ -628,10 +628,10 @@ const CV_INFO = {
     desc: "Đổi dấu phân cách của CSV (phẩy, chấm phẩy, tab, gạch đứng) mà không làm hỏng giá trị có ngoặc kép.",
     mock: mockTextPair("export_eu.csv", ["ma;ten;gia", ["A01;But bi;12,50", true], "A02;Kep giay;3,00"], "export.csv", ["ma,ten,gia", ['A01,But bi,"12,50"', true], 'A02,Kep giay,"3,00"'], "; → ,"),
     dropTitle: "Thả file CSV vào đây", accept: ".csv,.txt",
-    steps: ["Thêm file, delimiter hiện tại tự nhận diện.", "Chọn delimiter mới.", "Tải file đã đổi."],
+    steps: ["Thêm file, dấu phân cách hiện tại tự nhận diện.", "Chọn dấu phân cách mới.", "Tải file đã đổi."],
     explainer: [
       { t: "Vì sao cần đổi", b: "Nhiều nơi dùng dấu phẩy làm dấu thập phân nên xuất CSV bằng chấm phẩy." },
-      { t: "Ngoặc kép tự xử lý", b: "Giá trị chứa delimiter mới, ngoặc kép hoặc xuống dòng được tự bọc trong ngoặc kép." },
+      { t: "Ngoặc kép tự xử lý", b: "Giá trị chứa dấu phân cách mới, ngoặc kép hoặc xuống dòng được tự bọc trong ngoặc kép." },
     ],
   },
   "csv-to-json": {
@@ -693,9 +693,9 @@ const CF_INFO = {
     headline: "BẮT MÂU THUẪN<br>GIỮA CÁC CỘT",
     desc: "Ngày nghỉ trước ngày vào, tổng tiền sai, một mã gắn với hai tên. Bạn viết điều kiện, Denoise kiểm tra từng dòng.",
     mock: mockPair([[[]], [["is-hit", "", "is-hit"]], [[]], [[]]], [[[]], [[]], [[]]], "-1 dòng"),
-    steps: ["Chọn file và kiểu rule: biểu thức hoặc phụ thuộc hàm.", "Viết biểu thức bằng cách bấm tên cột và các nút, rồi bấm Phát hiện.", "Xoá dòng vi phạm hoặc giữ nguyên để rà tay."],
+    steps: ["Chọn file và kiểu quy tắc: biểu thức hoặc phụ thuộc hàm.", "Viết biểu thức bằng cách bấm tên cột và các nút, rồi bấm Phát hiện.", "Xoá dòng vi phạm hoặc giữ nguyên để rà tay."],
     explainer: [
-      { t: "Hai kiểu rule", b: "Biểu thức: điều kiện mọi dòng phải thoả. Phụ thuộc hàm: mỗi giá trị cột A chỉ đi với một giá trị của cột phụ thuộc." },
+      { t: "Hai kiểu quy tắc", b: "Biểu thức: điều kiện mọi dòng phải thoả. Phụ thuộc hàm: mỗi giá trị cột A chỉ đi với một giá trị của cột phụ thuộc." },
       { t: "Nếu … thì …", b: "Viết A => B (nút THÌ =>): dòng thoả A thì B phải đúng. Vd phong_ban = \"Sales\" => luong >= 10000000." },
       { t: "Dòng bị bỏ qua", b: "Ô trống, sai kiểu hoặc chia cho 0 thì chưa kết luận được nên bị bỏ qua, và Denoise báo lại số dòng đó." },
     ],
@@ -855,7 +855,7 @@ async function handleFileSelected(g, file) {
     return;
   }
   if (g === "cv" && (!/\.(csv|txt)$/i.test(file.name) || st.tool === "json-to-csv")) {
-    showRawPreview(g, file.name, sizeText, null, 'File JSON. Bấm "Convert" để xem kết quả.');
+    showRawPreview(g, file.name, sizeText, null, 'File JSON. Bấm "Chuyển đổi" để xem kết quả.');
     return;
   }
   if (!/\.csv$/i.test(file.name) && g === "ft") {
@@ -1120,7 +1120,7 @@ const CONTINUE_GROUPS = [
     { icon: "≈", tool: "inconsistent-category", sub: "Về giá trị chuẩn" },
     { icon: "⋈", tool: "cross-rule", sub: "Mâu thuẫn giữa các cột" },
   ] },
-  { key: "convert", label: "Convert", g: "cv", attr: "data-convert-tool", items: [
+  { key: "convert", label: "Chuyển đổi", g: "cv", attr: "data-convert-tool", items: [
     { icon: "⇄", tool: "delimiter" }, { icon: "{ }", tool: "csv-to-json" }, { icon: "{ }", tool: "json-to-csv" },
   ] },
   { key: "auto", label: "Tự động", g: "ft", attr: "data-tool", items: [
@@ -1980,7 +1980,7 @@ $("convert-run-btn").addEventListener("click", async () => {
     url = "/api/convert/json-to-csv";
     formData.append("output_delimiter", $("opt-out-delim").value);
   }
-  const data = await callBackend($("convert-run-btn"), "Convert", url, formData, $(T.error));
+  const data = await callBackend($("convert-run-btn"), "Chuyển đổi", url, formData, $(T.error));
   if (!data) return;
   state.cv.lastResult = data;
   $(T.resultEmpty).hidden = true;
@@ -1990,7 +1990,7 @@ $("convert-run-btn").addEventListener("click", async () => {
     $("convert-json-card").hidden = false;
     $("convert-json-dims").textContent = `${data.record_count} record`;
     $("convert-result-text").textContent = data.result_text;
-    setStatus($(T.status), `✅ ${data.record_count} record (delimiter: ${delimiterLabel(data.used_delimiter)})`, "is-ok");
+    setStatus($(T.status), `✅ ${data.record_count} record (dấu phân cách: ${delimiterLabel(data.used_delimiter)})`, "is-ok");
     recordPipeStep(CV_TAB_LABEL[tool], data.result_text, "json", inp.label, fresh, inp.source);
   } else {
     $("convert-json-card").hidden = true;
@@ -1999,7 +1999,7 @@ $("convert-run-btn").addEventListener("click", async () => {
     const dataRows = Math.max(0, data.row_count - 1);
     showResultTable("cv", CV_TAB_LABEL[tool], data.preview_rows, tableDims(dataRows, colCount));
     setStatus($(T.status), tool === "delimiter"
-      ? `✅ ${dataRows} dòng dữ liệu · đã nhận diện delimiter gốc: ${delimiterLabel(data.used_from_delimiter)}`
+      ? `✅ ${dataRows} dòng dữ liệu · đã nhận diện dấu phân cách gốc: ${delimiterLabel(data.used_from_delimiter)}`
       : `✅ ${dataRows} dòng dữ liệu · ${data.columns.length} cột`, "is-ok");
     recordPipeStep(CV_TAB_LABEL[tool], data.result_text, "csv", inp.label, fresh, inp.source);
   }
@@ -2125,7 +2125,7 @@ function renderCfOptions() {
     const current = RULE_TYPES.some(([v]) => v === state.cf.ruleType) ? state.cf.ruleType : "expression";
     wrap.innerHTML = `
       <div class="field">
-        <label>Kiểu rule</label>
+        <label>Kiểu quy tắc</label>
         <div class="ft-seg" data-seg-for="cf-rule-type">
           ${RULE_TYPES.map(([v, l]) => `<button type="button" class="${v === current ? "is-active" : ""}" data-value="${v}">${l}</button>`).join("")}
         </div>
@@ -2175,7 +2175,7 @@ const CF_MULTI = {
     dtypes: ["category"],
     waitFile: "Chọn file hoặc dán dữ liệu để chọn cột Nhóm.",
     noColumns: "Không có cột Nhóm nào (cột ít giá trị khác nhau, lặp lại nhiều, vd giới tính, phòng ban).",
-    noColumnsError: "Không có cột Nhóm (category) nào để kiểm tra.",
+    noColumnsError: "Không có cột Nhóm nào để kiểm tra.",
     freeWord: "cột Nhóm",
     preselect: true, // cách xử lý duy nhất là chuẩn hoá tự động, không xoá dữ liệu nên chọn sẵn
     defaults: () => ({ categories: "", threshold: IC_DEFAULT_THRESHOLD }),
