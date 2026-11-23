@@ -1129,7 +1129,7 @@ const CONTINUE_GROUPS = [
     { icon: "@", tool: "format-noise" },
   ] },
   // Không phải tool trong chuỗi: bấm là chuyển kết quả hiện tại sang Class Noise (bước 1, như vừa chọn file đó). Chỉ nhận CSV.
-  { key: "class-noise", label: "Class Noise", special: true, items: [] },
+  { key: "class-noise", label: "Nhãn sai", special: true, items: [] },
 ];
 function renderContinuePanel(g) {
   const panel = $(TOOLSEC[g].cont);
@@ -1139,7 +1139,7 @@ function renderContinuePanel(g) {
   panel.hidden = false;
   list.innerHTML = "";
   pills.innerHTML = CONTINUE_GROUPS.map((gr) =>
-    `<button type="button" class="continue-pill" data-category="${gr.key}"${isJson && gr.key !== "convert" ? " disabled" : ""}${gr.special ? ' title="Dùng kết quả này làm file cho Class Noise"' : ""}>${gr.label}</button>`
+    `<button type="button" class="continue-pill" data-category="${gr.key}"${isJson && gr.key !== "convert" ? " disabled" : ""}${gr.special ? ' title="Dùng kết quả này làm file cho Nhãn sai"' : ""}>${gr.label}</button>`
   ).join("");
   pills.querySelectorAll(".continue-pill").forEach((pill) => {
     pill.addEventListener("click", () => {
