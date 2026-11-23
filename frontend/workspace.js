@@ -870,7 +870,7 @@ async function handleFileSelected(g, file) {
     return;
   }
   const { rows, totalDataRows } = naiveParseCsvPreview(text, PREVIEW_ROWS);
-  showRawPreview(g, file.name, tableDims(totalDataRows, rows.length ? rows[0].length : 0), rows, totalDataRows > PREVIEW_ROWS ? `Xem trước ${PREVIEW_ROWS}/${totalDataRows} dòng đầu.` : "");
+  showRawPreview(g, file.name, tableDims(totalDataRows, rows.length ? rows[0].length : 0), rows, "");
 }
 // Gom đầu vào cho 1 lần gọi backend: đang nối tiếp -> text của bước trước;
 // không thì file hoặc text dán tay. Trả về { error } hoặc { label }.
@@ -2054,8 +2054,7 @@ async function cfInspect(source, label, opts) {
   renderCfOptions();
   cfCheckStale(); // đọc xong cột của đầu vào mới: nếu khác lần Phát hiện cuối thì báo
   if (source.file && !opts.keepPreview) {
-    const note = data.row_count > PREVIEW_ROWS ? `Xem trước ${PREVIEW_ROWS}/${data.row_count} dòng đầu · ${data.columns.length} cột đã đọc được.` : `${data.columns.length} cột đã đọc được.`;
-    showRawPreview("cf", label, tableDims(data.row_count, data.columns.length), data.preview_rows, note);
+    showRawPreview("cf", label, tableDims(data.row_count, data.columns.length), data.preview_rows, "");
   }
 }
 // Đầu vào hiện tại của khối Cần cấu hình, cùng thứ tự ưu tiên với collectInput(): kết quả bước trước > file > text dán.

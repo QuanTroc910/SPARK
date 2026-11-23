@@ -315,9 +315,7 @@ async function loadClassPreview(file) {
     showClassPreview(file.name, sizeText, null, data.error || "Không đọc được file.");
     return;
   }
-  const shown = data.preview_rows.length - 1; // trừ dòng tiêu đề; backend đã cắt tối đa 100 dòng
-  const note = data.row_count > shown ? `Xem trước ${shown}/${data.row_count} dòng đầu · ${data.columns.length} cột.` : `${data.columns.length} cột.`;
-  showClassPreview(file.name, `${data.row_count} dòng × ${data.columns.length} cột`, data.preview_rows, note);
+  showClassPreview(file.name, `${data.row_count} dòng × ${data.columns.length} cột`, data.preview_rows, "");
 }
 // "↺ Đổi file": bỏ file đang chọn, trả lại ô kéo-thả. (Dữ liệu đã tải lên ở các bước sau không đổi cho tới khi tải file mới.)
 $("class-change-file-btn").addEventListener("click", () => {
