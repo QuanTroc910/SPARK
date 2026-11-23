@@ -218,11 +218,11 @@ function renderBackendStatus() {
   // Chấm tròn trạng thái ở header do workspace.js lo (checkBackendHealth()
   // bên đó) -- ở đây chỉ cập nhật dòng ghi chú dưới ô kéo-thả của Bước 1.
   const notice = $("upload-notice");
-  if (state.backendAvailable) {
-    notice.textContent = "Đã kết nối backend Flask.";
-  } else {
-    notice.textContent = `Không kết nối được backend. Hãy chạy "python3 app.py" rồi thử lại.`;
-  }
+  // Kết nối bình thường thì không hiện gì; chỉ báo khi mất kết nối.
+  notice.hidden = state.backendAvailable;
+  notice.textContent = state.backendAvailable
+    ? ""
+    : `Không kết nối được backend. Hãy chạy "python3 app.py" rồi thử lại.`;
 }
 function updateUploadButtonState() {
   $("upload-btn").disabled = !(state.selectedFile && state.backendAvailable);
@@ -2337,10 +2337,6 @@ function renderClassSummary(diag) {
     </div>
   `;
   setClassWarnings([
-    {
-      level: "warn",
-      text: "Bộ kết hợp là phương pháp thử nghiệm: trong thực nghiệm, nó chưa vượt được một mô hình đơn giản (1 mô hình tăng cường độ dốc chạy qua kiểm tra chéo). Xem cột «Cùng nghi» để biết dòng nào nhiều phương pháp đồng ý.",
-    },
     classQualityWarning(diag.quality),
     ...(diag.warnings || []).map((w) => ({ level: "warn", text: w })),
   ]);
