@@ -234,9 +234,9 @@ function setAuthMode(mode) {
   authState.mode = mode;
   const isLogin = mode === "login";
   $("ws-auth-title").textContent = isLogin ? "Đăng nhập" : "Tạo tài khoản";
-  $("ws-auth-desc").textContent = isLogin
-    ? "Tiếp tục việc đang dở."
-    : "Tải lên, làm sạch và xuất file.";
+  // Chế độ đăng ký không có dòng mô tả (ẩn hẳn, không để lại khoảng trống).
+  $("ws-auth-desc").textContent = isLogin ? "Tiếp tục việc đang dở." : "";
+  $("ws-auth-desc").hidden = !isLogin;
   $("ws-auth-submit").textContent = isLogin ? "Đăng nhập" : "Tạo tài khoản";
   $("ws-auth-switch-text").textContent = isLogin ? "Chưa có tài khoản?" : "Đã có tài khoản?";
   $("ws-auth-toggle").textContent = isLogin ? "Tạo tài khoản" : "Đăng nhập";
