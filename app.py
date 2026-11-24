@@ -78,13 +78,7 @@ from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
 from class_noise.distance_based import detect_class_noise_distance
 from class_noise.ensemble_based import detect_class_noise_ensemble
-from class_noise.feature_selection import (
-    cap_outliers,
-    filter_correlated,
-    log_transform,
-    rank_by_importance,
-    select_by_elbow,
-)
+from class_noise.feature_selection import cap_outliers, log_transform
 from class_noise.preprocess import PreprocessConfig, PreprocessError, prepare_for_class_noise
 from class_noise.web_adapter import (
     COMPONENT_LABELS,
@@ -727,13 +721,13 @@ def class_noise_detect_api():
         "auto" = chọn theo độ phủ), alpha (mặc định 0 = "công tắc", > 0 = "pha trộn"), n_estimators
         (mặc định 100), cv_folds (mặc định 5). Response thêm `method_findings` = danh sách RIÊNG
         của từng phương pháp thành phần (dòng nó tự gắn cờ + điểm nghi của nó) cho phần "Xem thêm".
-        LƯU Ý: thực nghiệm đầy đủ (CLAUDE.md mục 5) cho thấy bộ này KHÔNG vượt đối chứng
-        sklearn thuần; công thức gộp điểm và luật chọn K chưa chốt (class_noise/combined.py::
-        merge_scores_and_select_k).
+        Đã chốt 24/11/2026: gộp = trung bình hạng, alpha = 0, K = số dòng Confident Learning gắn cờ
+        (class_noise/combined.py::merge_scores_and_select_k).
 
-    MỌI method đều đi qua BƯỚC CHUẨN BỊ CHUNG (class_noise/preprocess.py) trước khi chạy; payload
-    nhận thêm `reduce_columns` (true = "Giảm số cột" theo nhãn, mặc định false). Response có thêm
-    `preprocess` (cột nào bị bỏ + lý do, dòng bị loại/gộp, nhóm dòng mâu thuẫn) và
+    MỌI method đều đi qua BƯỚC CHUẨN BỊ CHUNG (class_noise/preprocess.py) trước khi chạy, trong đó có
+    bước giảm số cột bằng BORUTA (luôn chạy, KHÔNG còn tham số `reduce_columns`; nếu client cũ vẫn gửi
+    thì bị bỏ qua). Response có thêm `preprocess` (cột nào bị bỏ + lý do, thông tin Boruta
+    `preprocess.label_reduction`, dòng bị loại/gộp, nhóm dòng mâu thuẫn) và
     `diagnostics.quality` (nhận xét độ tin cậy theo MỨC VƯỢT MỐC, xem class_noise/web_adapter.py).
     Route này CHỈ "phiên dịch" JSON <-> Python object + JSON-hoá kết quả,
     không có logic detect nào viết thêm ở đây -- logic thật nằm hết ở 3 module
@@ -810,12 +804,11 @@ def class_noise_detect_api():
         ), 400
 
     cv_folds = int(payload.get("cv_folds") or 5)
-    reduce_by_label = _as_bool(payload.get("reduce_columns"))
 
     # BƯỚC CHUẨN BỊ CHUNG (class_noise/preprocess.py, CLAUDE.md "Kế hoạch cải tiến Class Noise" mục 1),
     # chạy TRƯỚC mọi phương pháp và KHÔNG dùng nhãn để chọn cột: bỏ cột hằng / gần như toàn ô trống /
     # định danh / tương quan >= 0,8; bỏ dòng còn ô trống; gộp dòng trùng đặc trưng cùng nhãn; báo dòng
-    # mâu thuẫn. "Giảm số cột theo nhãn" (Random Forest + điểm gãy) chỉ chạy khi người dùng chọn.
+    # mâu thuẫn; rồi giảm số cột theo nhãn bằng BORUTA (LUÔN chạy, người dùng không chọn; CLAUDE.md "Quyết định 24/11/2026").
     try:
         prepared = prepare_for_class_noise(
             df,
@@ -823,13 +816,12 @@ def class_noise_detect_api():
                 label_column=label_column,
                 feature_columns=feature_columns,
                 n_folds=cv_folds,
-                reduce_by_label=reduce_by_label,
             ),
         )
     except (PreprocessError, ValueError, KeyError) as exc:
         return jsonify({"error": f"Không chuẩn bị được dữ liệu: {exc}"}), 400
     used_features = prepared.feature_columns
-    report_json = preprocess_info(prepared.report, reduce_by_label)
+    report_json = preprocess_info(prepared.report)
 
     # Biến đổi RIÊNG từng phương pháp (kế hoạch mục 3, 22/11/2026):
     #  - Distance-based, Ensemble-based: cap outlier (về biên IQR) + log-transform
@@ -1109,11 +1101,10 @@ def _is_mostly_numeric(series, min_ratio: float = 0.9) -> bool:
     """Coi 1 cột là "đủ số" để làm candidate cho Feature Importance nếu ít
     nhất `min_ratio` (mặc định 90%) các ô KHÔNG RỖNG của nó ép được thành số.
 
-    Cần lọc TRƯỚC khi đưa vào rank_by_importance(), vì hàm đó yêu cầu MỌI
-    candidate đều phải là số TRÊN CÙNG 1 DÒNG mới tính dòng đó "dùng được" --
-    nếu lỡ đưa nguyên 1 cột CHỮ (vd "workclass") vào làm candidate, cột đó
-    luôn luôn NaN sau khi ép số, khiến TOÀN BỘ dòng bị loại (0 dòng dùng
-    được), lỗi ngay từ bước train Random Forest.
+    Cần lọc TRƯỚC khi đưa vào các bước huấn luyện, vì chúng yêu cầu MỌI cột
+    đặc trưng đều phải là số TRÊN CÙNG 1 DÒNG mới tính dòng đó "dùng được" --
+    nếu lỡ đưa nguyên 1 cột CHỮ (vd "workclass") vào, cột đó luôn luôn NaN
+    sau khi ép số, khiến TOÀN BỘ dòng bị loại (0 dòng dùng được).
     """
     non_empty = series.astype(str).str.strip()
     non_empty = non_empty[non_empty != ""]
@@ -1121,70 +1112,6 @@ def _is_mostly_numeric(series, min_ratio: float = 0.9) -> bool:
         return False
     numeric = pd.to_numeric(non_empty, errors="coerce")
     return numeric.notna().mean() >= min_ratio
-
-
-@app.route("/api/class-noise/reduce-features", methods=["POST"])
-def class_noise_reduce_features_api():
-    """Bước 3 (class), nút "🪄 Giảm cột tự động": chạy 2 bước giảm cột TRƯỚC
-    khi người dùng tick tay đặc trưng (xem class_noise/feature_selection.py):
-      Bước 1 -- rank_by_importance() + select_by_elbow(): xếp hạng TẤT CẢ cột
-        (trừ cột đang là nhãn) theo mức liên quan tới nhãn, tự tìm điểm "gãy
-        khúc" để giữ lại nhóm cột quan trọng nhất -- KHÔNG cần chọn tay % hay
-        số cột nào (Elbow Method, xem docstring select_by_elbow()).
-      Bước 2 -- filter_correlated(): trong nhóm đó, loại bớt cột THỪA THÔNG
-        TIN LẪN NHAU (tương quan >= 0.8 giữa 2 cột với nhau).
-
-    Route này CHỈ TÍNH TOÁN và trả kết quả, KHÔNG tự áp dụng xuống cấu hình
-    detect thật -- frontend nhận về rồi TỰ TICK lại danh sách checkbox sẵn có
-    (người dùng vẫn sửa tay thêm được, không bị khoá cứng theo kết quả này).
-    """
-    payload = request.get_json()
-    file_id = payload.get("file_id")
-    owner_error = _require_file_owner(file_id)
-    if owner_error:
-        return owner_error
-    df = _peek_working_df(file_id)  # bản đang làm việc nếu đã xử lý (cách B, mục 37)
-    if df is None:
-        return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
-
-    label_column = payload.get("label_column")
-    if not label_column:
-        return jsonify({"error": "Thiếu label_column"}), 400
-    if label_column not in df.columns:
-        return jsonify({"error": f"Cột không tồn tại trong file: {label_column}"}), 400
-
-    # Chỉ lấy cột ĐỦ SỐ làm candidate -- loại tự động các cột chữ (vd
-    # "workclass", "occupation"...), khớp đúng lời hứa đã ghi trong mô tả
-    # panel ("cột không ép được thành số sẽ tự động bị loại").
-    candidate_columns = [
-        c for c in df.columns if c != label_column and _is_mostly_numeric(df[c])
-    ]
-    if not candidate_columns:
-        return jsonify(
-            {"error": "Không có cột số nào để chạy giảm cột (toàn bộ cột còn lại đều là cột chữ)"}
-        ), 400
-
-    n_estimators = int(payload.get("n_estimators") or 300)
-
-    try:
-        ranked = rank_by_importance(
-            df,
-            label_column=label_column,
-            candidate_columns=candidate_columns,
-            n_estimators=n_estimators,
-        )
-        after_importance = select_by_elbow(ranked)
-        after_correlation = filter_correlated(df, after_importance, threshold=0.8)
-    except (ValueError, KeyError) as exc:
-        return jsonify({"error": f"Không chạy được với cấu hình này: {exc}"}), 400
-
-    return jsonify(
-        {
-            "ranked": [{"column": r.column, "importance": r.importance} for r in ranked],
-            "after_importance": after_importance,
-            "after_correlation": after_correlation,
-        }
-    )
 
 
 # =============================================================================
@@ -1198,7 +1125,7 @@ def class_noise_reduce_features_api():
 #
 # Dùng CHUNG bản "đang làm việc" (WORKING_FILES) + lịch sử hoàn tác (HANDLING_HISTORY)
 # với nhánh Attribute -- file gốc (UPLOADED_FILES) không bao giờ đổi. Từ nay các route
-# /api/class-noise/detect và /reduce-features cũng đọc BẢN ĐANG LÀM VIỆC (cách B: phát
+# /api/class-noise/detect cũng đọc BẢN ĐANG LÀM VIỆC (cách B: phát
 # hiện lại sau khi xử lý thì chạy trên dữ liệu đã xử lý, giống nhánh Attribute).
 # Chỉ đổi CỘT NHÃN hoặc xoá dòng; các cột đặc trưng KHÔNG bao giờ bị sửa (bước cap
 # outlier + log của lúc detect chạy trên bản sao, không ghi ngược vào file).

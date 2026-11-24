@@ -1,26 +1,20 @@
 """
-Module GIẢM SỐ CỘT (feature selection) cho Class Noise -- chạy TRƯỚC Confident
-Learning, theo đúng quy trình thầy hướng dẫn (3 bước):
-  Bước 1 (module này): xếp hạng cột theo mức LIÊN QUAN TỚI NHÃN, giữ top-K.
-  Bước 2 (module này): trong các cột còn lại, loại bớt cột THỪA THÔNG TIN LẪN
-    NHAU (tương quan cao giữa CỘT VỚI CỘT, không liên quan gì tới nhãn).
-  Bước 3 (module này): trên các cột CUỐI CÙNG sau Bước 1+2 -- (3a) cap outlier
-    về biên IQR/Z-score (TÁI DÙNG detect_outlier() + công thức biên/định dạng số đã có
-    ở attribute_noise/, không viết lại công thức IQR/Z-score lần 2), (3b) biến
-    đổi logarit để phân phối đỡ "lệch đuôi dài", cân đối hơn.
+Module GIẢM SỐ CỘT (feature selection) cho Class Noise.
 
-Phân biệt quan trọng giữa Bước 1 và Bước 2 (dễ nhầm vì cả 2 đều "giảm cột"):
-  - Bước 1 hỏi: "cột này có giúp đoán được NHÃN không?"   (cột vs NHÃN)
-  - Bước 2 hỏi: "2 cột này có đang nói CÙNG 1 chuyện với NHAU không?" (cột vs CỘT)
-Vì hỏi 2 câu khác nhau nên dùng 2 kỹ thuật khác nhau, không gộp làm 1 được.
+Còn lại trong module này (sau khi gỡ "Random Forest + điểm gãy" ngày 24/11/2026 -- bước giảm cột theo
+NHÃN nay do BORUTA làm, xem class_noise/boruta.py và class_noise/preprocess.py):
+  - filter_correlated(): loại bớt cột THỪA THÔNG TIN LẪN NHAU (tương quan cao giữa CỘT VỚI CỘT,
+    không liên quan gì tới nhãn); `order_columns_without_labels()` là luật xếp thứ tự giữ cột
+    KHÔNG nhìn nhãn mà `filter_correlated(prioritized=False)` dùng.
+  - cap_outliers(): cap outlier về biên IQR/Z-score (TÁI DÙNG detect_outlier() + công thức biên/định
+    dạng số đã có ở attribute_noise/, không viết lại công thức IQR/Z-score lần 2).
+  - log_transform(): biến đổi logarit để phân phối đỡ "lệch đuôi dài", cân đối hơn.
 """
 
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
 
 from attribute_noise.attribute_handling import _format_numeric_for_column, _resolve_cap_bounds
 from attribute_noise.config import ColumnDType, ColumnNoiseConfig, NoiseType
@@ -29,85 +23,13 @@ from attribute_noise.detectors import detect_outlier
 
 @dataclass
 class FeatureRanking:
-    """Kết quả xếp hạng 1 cột ở Bước 1."""
+    """Một dòng của bảng xếp hạng cột theo mức quan trọng (cột + mức quan trọng).
+
+    Hàm xếp hạng cũ (`rank_by_importance`, `select_by_elbow`) đã bị gỡ ngày 24/11/2026 (thay bằng Boruta);
+    chỉ còn giữ kiểu dữ liệu này vì mã nghiên cứu `categorical_encoding.py` (không được web gọi) còn dùng."""
 
     column: str
     importance: float
-
-
-def rank_by_importance(
-    df: pd.DataFrame,
-    label_column: str,
-    candidate_columns: list[str],
-    n_estimators: int = 300,
-    random_state: int = 42,
-) -> list[FeatureRanking]:
-    """Bước 1: xếp hạng các cột candidate theo mức độ LIÊN QUAN TỚI NHÃN.
-
-    Train 1 Random Forest duy nhất dự đoán nhãn từ TẤT CẢ cột candidate, rồi
-    đọc `feature_importances_` -- RF tự tính được mỗi cột góp phần bao nhiêu
-    vào việc tách đúng nhãn qua các lần chia nhánh của 300 cây. Dùng cách này
-    (thay vì hệ số tương quan Pearson thường) vì nó bắt được cả quan hệ
-    KHÔNG tuyến tính giữa cột và nhãn, tổng quát hơn.
-
-    Trả về danh sách đã SẮP XẾP GIẢM DẦN theo importance -- cột quan trọng
-    nhất đứng đầu, để `filter_correlated()` ở Bước 2 biết thứ tự ưu tiên giữ.
-    """
-    working = df.copy()
-    for col in candidate_columns:
-        working[col] = pd.to_numeric(working[col], errors="coerce")
-
-    label_ok = working[label_column].astype(str).str.strip() != ""
-    features_ok = working[candidate_columns].notna().all(axis=1)
-    usable = working[label_ok & features_ok]
-
-    X = usable[candidate_columns].to_numpy()
-    y = LabelEncoder().fit_transform(usable[label_column].to_numpy())
-
-    rf = RandomForestClassifier(
-        n_estimators=n_estimators,
-        class_weight="balanced",
-        random_state=random_state,
-        n_jobs=-1,
-    )
-    rf.fit(X, y)
-
-    rankings = [
-        FeatureRanking(column=col, importance=float(imp))
-        for col, imp in zip(candidate_columns, rf.feature_importances_)
-    ]
-    rankings.sort(key=lambda r: r.importance, reverse=True)
-    return rankings
-
-
-def select_by_elbow(ranked: list[FeatureRanking]) -> list[str]:
-    """Chọn cột theo "Điểm Gãy" (Elbow Method) -- kỹ thuật THẬT, dùng phổ
-    biến để chọn số thành phần trong PCA (scree plot) hay số cụm K trong
-    K-means. KHÔNG cần tự chọn tay bất kỳ ngưỡng % hay số trần nào (khác
-    với 2 bản thử nghiệm trước đó: "luôn lấy 8 cột" rồi "lấy đủ 90% có cap
-    10" -- cả 2 đều cần 1 con số tự đặt, đã bỏ vì thiếu căn cứ vững) -- cách
-    này TỰ TÌM điểm "gãy khúc" thật sự trong CHÍNH dữ liệu.
-
-    Cách làm: tính tỉ lệ importance[cột sau] / importance[cột trước] cho mỗi
-    cặp cột liền kề -- tỉ lệ càng gần 1 nghĩa là 2 cột liền kề gần ngang
-    nhau (chưa gãy); tỉ lệ càng nhỏ nghĩa là cột sau TỤT MẠNH so với cột
-    trước (dấu hiệu "hết vùng quan trọng, sang vùng vụn vặt"). Tìm vị trí
-    có tỉ lệ THẤP NHẤT trong toàn bộ bảng xếp hạng -- đó là điểm gãy rõ nhất.
-    Giữ lại mọi cột TRƯỚC điểm gãy, bỏ từ điểm gãy trở đi.
-
-    Đã kiểm chứng trên Credit Card Fraud: điểm gãy mạnh nhất rơi đúng vào
-    cột thứ 8→9 (V3→V2, tỉ lệ tụt còn ~53.5%) ở CẢ 3 mức n_estimators đã
-    thử (200/300/500) -- không phải ngẫu nhiên 1 lần.
-    """
-    if len(ranked) < 2:
-        return [r.column for r in ranked]
-
-    drop_ratios = [
-        ranked[i].importance / ranked[i - 1].importance
-        for i in range(1, len(ranked))
-    ]
-    elbow_index = drop_ratios.index(min(drop_ratios)) + 1
-    return [r.column for r in ranked[:elbow_index]]
 
 
 def order_columns_without_labels(

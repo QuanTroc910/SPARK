@@ -120,12 +120,11 @@ def quality_assessment(excess: float | None, what: str = "Mô hình", low: float
     return {"level": level, "excess": excess, "threshold": low, "message": message}
 
 
-def preprocess_info(report: PreprocessReport, reduce_by_label: bool) -> dict:
+def preprocess_info(report: PreprocessReport) -> dict:
     """Báo cáo bước chuẩn bị chung ở dạng gọn cho giao diện: cột nào bị bỏ vì luật gì, số dòng bị loại / gộp,
     nhóm dòng mâu thuẫn (cùng đặc trưng khác nhãn)."""
     data = report.to_dict()
     data["conflict_groups_total"] = data["n_conflict_groups"]
     data["conflict_groups"] = data["conflict_groups"][:MAX_LISTED_IN_RESPONSE]
     data["blank_feature_rows"] = data["blank_feature_rows"][:MAX_LISTED_IN_RESPONSE]
-    data["reduce_by_label"] = bool(reduce_by_label)
     return data

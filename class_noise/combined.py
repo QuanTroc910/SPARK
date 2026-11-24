@@ -33,12 +33,15 @@ Cách làm (đơn giản, kiểm tra được từng bước):
      nghi dòng đó và lý do (mức vượt mốc). Nghĩa là bộ kết hợp chỉ SẮP XẾP LẠI cho tốt hơn,
      còn "bao nhiêu dòng" lấy từ phương pháp đáng tin nhất, không tự đặt ngưỡng mới.
 
-Bước 4 + 5 (điểm kết hợp và số dòng K) nằm riêng trong `merge_scores_and_select_k()`: công thức gộp
-điểm và luật chọn K CHƯA chốt (chờ thực nghiệm), nên tách ra 1 hàm để sau này đổi đúng 1 chỗ, không
-đụng tới phần hạng phần trăm / cổng chất lượng / trọng số ở trên.
+Bước 4 + 5 (điểm kết hợp và số dòng K) nằm riêng trong `merge_scores_and_select_k()` để sau này
+muốn đổi thì đổi đúng 1 chỗ, không đụng tới phần hạng phần trăm / cổng chất lượng / trọng số ở trên.
 
-alpha KHÔNG được chọn ở đây: chọn alpha là việc của khâu thực nghiệm (kế hoạch mục 5: chọn
-trên 1 seed rồi giữ cố định), để không tinh chỉnh theo đúng dữ liệu đang đánh giá.
+ĐÃ CHỐT 24/11/2026: alpha = 0 (trung bình hạng, các phương pháp qua cổng chia trọng số đều nhau) và
+K = số dòng Confident Learning tự gắn cờ (với alpha = 0 hai phương pháp hoà trọng số nên luật "phương pháp
+nặng nhất" rơi đúng vào Confident Learning nhờ thứ tự METHOD_ORDER; nếu Confident Learning bị cổng loại thì
+K lấy từ Mutual k-NN). (Ghi chú cũ "chưa chốt, chờ thực nghiệm" không còn đúng;
+đoạn thực nghiệm cũ cấy nhiễu sai cách đã huỷ, xem CLAUDE.md "Quyết định 24/11/2026".)
+alpha KHÔNG chọn ở đây: web dùng mặc định alpha = 0, các giá trị khác chỉ dùng để thử nghiệm.
 
 Module thuần Python/numpy/pandas, không phụ thuộc Flask.
 """
@@ -308,7 +311,7 @@ def merge_scores_and_select_k(
     n_rows: int,
 ) -> MergedScores:
     """BƯỚC "GỘP ĐIỂM + CHỌN K" (bước 4 và 5 trong docstring module) -- tách riêng để sau này đổi công thức gộp
-    điểm hoặc luật chọn K chỉ phải sửa hàm này. HIỆN TẠI (chưa chốt, chờ thực nghiệm):
+    điểm hoặc luật chọn K chỉ phải sửa hàm này. ĐÃ CHỐT 24/11/2026 (alpha = 0, K = số dòng CL gắn cờ):
 
       * điểm kết hợp = trung bình có trọng số của hạng phần trăm, chỉ tính các phương pháp ĐANG BẬT và CÓ ý
         kiến về dòng đó (hạng NaN = không có ý kiến);

@@ -2131,14 +2131,13 @@ $("class-detect-btn").addEventListener("click", async () => {
   statusEl.textContent = CLASS_DETECT_WAIT;
 
   // Chỉ còn 1 cách phát hiện: bộ kết hợp. Không gửi k / alpha / n_estimators (backend dùng mặc định k = 5,
-  // alpha = 0, n_estimators = 100) và luôn "Không giảm số cột" (reduce_columns = false). Bước chuẩn bị chung
-  // (bỏ cột hằng / định danh / tương quan, gộp dòng trùng...) vẫn chạy ở backend, không dùng nhãn.
+  // alpha = 0, n_estimators = 100). Bước chuẩn bị chung chạy ở backend: bỏ cột hằng / định danh / tương quan
+  // (không dùng nhãn), giảm số cột bằng Boruta (luôn chạy, người dùng không chọn), gộp dòng trùng...
   const requestBody = {
     file_id: state.fileId,
     label_column: state.classLabelColumn,
     feature_columns: featureColumns,
     method: "combined",
-    reduce_columns: false,
   };
 
   let response;
@@ -2235,7 +2234,7 @@ const PREPROCESS_REASONS = {
   constant: "Cột hằng",
   identifier: "Giống mã định danh",
   correlated: "Trùng thông tin với cột khác",
-  label_reduction: "Ít liên quan tới nhãn",
+  label_reduction: "Giảm số cột (Boruta)",
 };
 function renderClassPreprocess() {
   const card = $("class-preprocess-card");
@@ -2291,22 +2290,18 @@ function renderClassPreprocess() {
           .join("")}</ul></details>`
     : "";
 
+  // Giảm số cột bằng Boruta (luôn chạy): giữ X / Y cột, liệt kê cột bị bỏ, số vòng.
   let reduction = "";
   const lr = pp.label_reduction;
-  if (lr && lr.ranking && lr.ranking.length) {
-    const maxImportance = lr.ranking[0].importance || 1;
-    const bars = lr.ranking
-      .map((r) => {
-        const width = Math.max(4, Math.round((r.importance / maxImportance) * 100));
-        const keep = lr.kept.includes(r.column);
-        return `<div class="chart-row">
-          <span class="chart-label mono">${escapeHtml(r.column)}</span>
-          <span class="chart-bar-track"><span class="chart-bar-fill" style="width:${width}%; background: var(--signal); opacity: ${keep ? 1 : 0.25};"></span></span>
-          <span class="chart-count">${(r.importance * 100).toFixed(1)}%</span>
-        </div>`;
-      })
-      .join("");
-    reduction = `<h4 class="sub-title">Giảm số cột theo nhãn: giữ ${lr.kept.length} / ${lr.ranking.length} cột</h4>${bars}`;
+  if (lr && lr.applied) {
+    const total = lr.n_columns_in || (lr.kept.length + lr.rejected.length + (lr.tentative || []).length);
+    const rejected = (lr.rejected || []).map((c) => `<span class="mono">${escapeHtml(c)}</span>`).join(", ");
+    reduction = `<h4 class="sub-title">Giảm số cột (Boruta): giữ ${lr.kept.length} / ${total} cột</h4>
+      <p class="class-prep-line">${lr.n_iter} vòng${lr.seconds != null ? `, ${lr.seconds} giây` : ""}.${
+        rejected ? ` Cột bị bỏ vì không quan trọng hơn cột ngẫu nhiên: ${rejected}.` : " Không cột nào bị bỏ."
+      }${(lr.tentative || []).length ? ` ${lr.tentative.length} cột chưa kết luận được vẫn được giữ.` : ""}</p>`;
+  } else if (lr) {
+    reduction = `<h4 class="sub-title">Giảm số cột (Boruta): không áp dụng được, giữ nguyên các cột</h4>`;
   }
 
   const warns = (pp.warnings || []).map((w) => `<p class="hint-note">⚠️ ${escapeHtml(w)}</p>`).join("");

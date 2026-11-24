@@ -11,9 +11,10 @@ Thứ tự các bước (hàm chính: `prepare_for_class_noise`):
   2. Luật theo từng cột (không nhìn nhãn): bỏ cột toàn ô trống, cột chữ (chưa hỗ trợ), cột gần như
      toàn ô trống (mặc định > 50%), cột hằng, cột định danh (số nguyên có >= 95% giá trị khác nhau).
   3. Lọc tương quan |r| >= 0.8, chọn cột giữ KHÔNG dùng nhãn (ít ô trống -> ít tương quan hơn).
-  4. (TUỲ CHỌN, mặc định TẮT) giảm số cột theo nhãn bằng Random Forest + điểm gãy -- đây là bước
-     đầu thầy yêu cầu; chỉ chạy khi người dùng chọn "Giảm số cột", kèm cảnh báo khi nhãn chưa đủ
-     tin cậy để chọn cột theo nhãn.
+  4. Giảm số cột theo nhãn bằng BORUTA (class_noise/boruta.py) -- LUÔN chạy từ 24/11/2026, người dùng
+     không chọn (thay Random Forest + điểm gãy cũ, vốn chỉ giữ 1 cột khi nhãn nhiễu). Chạy trên toàn bộ
+     dòng đủ giá trị; chỉ bỏ cột Boruta kết luận "bỏ"; lỗi hoặc không giữ cột nào thì giữ tất cả + cảnh
+     báo; kèm cảnh báo khi lớp hiếm quá ít dòng hoặc "mức vượt mốc" thấp.
   5. Bỏ dòng còn ô trống ở các cột đã giữ, báo rõ số dòng.
   6. Gom dòng TRÙNG đặc trưng: nhóm cùng nhãn -> gộp 1 đại diện (kết quả sau này trả về cả nhóm);
      nhóm khác nhãn -> báo "dòng mâu thuẫn" (giữ nguyên các dòng này: đó là dấu hiệu nhãn sai, hoặc đặc trưng chưa đủ phân biệt).
@@ -22,6 +23,7 @@ Cố tình KHÔNG reset_index(): index gốc được giữ, để row_number (=
 phía sau luôn khớp đúng dòng trong file gốc.
 """
 
+import time
 from dataclasses import asdict, dataclass, field
 
 import numpy as np
@@ -32,7 +34,8 @@ from sklearn.preprocessing import LabelEncoder
 
 from attribute_noise.detectors import detect_duplicate_rows
 
-from .feature_selection import filter_correlated, rank_by_importance, select_by_elbow
+from .boruta import boruta_select
+from .feature_selection import filter_correlated
 
 
 class PreprocessError(Exception):
@@ -50,8 +53,9 @@ class PreprocessConfig:
     identifier_min_rows: int = 30          # dưới số dòng này không xét "định danh" (file quá nhỏ thì tỉ lệ vô nghĩa)
     correlation_threshold: float = 0.8
     correlation_method: str = "pearson"    # hoặc "spearman"
-    reduce_by_label: bool = False          # giảm cột theo NHÃN: mặc định KHÔNG
-    n_estimators: int = 100                # số cây cho Random Forest ở bước giảm cột theo nhãn
+    n_estimators: int = 100                # số cây của Random Forest chỉ dùng để đo "mức vượt mốc" (cảnh báo độ tin cậy)
+    boruta_n_estimators: int = 50          # số cây mỗi vòng của Boruta (giảm cột theo nhãn, LUÔN chạy từ 24/11/2026)
+    boruta_max_iter: int = 100             # số vòng tối đa của Boruta
     low_margin_warning: float = 0.2        # cảnh báo nếu "mức vượt mốc" của mô hình < 20% (ngưỡng tạm, chưa chốt)
     min_minority_rows: int = 50            # cảnh báo nếu lớp hiếm có ít hơn ngần này dòng
     group_duplicates: bool = True
@@ -88,7 +92,7 @@ class PreprocessReport:
     conflict_groups: list[ConflictGroup] = field(default_factory=list)
     n_conflict_groups: int = 0
     n_conflict_rows: int = 0
-    label_reduction: dict | None = None   # kết quả bước giảm cột theo nhãn (None = không chạy)
+    label_reduction: dict | None = None   # kết quả Boruta (None = không chạy được hoặc chỉ còn 1 cột)
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -146,7 +150,7 @@ def _column_problem(raw: pd.Series, cfg: PreprocessConfig) -> tuple[str, str] | 
 
 
 # --------------------------------------------------------------------------------------
-# Bước 4 (tuỳ chọn): giảm cột theo nhãn + cảnh báo độ tin cậy
+# Bước 4: giảm cột theo nhãn bằng Boruta + cảnh báo độ tin cậy
 # --------------------------------------------------------------------------------------
 def _margin_over_baseline(num: pd.DataFrame, labels: pd.Series, cfg: PreprocessConfig) -> float | None:
     """"Mức vượt mốc" = (độ chính xác CV - độ chính xác đoán toàn lớp đông nhất) / (1 - cùng mốc đó).
@@ -171,17 +175,41 @@ def _margin_over_baseline(num: pd.DataFrame, labels: pd.Series, cfg: PreprocessC
 
 
 def _reduce_by_label(num: pd.DataFrame, labels: pd.Series, columns: list[str], cfg: PreprocessConfig):
-    """Random Forest xếp hạng cột theo NHÃN rồi cắt ở điểm gãy (đúng bước 1 thầy yêu cầu).
-    Trả (cột giữ lại, thông tin để hiện, danh sách cảnh báo)."""
+    """Giảm cột theo NHÃN bằng BORUTA (class_noise/boruta.py), chạy trên TOÀN BỘ dòng đủ giá trị ở mọi cột còn lại.
+    Chỉ BỎ cột Boruta kết luận "bỏ"; cột "chưa quyết định" vẫn giữ. Dự phòng: Boruta lỗi hoặc không giữ cột nào
+    -> giữ tất cả cột và thêm cảnh báo. Trả (cột giữ lại, thông tin để hiện, danh sách cảnh báo)."""
     tmp = num[columns].copy()
     tmp[cfg.label_column] = labels.to_numpy()
-    tmp = tmp.dropna(subset=columns)               # rank_by_importance cần dòng đủ mọi cột
+    tmp = tmp.dropna(subset=columns)               # Boruta cần dòng đủ mọi cột
     lab = tmp[cfg.label_column]
-    ranking = rank_by_importance(tmp, cfg.label_column, columns, n_estimators=cfg.n_estimators,
-                                 random_state=cfg.random_state)
-    kept = select_by_elbow(ranking)
 
     warnings: list[str] = []
+    if tmp.empty:
+        # Mọi dòng đều có ô trống ở ít nhất 1 cột: không có dữ liệu để chạy Boruta -> giữ tất cả cột (bước 5 phía dưới
+        # sẽ báo rõ số dòng bị bỏ vì ô trống).
+        warnings.append("Không có dòng nào đủ giá trị ở mọi cột để chạy Boruta; giữ tất cả các cột.")
+        info = {
+            "applied": False, "method": "boruta", "kept": list(columns), "rejected": [], "tentative": [], "n_iter": 0,
+            "seconds": 0.0, "n_columns_in": len(columns), "n_rows_used": 0, "margin": None, "minority_rows": 0,
+        }
+        return list(columns), info, warnings
+    started = time.monotonic()
+    result = None
+    try:
+        result = boruta_select(tmp[columns], lab.to_numpy(), max_iter=cfg.boruta_max_iter,
+                               n_estimators=cfg.boruta_n_estimators, random_state=cfg.random_state)
+    except Exception as exc:   # noqa: BLE001 -- dự phòng: lỗi gì của Boruta cũng không được làm hỏng cả bước chuẩn bị
+        warnings.append(f"Boruta không chạy được ({exc}); giữ tất cả {len(columns)} cột.")
+    if result is not None and not result.kept:
+        warnings.append(f"Boruta không giữ cột nào; giữ tất cả {len(columns)} cột.")
+        result = None
+    seconds = time.monotonic() - started
+
+    if result is None:
+        kept, rejected, tentative, n_iter, applied = list(columns), [], [], 0, False
+    else:
+        kept, rejected, tentative, n_iter, applied = result.kept, result.rejected, result.tentative, result.n_iter, True
+
     minority_rows = int(lab.value_counts().min())
     margin = _margin_over_baseline(tmp[columns], lab, cfg)
     if minority_rows < cfg.min_minority_rows:
@@ -194,10 +222,18 @@ def _reduce_by_label(num: pd.DataFrame, labels: pd.Series, columns: list[str], c
             f"Mô hình chỉ vượt mốc đoán bừa {max(margin, 0):.0%} (< {cfg.low_margin_warning:.0%}): nhãn có thể "
             "chưa đủ tin cậy để chọn cột theo nhãn."
         )
+    if tentative:
+        warnings.append(f"Boruta chưa kết luận được {len(tentative)} cột sau {n_iter} vòng; các cột đó vẫn được giữ.")
     info = {
-        "applied": True,
-        "ranking": [{"column": r.column, "importance": float(r.importance)} for r in ranking],
+        "applied": applied,
+        "method": "boruta",
         "kept": kept,
+        "rejected": rejected,
+        "tentative": tentative,
+        "n_iter": n_iter,
+        "seconds": round(seconds, 1),
+        "n_columns_in": len(columns),
+        "n_rows_used": int(len(tmp)),
         "margin": None if margin is None else float(margin),
         "minority_rows": minority_rows,
     }
@@ -263,13 +299,13 @@ def prepare_for_class_noise(df: pd.DataFrame, config: PreprocessConfig) -> Prepa
                 f"trùng thông tin với cột '{d['kept_column']}' (|r| = {d['correlation']:.2f})",
             ))
 
-    # --- Bước 4 (tuỳ chọn): giảm cột theo nhãn ---
-    if config.reduce_by_label and len(columns) > 1:
+    # --- Bước 4: giảm cột theo nhãn bằng Boruta (LUÔN chạy, người dùng không chọn) ---
+    if len(columns) > 1:
         kept, info, warns = _reduce_by_label(num, labels, columns, config)
         for c in columns:
             if c not in kept:
                 report.dropped_columns.append(DroppedColumn(
-                    c, "label_reduction", "xếp hạng thấp theo mức liên quan tới nhãn (Random Forest, trước điểm gãy)"))
+                    c, "label_reduction", "Boruta: không quan trọng hơn cột ngẫu nhiên"))
         columns = [c for c in columns if c in kept]
         report.label_reduction = info
         report.warnings.extend(warns)

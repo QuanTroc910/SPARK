@@ -110,7 +110,7 @@ def aggregate_importance_by_origin(
 ) -> list[FeatureRanking]:
     """Cộng dồn importance của các cột one-hot CON về lại đúng cột CHỮ GỐC
     của chúng -- BẮT BUỘC phải gọi hàm này trước khi đưa kết quả
-    `rank_by_importance()` vào `select_by_elbow()`, nếu candidate_columns có
+    `rank_by_importance()` (đã gỡ 24/11/2026) vào `select_by_elbow()` (đã gỡ), nếu candidate_columns có
     lẫn cột one-hot. Lý do: Elbow Method so sánh importance giữa các cột
     LIỀN KỀ trong bảng xếp hạng -- nếu chạy thẳng trên các mảnh one-hot rời
     rạc (1 cột gốc có thể bị xé thành nhiều mảnh rải khắp bảng), phép so

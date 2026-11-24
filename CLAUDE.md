@@ -205,6 +205,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     Ensemble KHÔNG chạy nếu không chọn nhưng vẫn gộp được (dùng cho thực nghiệm). Phần "gộp điểm + chọn K" tách riêng thành `merge_scores_and_select_k()` (công thức + luật K
     KHÔNG đổi, chờ thực nghiệm; đối chiếu bản cũ trên 600 cấu hình ngẫu nhiên = từng trường giống hệt). Thêm `MethodFinding` + `method_findings(output, recorded)` (dòng MÀ CHÍNH 1 phương pháp tự gắn cờ, xếp
     theo điểm nghi của nó), và `CombinedResult.method_outputs` / `.recorded_labels`.
+    **[CẬP NHẬT 24/11/2026: Quân báo thực nghiệm mục 5 cấy nhiễu SAI CÁCH và đã HUỶ; không dùng các số đó để kết luận. Đã chốt alpha = 0, K = số dòng CL gắn cờ.]**
     **THỰC NGHIỆM ĐẦY ĐỦ (mục 5) KHÔNG ỦNG HỘ bộ kết hợp:** thua đối chứng `naive_cv`, không hơn cách chỉ cắt top-K theo điểm của Confident Learning, α gần như vô nghĩa; xem mục 5 trước khi trích dẫn.
   - `ensemble_diverse.py` — **MỚI (22/11/2026, kế hoạch mục 7) — ENSEMBLE 5 HỌ**, làm lại `ensemble_based.py` (bản cũ GIỮ NGUYÊN làm đối chứng):
     `detect_class_noise_ensemble_diverse(df, config, cv_folds=5, random_state=42, min_votes=3, balance_thresholds=True)` -> `EnsembleDiverseResult(findings, diagnostics, scores)`.
@@ -251,7 +252,9 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     tối ưu gì như GaussianNB) nên hội tụ rất nhanh dù "có train".
   - `web_adapter.py` — **MỚI (mục 45)**: hàm phụ cho route Class Noise của web (`expand_findings`, `quality_assessment` theo MỨC VƯỢT MỐC, `preprocess_info`, `string_frame`, `finite`; mục 48 thêm
     `method_list_json()` = danh sách riêng 1 phương pháp ở dạng JSON đã mở ra cả nhóm dòng trùng, và `COMPONENT_LABELS`); thuần Python, không phụ thuộc Flask.
-  - `feature_selection.py` — **MỚI, GIẢM SỐ CỘT trước khi chạy Confident
+  - `feature_selection.py` — **[24/11/2026: `rank_by_importance()` + `select_by_elbow()` ĐÃ GỠ, thay bằng Boruta (mục 50); chỉ còn `filter_correlated()`,
+    `order_columns_without_labels()`, `cap_outliers()`, `log_transform()` và dataclass `FeatureRanking` (giữ cho mã nghiên cứu `categorical_encoding.py`). Phần mô tả bên dưới
+    về xếp hạng + điểm gãy chỉ còn là LỊCH SỬ.]** **MỚI, GIẢM SỐ CỘT trước khi chạy Confident
     Learning** (theo yêu cầu thầy sau buổi báo cáo — xem mục 9 dưới đây để
     biết đầy đủ lý do/lịch sử quyết định): `rank_by_importance()` (Bước 1 —
     train 1 Random Forest, đọc `feature_importances_`, xếp hạng cột theo mức
@@ -272,7 +275,15 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
   - `preprocess.py` — **MỚI (22/11/2026, kế hoạch mục 1)**: pipeline chuẩn bị chung, KHÔNG dùng nhãn để chọn cột:
     `prepare_for_class_noise(df, PreprocessConfig)` -> `PreparedData` (df chỉ gồm nhãn + cột số, giữ index gốc; `groups`
     nhóm dòng trùng; `expand_row_numbers()` trả kết quả về cả nhóm) + `PreprocessReport.to_dict()` (cột bị bỏ kèm lý do,
-    dòng bị loại, lớp ít dòng, nhóm mâu thuẫn, cảnh báo). Chưa nối vào `app.py`.
+    dòng bị loại, lớp ít dòng, nhóm mâu thuẫn, cảnh báo). Đã nối vào `app.py` (mục 45). **Từ 24/11/2026 bước 4 "giảm cột theo nhãn" LUÔN chạy và dùng BORUTA**
+    (`PreprocessConfig.reduce_by_label` đã xoá; thêm `boruta_n_estimators=50`, `boruta_max_iter=100`; `report.label_reduction` = {applied, method:"boruta", kept, rejected, tentative,
+    n_iter, seconds, n_columns_in, n_rows_used, margin, minority_rows}; cột bị bỏ ghi `reason="label_reduction"`, detail "Boruta: không quan trọng hơn cột ngẫu nhiên"; Boruta lỗi hoặc
+    không giữ cột nào -> giữ tất cả cột + cảnh báo). `preprocess_info(report)` không còn tham số `reduce_by_label`.
+  - `boruta.py` — **MỚI (24/11/2026, mục 50)**: BORUTA theo các bước của BorutaPy (Kursa & Rudnicki 2010), chỉ dùng scikit-learn + scipy.
+    `boruta_select(X, y, max_iter=100, alpha=0.05, n_estimators=50, random_state=42)` -> `BorutaResult(kept, rejected, tentative, n_iter)`.
+    Mỗi vòng: cột bóng = xáo trộn từng cột chưa bị loại -> Random Forest (50 cây) trên cột thật + bóng -> cột thật quan trọng hơn bóng mạnh nhất
+    thì +1 lần thắng -> kiểm định nhị thức cho cột "chưa quyết định", hiệu chỉnh 2 bước (Benjamini–Hochberg rồi Bonferroni theo số vòng) -> giữ / bỏ.
+    CHỈ BỎ cột bị kết luận "bỏ"; cột "chưa quyết định" vẫn giữ. Nối vào `preprocess.py` (bước giảm cột theo nhãn, LUÔN chạy).
   Dùng lại `attribute_noise/pipeline.py::load_data()` để đọc file (không
   viết lại hàm đọc CSV/Excel riêng). Có `demo_class_noise.py` ở gốc repo để
   chạy thử CLI, và 1 loạt file `demo_*.py` KHÁC (`demo_model_don_gian.py`,
@@ -362,7 +373,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
   - `GET /api/download/<download_id>` — trả file CSV (lưu tạm trong
     `CLEANED_FILES`, tách riêng khỏi `UPLOADED_FILES`/`WORKING_FILES`).
   - `POST /api/class-noise/detect` — **[CẬP NHẬT mục 48: giao diện Denoise CHỈ còn gọi `method="combined"` (Confident Learning + Mutual k-NN), không gửi k / alpha / n_estimators /
-    cv_folds, `reduce_columns=false`; backend dùng mặc định k = 5, alpha = 0, n_estimators = 100, cv_folds = 5. Các method khác + `reduce_columns` + `k` / `alpha` vẫn được route nhận.]**
+    cv_folds; backend dùng mặc định k = 5, alpha = 0, n_estimators = 100, cv_folds = 5. Các method khác + `k` / `alpha` vẫn được route nhận.]**
     **Hướng Class noise (mục 10+11):
     field `method`** dispatch sang 1 trong **ĐỦ CẢ 3** thuật toán DETECT
     (`"single_learning"` mặc định = Confident Learning, `"distance_based"`
@@ -397,18 +408,8 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     dùng giá trị NGUYÊN** (cây quyết định: log là phép đơn điệu nên không đổi gì, cap có thể xoá tín hiệu ở giá trị cực đoan; đã đo
     raw/cap/cap+log trên Car, Adult, Credit Card, 3 seed: chênh trong vòng dao động giữa các seed). Câu mô tả ở `workspace.html`
     (`#panel-3-class-desc`) đã sửa cho khớp.
-  - `POST /api/class-noise/reduce-features` — **MỚI**: chạy
-    `rank_by_importance()` → `select_by_elbow()` → `filter_correlated()`
-    (xem `class_noise/feature_selection.py` ở mục kiến trúc trên) trên TẤT
-    CẢ cột trừ cột đang là nhãn, trả về cả bảng xếp hạng đầy đủ lẫn 2 danh
-    sách cột sau mỗi bước. TỰ LỌC BỎ cột không "đủ số" (`_is_mostly_numeric()`
-    — ít nhất 90% ô không rỗng ép được thành số) khỏi candidate TRƯỚC khi
-    đưa vào `rank_by_importance()` — thiếu bước này sẽ lỗi "0 dòng dùng
-    được" nếu lỡ lẫn cột chữ (vd `workclass` của Adult Income) vào, vì hàm
-    đó yêu cầu MỌI candidate đều là số trên CÙNG 1 dòng mới tính dòng đó
-    dùng được (lỗi thật đã gặp lúc code, đã fix). CHỈ TÍNH TOÁN, KHÔNG tự
-    áp dụng xuống cấu hình detect thật — FE nhận kết quả rồi tự tick lại
-    checkbox đặc trưng sẵn có.
+  - ~~`POST /api/class-noise/reduce-features`~~ — **ĐÃ GỠ 24/11/2026** (chạy RF + điểm gãy + lọc tương quan, từng nối với nút "Giảm cột tự động"). Việc giảm cột nay nằm
+    trong bước chuẩn bị chung của `/api/class-noise/detect` (Boruta luôn chạy). Không có route riêng cho Boruta (bản đầu mục 50 từng làm `/api/class-noise/boruta` + nút riêng, đã bỏ theo bản yêu cầu).
   Rule/config sai (formula lỗi cú pháp, cột không tồn tại...) trả HTTP 400
   kèm message rõ ràng, không crash 500.
   - **Tài khoản đăng nhập (Multi-User THẬT, mục 14):** Flask app khởi tạo
@@ -656,7 +657,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
   `toggleStep4Direction()`/`toggleStep5Direction()`, được `goStep()` tự gọi
   mỗi lần VÀO bước đó dù đi bằng nút "Tiếp tục" hay bấm thẳng stepper):
   - Bước 3 (class): dropdown chọn `label_column` (mặc định CỘT CUỐI — quy
-    ước phổ biến của dữ liệu phân loại), **MỚI** khối "🪄 Giảm cột tự động"
+    ước phổ biến của dữ liệu phân loại), **[ĐÃ GỠ 24/11/2026 khỏi index.html + script.js]** khối "🪄 Giảm cột tự động"
     (nằm GIỮA ô chọn nhãn và danh sách checkbox đặc trưng — phải chọn nhãn
     trước mới bấm được) gọi `POST /api/class-noise/reduce-features`, hiện
     dòng tóm tắt "X cột gốc → Y cột (Bước 1) → Z cột (Bước 2)" + biểu đồ cột
@@ -979,7 +980,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
    - Nút "Xuất file CSV" cuối Bước 5 CHỈ đóng gói bản đang làm việc hiện tại
      (`POST /api/export-working`) để tải về — không tự chạy thêm xử lý nào.
 
-9. **Giảm số cột (feature selection) cho Class Noise — ĐÃ CODE XONG ĐỦ CẢ 3
+9. **[BƯỚC 1 (RF + điểm gãy) ĐÃ GỠ 24/11/2026, thay bằng Boruta — xem mục 50; phần dưới là LỊCH SỬ]** **Giảm số cột (feature selection) cho Class Noise — ĐÃ CODE XONG ĐỦ CẢ 3
    BƯỚC (`feature_selection.py`), ĐÃ NỐI VÀO WEB:**
    - Bước 1+2 (`rank_by_importance`/`select_by_elbow`/`filter_correlated`):
      nối qua `POST /api/class-noise/reduce-features` + khối "Giảm cột tự
@@ -1964,7 +1965,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
 45. **Class Noise trên web: bước chuẩn bị chung, "Bộ kết hợp", Giảm số cột là lựa chọn, báo cáo cột bị bỏ, cảnh báo theo mức vượt mốc — ĐÃ XONG (22/11/2026), CHỈ chạy thử bằng tay, KHÔNG viết test mới (chưa commit lúc ghi):**
     - **Nguồn gốc:** mục "7. Web" trong bản yêu cầu của user (= mục 6 của kế hoạch cải tiến Class Noise ở cuối file); user nói "Làm mục 7 đi, không cần test đâu".
     - **Backend `/api/class-noise/detect` (`app.py`):** MỌI phương pháp giờ đi qua `class_noise/preprocess.py::prepare_for_class_noise()` TRƯỚC khi chạy (bỏ cột hằng / gần toàn trống / định danh / tương quan >= 0,8
-      KHÔNG dùng nhãn; bỏ dòng còn ô trống; gộp dòng trùng đặc trưng cùng nhãn; báo nhóm mâu thuẫn). Payload thêm `reduce_columns` (mặc định false = "Không giảm số cột"; true = giảm theo nhãn bằng Random Forest +
+      KHÔNG dùng nhãn; bỏ dòng còn ô trống; gộp dòng trùng đặc trưng cùng nhãn; báo nhóm mâu thuẫn). [24/11/2026: tham số `reduce_columns` ĐÃ BỎ, Boruta luôn chạy, xem mục 50] Payload thêm `reduce_columns` (mặc định false = "Không giảm số cột"; true = giảm theo nhãn bằng Random Forest +
       điểm gãy, kèm cảnh báo trong `preprocess.warnings`). Thêm `method="combined"` (`detect_class_noise_combined`, tham số `alpha` 0 = công tắc / 0,5 = pha trộn, `n_estimators` mặc định 100, k của Mutual k-NN = "auto").
       `k` của Distance-based: không gửi khoá `k` = 5 như cũ; gửi `null` / `""` / `"auto"` = tự chọn theo độ phủ (ô k trên web để trống = tự động, mặc định ô vẫn là 5 vì thực nghiệm mục 5 cho thấy "k theo độ phủ" kém k = 5 ở 3/4 bộ).
       Distance + Ensemble vẫn cap outlier + log (trên bản chuỗi của bảng đã chuẩn bị), Confident Learning dùng giá trị nguyên.
@@ -2053,7 +2054,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       bỏ dòng cảnh báo "Bộ kết hợp là phương pháp thử nghiệm…" ở màn kết quả (khung cảnh báo vẫn hiện khi mức vượt mốc thấp / `diag.warnings`, tự ẩn nếu không có gì); bỏ 2 dòng chân trang
       ("Riêng tư theo tài khoản…", "Xử lý qua backend Flask"), chỉ còn "Denoise · khoá luận tốt nghiệp 2026". Cũng bỏ: dòng "Nhãn có thể bị gán sai? 2 phương pháp gộp, 4 bước" trong thẻ Class Noise của menu Product, và dải 3 nhãn bo tròn (`.convert-badges`: "Khai cột & tham số / Xem lỗi trước khi sửa / Xử lý qua backend thật", "Không cần cấu hình / Cần đăng nhập / …", "Kết quả tức thì / …") ở đầu 3 nhóm tool (CSS `.convert-badge*` còn trong file nhưng không dùng nữa). Sau đó bỏ luôn cụm 3 mục góc phải (`.ft-meta`: Chạy trên Backend Flask / Hai nhịp / Giá / Đăng nhập bắt buộc) ở 3 trang tool (Tự động, Cần cấu hình, Convert); `.ft-meta` của Guide / Bảo mật / Quyền riêng tư / Hồ sơ giữ nguyên. Commit `ffc53d7`. Trang chủ, lưới "Bắt đầu từ một tool nhỏ": bỏ chữ "Bấm là chạy" ở góc phải và dòng chú thích nhỏ trong 8 ô (chỉ còn nhãn nhóm, tên tool, mũi tên); chú thích nhỏ trong MENU Product giữ nguyên. Cũng bỏ: chữ "Không tự sửa khi chưa hỏi" ở góc phải mục "Bốn bước, bạn giữ quyền quyết định" và nhãn "Free Tools / Cần cấu hình / Class Noise" ở đáy 9 thẻ "Denoise sửa được gì" (nhãn "9 loại lỗi" giữ nguyên). Commit `8e4faeb`. Form đăng nhập / đăng ký: bỏ chữ "Xử lý qua backend Flask" ở góc trên nửa phải (xoá `.ws-auth-right-top` trong HTML, luật CSS còn nhưng không dùng) và bỏ dòng "Tải lên, làm sạch và xuất file." dưới tiêu đề "Tạo tài khoản" (`setAuthMode()` trong `workspace.js` ẩn `#ws-auth-desc` ở chế độ đăng ký; chế độ đăng nhập vẫn có "Tiếp tục việc đang dở."). Chưa commit lúc ghi.
     - **Giới hạn / việc nợ:** chạy đồng bộ, chưa chạy nền / thanh tiến độ; danh sách riêng trả về ĐẦY ĐỦ trong response (file rất nhiễu có thể hàng chục nghìn dòng mỗi danh sách); dòng cảnh báo "thử nghiệm" vẫn còn trên màn kết quả
-      (hỏi user có muốn bỏ không); công thức gộp điểm + luật chọn K chưa chốt (`merge_scores_and_select_k`); mục "Giảm số cột theo nhãn" chỉ còn là tham số của route (`reduce_columns`), giao diện không dùng.
+      (hỏi user có muốn bỏ không); công thức gộp điểm + luật chọn K chưa chốt (`merge_scores_and_select_k`); [24/11/2026: tham số `reduce_columns` và route `/api/class-noise/reduce-features` đã gỡ, Boruta luôn chạy — mục 50.]
 
 49. **Lỗi "mới chạy web phải tải file lần thứ 2 mới được" — ĐÃ TÌM RA NGUYÊN NHÂN VÀ SỬA (23/11/2026, chưa commit lúc ghi):**
     - **Nguyên nhân (tái hiện được bằng Playwright):** `app.secret_key` trước đây `os.urandom(32)` mỗi lần khởi động, mà `app.run(debug=True)` TỰ KHỞI ĐỘNG LẠI mỗi khi 1 file `.py` đổi (vd sau `git pull`)
@@ -2075,6 +2076,44 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Còn lại (không sửa):** dữ liệu file nằm trong RAM nên restart server vẫn mất `file_id` đang làm dở (các bước sau báo không tìm thấy file, phải tải lại); đổi mật khẩu/`SPARK_SECRET_KEY` hoặc xoá `.spark_secret_key` sẽ đăng xuất mọi người (đúng ý).
     - **Kiểm chứng:** Playwright: (a) mở trang + chọn file, restart server, bấm Tải lên: trước sửa 401 không form, sau sửa tải lên thành công ngay lần đầu; (b) ép đổi key bằng biến môi trường: hiện form + lời giải thích, đăng nhập lại về Class Noise,
       file vẫn chọn, tải lên được; (c) luồng khách -> đăng ký -> Free Tools chạy lần đầu bình thường; chạy lại bộ kiểm tra giao diện Class Noise 96 đạt (2 mục "lỗi" còn lại do bài kiểm tra cũ vẫn mong chữ đã bỏ).
+
+50. **Quyết định 24/11/2026: giảm số cột = BORUTA, chạy TỰ ĐỘNG trong bước chuẩn bị chung — ĐÃ XONG, ĐÃ TEST (đã commit hay chưa: xem `git log`; CHƯA push, chờ Quân đồng ý):**
+    - **Quyết định (theo bản yêu cầu của Quân):** bước "giảm cột theo nhãn" Random Forest + điểm gãy được THAY bằng **Boruta**, chạy tự động (người dùng không chọn, không có nút riêng), nằm sau bước lọc chung
+      KHÔNG dùng nhãn (cột hằng / định danh / quá nhiều ô trống / tương quan Pearson >= 0,8) và trước bước bỏ dòng ô trống + gộp dòng trùng. KHÔNG đụng Confident Learning (RF 100 cây,
+      `min_samples_leaf=5`, tắt `balanced`), Mutual k-NN, bộ kết hợp (trung bình hạng, alpha = 0, K = số dòng CL gắn cờ — đã chốt, chỉ sửa ghi chú trong `app.py` và `combined.py`).
+    - **Cách làm:** `class_noise/boruta.py::boruta_select()` (đúng mã Quân đưa: BorutaPy, 50 cây mỗi vòng, tối đa 100 vòng, alpha 0,05, perc = 100, hiệu chỉnh Benjamini–Hochberg rồi Bonferroni theo số vòng; chỉ BỎ cột
+      kết luận "bỏ", cột chưa quyết định vẫn giữ). `preprocess.py::_reduce_by_label()` gọi nó trên TOÀN BỘ dòng đủ giá trị ở mọi cột còn lại (không lấy mẫu), `random_state` = `config.random_state`;
+      giữ cảnh báo lớp hiếm + "mức vượt mốc"; dự phòng: Boruta lỗi hoặc không giữ cột nào -> giữ tất cả cột + cảnh báo; chỉ còn 1 cột thì không chạy. `info` = {applied, method:"boruta", kept, rejected,
+      tentative, n_iter, seconds, n_columns_in, n_rows_used, margin, minority_rows}.
+    - **Đã gỡ:** route `/api/class-noise/reduce-features`; tham số `reduce_columns` của `/api/class-noise/detect` (client cũ vẫn gửi thì bị bỏ qua); `PreprocessConfig.reduce_by_label`; `rank_by_importance()` + `select_by_elbow()`
+      trong `feature_selection.py` (giữ `filter_correlated`, `cap_outliers`, `log_transform` và dataclass `FeatureRanking` vì `categorical_encoding.py` — mã nghiên cứu — còn dùng); nút "Giảm cột tự động" ở `index.html` + `script.js` (giao diện cũ,
+      gỡ theo yêu cầu rõ của Quân dù CLAUDE.md dặn không sửa file cũ). Bản đầu mục này (cùng ngày) từng làm 1 nút "Giảm số cột" riêng + route `/api/class-noise/boruta` + file `boruta.py` tự viết nhiều tính năng
+      (đo bằng hoán vị trên tập giữ ra, mức quan trọng từng cột...): đã BỎ hết theo bản yêu cầu (bản sao lưu ngoài repo, mất khi máy ảo dựng lại).
+    - **Giao diện Denoise:** `workspace-flow.js` không còn gửi `reduce_columns`; trong thẻ "Bước chuẩn bị dữ liệu" (bước Kết quả) phần biểu đồ xếp hạng RF được thay bằng "Giảm số cột (Boruta): giữ X / Y cột" + danh sách cột bị bỏ
+      + số vòng / giây (+ ghi cột chưa kết luận vẫn giữ); nhãn lý do `label_reduction` = "Boruta: không quan trọng hơn cột ngẫu nhiên". Mô tả Guide ở bước 2 ghi Denoise tự bỏ cột thừa trước khi chạy. (Bản yêu cầu nói "panel Xem thêm" nhưng
+      biểu đồ xếp hạng cũ nằm ở thẻ chuẩn bị chứ không ở "Xem thêm" nên thay tại đúng chỗ đó.)
+    - **Số đo Quân đưa (máy 2 nhân, toàn bộ dòng, 50 cây) — ghi lại như Quân báo, CHƯA kiểm lại trong phiên này, các bộ dữ liệu đó không nằm trong repo:** Waveform-40 (5.000 × 40): giữ 18, bỏ đủ 19 cột rác, 12–21 giây;
+      Pendigits (10.992 × 15): giữ 15, 3,2 giây; Letter (20.000 × 14): giữ 14, 4,7 giây.
+    - **Lý do loại phương án cũ (số của Quân):** RF + điểm gãy: Pendigits chỉ giữ 1/15 cột, Waveform bỏ 6–8 cột thật. RFECV: Waveform sạch giữ 30 cột gồm 11 cột rác, 99 giây; nhiễu 10% giữ 18.
+    - **Giữ cách gộp hiện tại:** F1 trung bình 0,75, cao nhất trong 8 cách thử (75 lần chạy); cách 0,5 × điểm thô + 0,5 × điểm thô >= 0,5 chỉ đạt 0,54 (số của Quân).
+    - **Bộ dữ liệu thực nghiệm Class Noise (Quân chốt):** Pendigits, Letter Recognition (20.000 dòng), Waveform-40 (UCI). Credit Card không dùng nữa; mục 35 / 38 (chốt Credit Card, thực nghiệm cấy nhiễu trên đó) chỉ còn là lịch sử.
+    - **Thực nghiệm cũ không hợp lệ (Quân báo cấy nhiễu sai cách, đã huỷ):** mục 5 (+ các mục 7, 38, 46 dựa vào cùng cách cấy) — không dùng để kết luận. File liên quan (chờ Quân đồng ý mới xoá): `data/class_noise_multiseed_results.jsonl`,
+      `data/class_noise_experiment_summary.md`, `analyze_class_noise_same_k.py` (đã hỏng từ khi xoá `evaluate_*`).
+    - **Kiểm chứng:** bộ test mới `tests/test_boruta.py` (chạy `python3 tests/test_boruta.py`, không cần pytest): 44 kiểm tra đạt — unit Boruta (`make_classification(2000, 5 cột thật)` + 10 cột rác: 5 cột thật được giữ, cả 10 cột rác bị bỏ,
+      cùng seed cùng kết quả, `max_iter` nhỏ thì chưa kết luận vẫn giữ); preprocess (Boruta luôn chạy, cột bị bỏ ghi `label_reduction`, dự phòng khi Boruta lỗi / giữ 0 cột, 1 cột thì không chạy, cảnh báo lớp hiếm còn, dòng ô trống);
+      smoke route `/api/class-noise/detect` bằng Flask test client (có `preprocess.label_reduction`, `reduce_columns` cũ bị bỏ qua, `/reduce-features` và `/boruta` trả 404, 3 method đều đi qua Boruta, JSON không NaN).
+      Lưu ý bảng nhỏ (700 dòng × 9 cột): 1 cột rác còn "chưa quyết định" sau 100 vòng nên VẪN được giữ (đúng thiết kế) — test smoke chỉ đòi bỏ được >= 3/4 cột rác và giữ đủ cột thật.
+      Thêm 1 kiểm tra cho trường hợp mọi dòng đều có ô trống (Boruta không có dòng nào để chạy -> giữ tất cả cột + cảnh báo, không lỗi): tổng 46 kiểm tra đạt. Giao diện thật (Playwright, file tổng hợp 900 dòng: 5 cột thật + 6 cột rác): không còn nút /
+      khối "Giảm số cột", request detect không gửi `reduce_columns`, không gọi route đã gỡ, thẻ chuẩn bị hiện "Giảm số cột (Boruta): giữ 5 / 11 cột", liệt kê j1–j6 bị bỏ, 49 vòng, ~8 giây: 8 kiểm tra đạt.
+      Chạy lại các bài test cũ (nằm ngoài repo, ở thư mục tạm): Confident Learning 45/45, Mutual k-NN 56/56, Ensemble 32/32, Ensemble 5 họ 37/37, bộ kết hợp 40/40, route bộ kết hợp 64/64, route Class Noise 16/16, xử lý Class Noise (API) tất cả đạt,
+      bộ máy Biểu thức / Nếu–thì / chữ trần / kiểm tra khi gõ / Phụ thuộc hàm / IQR / hồi quy đều đạt. `test_preprocess.py` đã SỬA cho đúng hành vi mới (T1–T5, T7–T8 kiểm các bước không dùng nhãn trên dữ liệu ngẫu nhiên nhỏ nên tắt Boruta bằng
+      cách thay `boruta_select`; T6 viết lại: Boruta luôn chạy, giữ f0–f2, `reduce_by_label` không còn) -> 38/38 đạt.
+      KHÔNG chạy được / lỗi từ trước, KHÔNG do thay đổi này: `test_harness.py` (import `evaluate_class_noise_multiseed` đã xoá), `test_fd_multi.py` (cần 1 file CSV đầu vào đã mất); các test giao diện cũ còn mong giao diện CŨ (thẻ chọn phương pháp, `.ft-meta`,
+      chữ đã rút gọn, tên nút «Class Noise», file `test_all_noise.xlsx` đã xoá): `test_class_ui_combined`, `test_to_class_noise`, `test_class_preview_ui`, `test_class_attr_note`, `test_no_onehot` — chưa sửa. `test_class_handling_ui` (đã bỏ bước chọn thẻ phương pháp)
+      còn 1 FAIL cũ: "561 dòng dùng được = 596 dòng của file xuất" — do bước chuẩn bị GỘP DÒNG TRÙNG (từ mục 45), tắt Boruta cho cùng kết quả (565 → 561 dòng), không liên quan Boruta; `test_ch_filters` đạt.
+    - **Giới hạn / việc nợ:** Boruta VẪN dùng nhãn để chấm cột nên nhãn nhiễu nhiều có thể làm cột thật bị xếp thấp (chỉ đo được bằng thực nghiệm cấy nhiễu hợp lệ trên 3 bộ mới); chạy ĐỒNG BỘ (chưa chạy nền, chưa thanh tiến độ,
+      bảng lớn chạy RẤT LÂU vì Boruta luôn chạy trên TOÀN BỘ dòng không lấy mẫu — đo thật (máy 2 nhân, 50 cây): 50.000 × 20 cột ≈ 4,6 giây/vòng (20 vòng ≈ 1,5 phút, 100 vòng ≈ 7,7 phút); 284.807 × 30 cột ≈ 45 giây/vòng (20 vòng ≈ 15 phút, 100 vòng ≈ 75 phút) trong khi route chạy đồng bộ. Ba bộ Quân chọn (≤ 20.000 dòng) thì ổn. Nếu cần chạy file lớn: thêm lấy mẫu phân tầng hoặc giới hạn thời gian cho Boruta (CHƯA làm, vì bản yêu cầu ghi "không lấy mẫu"); mặc định dùng độ quan trọng Gini của Random Forest (như BorutaPy) nên có thể xác nhận nhầm 1–2 cột rác (không ảnh hưởng
+      việc bỏ cột, vì chỉ cột kết luận "bỏ" mới bị loại); chưa có thí nghiệm đo Boruta giúp tìm nhãn sai tốt hơn bao nhiêu; chưa push.
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
@@ -2308,7 +2347,7 @@ từ 21/11 — dùng lại, không viết mới.
    (d) điểm Ensemble chỉ có 4 mức nên đóng góp xếp hạng thô — kế hoạch mục 7 (5 họ có xác suất) sẽ cải thiện;
    (e) `k="auto"` cho Distance chọn k=3 trên Car (xem mục 2), có thể làm Distance yếu hơn mức có thể; (f) α chưa được chọn theo giao thức nên các số theo α chỉ để xem xu hướng.
    **(g) CẢI CHÍNH SAU MỤC 5:** kết quả "kết hợp F1 0,854 so với Confident Learning 0,713" trên Car KHÔNG tổng quát hoá khi chạy 4 bộ x 4 seed giữ lại — xem mục 5 (bộ kết hợp thua `naive_cv` và không hơn cách cắt top-K theo điểm của Confident Learning).
-5. Thực nghiệm — mở rộng `evaluate_class_noise_multiseed.py` — ĐÃ CHẠY XONG (22/11/2026): 4 bộ x 5 seed x 3 kiểu nhiễu = 60 ô, 900 bản ghi.
+5. **[HUỶ 24/11/2026: Quân báo thực nghiệm này cấy nhiễu sai cách; các số bên dưới KHÔNG còn là căn cứ — chỉ giữ làm lịch sử]** Thực nghiệm — mở rộng `evaluate_class_noise_multiseed.py` — ĐÃ CHẠY XONG (22/11/2026): 4 bộ x 5 seed x 3 kiểu nhiễu = 60 ô, 900 bản ghi.
    **Thiết lập:** harness v2 ghi `data/class_noise_multiseed_v2.jsonl` (+ điểm từng dòng ở `data/class_noise_scores_v2/`, git bỏ qua, ~35 MB, sinh lại được);
    `summarize_class_noise_multiseed.py` ghi báo cáo đầy đủ `data/class_noise_experiment_summary.md` (bảng theo từng bộ x kiểu nhiễu, Wilcoxon, downstream, biến thể, cổng, thời gian);
    `analyze_class_noise_same_k.py` làm phân tích "cắt cùng K". Bộ dữ liệu: Car (1.728 dòng, 2 lớp, 7,75% hiếm, nhãn gốc đúng 100%), Adult (mẫu 30.000 dòng, 6 cột số), dữ liệu thầy (mẫu 30.000/588.393
