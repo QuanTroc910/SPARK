@@ -77,7 +77,6 @@ from class_noise.combined import detect_class_noise_combined, method_findings
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
 from class_noise.distance_based import detect_class_noise_distance
-from class_noise.ensemble_based import detect_class_noise_ensemble
 from class_noise.feature_selection import cap_outliers, log_transform
 from class_noise.preprocess import PreprocessConfig, PreprocessError, prepare_for_class_noise
 from class_noise.web_adapter import (
@@ -704,19 +703,16 @@ def class_noise_detect_api():
     DÙNG CHUNG với hướng attribute -- không có endpoint upload riêng) +
     label_column + feature_columns + method (+ tham số riêng từng method).
 
-    **method** (mới, 3 giá trị khớp đúng Bảng 6 Gupta & Gupta 2019):
+    **method** (các giá trị còn dùng):
       - "single_learning" (mặc định, giữ nguyên hành vi cũ): Random Forest +
         5-fold CV + Confident Learning (class_noise/confident_learning.py).
         Tham số riêng: n_estimators, cv_folds.
       - "distance_based": Mutual k-Nearest Neighbor, N13
         (class_noise/distance_based.py) -- KHÔNG train model nào, chỉ xét
         khoảng cách. Tham số riêng: k.
-      - "ensemble_based": N29 (class_noise/ensemble_based.py) -- 3 classifier
-        khác họ (LogisticRegression, GaussianNB, LinearSVC) biểu quyết qua
-        cross-validation. Tham số riêng: cv_folds.
       - "combined" (CÁCH DUY NHẤT giao diện Denoise gọi, từ 23/11/2026): bộ kết hợp
         (class_noise/combined.py) chạy Confident Learning + Mutual k-NN rồi gộp thành 1 danh sách
-        Top-K. Ensemble KHÔNG còn nằm trong bộ kết hợp (vẫn có nhánh "ensemble_based" riêng ở trên).
+        Top-K. (Ensemble đã gỡ khỏi dự án 24/11/2026.)
         Tham số (đều tuỳ chọn, giao diện không gửi nên dùng mặc định): k (mặc định 5; null / "" /
         "auto" = chọn theo độ phủ), alpha (mặc định 0 = "công tắc", > 0 = "pha trộn"), n_estimators
         (mặc định 100), cv_folds (mặc định 5). Response thêm `method_findings` = danh sách RIÊNG
@@ -745,9 +741,9 @@ def class_noise_detect_api():
     dòng nghi ngờ" ở frontend dùng chung được 1 cách render.
 
     Tiền xử lý đặc trưng THEO PHƯƠNG PHÁP (kế hoạch mục 3, 22/11/2026):
-      - "distance_based" và "ensemble_based": tự cap outlier (về biên IQR) + log-transform
+      - "distance_based": tự cap outlier (về biên IQR) + log-transform
         (`cap_outliers()` + `log_transform()`, class_noise/feature_selection.py) lên
-        feature_columns, vì 2 phương pháp này đo khoảng cách / dùng mô hình tuyến tính nên
+        feature_columns, vì phương pháp này đo khoảng cách nên
         nhạy với giá trị cực đoan và phân phối lệch.
       - "single_learning" (cây quyết định): KHÔNG cap, KHÔNG log, dùng nguyên giá trị. Log là phép
         đơn điệu nên cây không đổi; cap thì có thể xoá tín hiệu thật nằm ở giá trị cực đoan. Đã đo
@@ -773,7 +769,7 @@ def class_noise_detect_api():
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
 
     method = payload.get("method") or "single_learning"
-    if method not in ("single_learning", "distance_based", "ensemble_based", "combined"):
+    if method not in ("single_learning", "distance_based", "combined"):
         return jsonify({"error": f"method không hợp lệ: {method}"}), 400
 
     label_column = payload.get("label_column")
@@ -824,7 +820,7 @@ def class_noise_detect_api():
     report_json = preprocess_info(prepared.report)
 
     # Biến đổi RIÊNG từng phương pháp (kế hoạch mục 3, 22/11/2026):
-    #  - Distance-based, Ensemble-based: cap outlier (về biên IQR) + log-transform
+    #  - Distance-based: cap outlier (về biên IQR) + log-transform
     #    (`cap_outliers()` + `log_transform()`), vì 2 phương pháp này đo khoảng cách / dùng mô hình
     #    tuyến tính nên nhạy với giá trị cực đoan và phân phối lệch.
     #  - Single learning (cây quyết định): KHÔNG cap, KHÔNG log. Log là phép đơn điệu nên cây không đổi;
@@ -870,22 +866,6 @@ def class_noise_detect_api():
                 ],
             )
 
-        if method == "ensemble_based":
-            ens_config = ClassNoiseConfig(label_column=label_column, feature_columns=used_features)
-            result = detect_class_noise_ensemble(_cap_and_log(prepared.df, used_features), ens_config, cv_folds=cv_folds)
-            return _respond(
-                {"diagnostics": _ensemble_diagnostics_json(result.diagnostics)},
-                [
-                    {
-                        "row_number": f.row_number,
-                        "recorded_label": f.recorded_label,
-                        "suggested_label": f.suggested_label,
-                        "score": f.disagree_ratio,
-                    }
-                    for f in result.findings
-                ],
-            )
-
         if method == "combined":
             alpha = float(payload.get("alpha") or 0.0)
             if not 0.0 <= alpha <= 1.0:
@@ -896,7 +876,7 @@ def class_noise_detect_api():
                 n_estimators=int(payload.get("n_estimators") or 100),
                 cv_folds=cv_folds,
             )
-            # Phương pháp thành phần để MẶC ĐỊNH (Confident Learning + Mutual k-NN): Ensemble không còn trong bộ kết hợp.
+            # Phương pháp thành phần để MẶC ĐỊNH (Confident Learning + Mutual k-NN).
             result = detect_class_noise_combined(
                 prepared.df, comb_config, alpha=alpha, k_neighbors=_neighbors_from_payload(), cv_folds=cv_folds,
                 prepare_features=_cap_and_log,
@@ -977,29 +957,13 @@ def _distance_diagnostics_json(diag) -> dict:
     }
 
 
-def _ensemble_diagnostics_json(diag) -> dict:
-    """Chẩn đoán của Ensemble 3 classifier: accuracy + mức vượt mốc từng classifier và của classifier tốt nhất."""
-    return {
-        "n_rows_total": diag.n_rows_total,
-        "n_rows_used": diag.n_rows_used,
-        "classifier_names": diag.classifier_names,
-        "per_classifier_accuracy": diag.per_classifier_accuracy,
-        "per_classifier_excess": {k: finite(v) for k, v in diag.per_classifier_excess.items()},
-        "best_excess_over_baseline": finite(diag.best_excess_over_baseline),
-        "majority_baseline_accuracy": diag.majority_baseline_accuracy,
-        "quality": quality_assessment(diag.best_excess_over_baseline, "Classifier tốt nhất"),
-        "class_names": diag.class_names,
-        "class_counts": diag.class_counts,
-    }
-
-
 def _combined_json(result, prepared) -> tuple[dict, list]:
     """Đóng gói kết quả bộ kết hợp.
 
     - `findings` (trả riêng): danh sách KẾT HỢP, mỗi dòng kèm lý do nghi ngờ: phương pháp nào cùng gắn cờ, tỉ lệ
-      láng giềng bất đồng, xác suất mô hình cho nhãn đang ghi (và tỉ lệ classifier bất đồng nếu có chạy Ensemble).
+      láng giềng bất đồng, xác suất mô hình cho nhãn đang ghi.
     - `diagnostics.methods`: bảng từng phương pháp thành phần (bật/tắt + lý do + trọng số + mức vượt mốc), kèm
-      chẩn đoán riêng `single` (Confident Learning) / `distance` (Mutual k-NN) / `ensemble` (nếu có chạy).
+      chẩn đoán riêng `single` (Confident Learning) / `distance` (Mutual k-NN).
     - `method_findings`: danh sách RIÊNG của từng phương pháp (dòng chính nó tự gắn cờ + điểm nghi của nó) cho
       phần "Xem thêm"; đã mở rộng ra cả nhóm dòng trùng như danh sách kết hợp.
     Chỉ đóng gói phương pháp THỰC SỰ có chạy (mặc định: Confident Learning + Mutual k-NN).
@@ -1007,12 +971,10 @@ def _combined_json(result, prepared) -> tuple[dict, list]:
     diag = result.diagnostics
     single = result.method_results.get("single_learning")
     dist = result.method_results.get("distance_based")
-    ens = result.method_results.get("ensemble_based")
 
     # Điểm từng thành phần theo số dòng 1-based (đã bỏ NaN) để tra nhanh cho các dòng Top-K.
     dist_score = pd.Series(dist.scores.disagreement, index=dist.scores.row_numbers) if dist is not None else None
     p_recorded = pd.Series(1.0 - single.scores.suspicion, index=single.scores.row_numbers) if single is not None else None
-    ens_score = pd.Series(ens.scores.disagreement, index=ens.scores.row_numbers) if ens is not None else None
 
     def _lookup(series, row: int):
         if series is None or row not in series.index:
@@ -1029,7 +991,6 @@ def _combined_json(result, prepared) -> tuple[dict, list]:
             "ranks": f.ranks,
             "distance_disagreement": _lookup(dist_score, f.row_number),
             "model_probability_recorded": _lookup(p_recorded, f.row_number),
-            "ensemble_disagreement": _lookup(ens_score, f.row_number),
         }
         for f in result.findings
     ]
@@ -1092,8 +1053,6 @@ def _combined_json(result, prepared) -> tuple[dict, list]:
         body["diagnostics"]["single"] = _single_diagnostics_json(single.diagnostics)
     if dist is not None:
         body["diagnostics"]["distance"] = _distance_diagnostics_json(dist.diagnostics)
-    if ens is not None:
-        body["diagnostics"]["ensemble"] = _ensemble_diagnostics_json(ens.diagnostics)
     return body, findings
 
 

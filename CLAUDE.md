@@ -2140,6 +2140,12 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       Chạy lại: `tests/test_boruta.py` 46/46, test lõi + hành động Phụ thuộc hàm cũ (`test_fd_core`, `test_fd_actions`) ALL OK, route Biểu thức / hồi quy / outlier 2 phương pháp đạt, Playwright `test_fd_actions_ui.js` ALL PASS (xem trước, áp dụng, bộ nhân viên: 5 nhóm chưa xác định như cũ).
     - **Chưa làm / ghi nhận:** luật chưa có tham số ngưỡng (đa số tối thiểu 2 lần, hơn giá trị thứ 2) — cố định theo đề; chưa thử trên bộ nào khác ngoài Hospital / Beers / dữ liệu nhân viên của repo; giao diện không đổi (chỉ khác câu giải thích khi bấm vào ô).
 
+52. **24/11/2026 — Xoá 3 file không còn dùng: `class_noise/ensemble_based.py`, `ensemble_diverse.py`, `categorical_encoding.py` — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** user bảo xoá. LƯU Ý: trước khi xoá mình từng nói cả 3 file "web không dùng" là SAI với `ensemble_based.py` — nó còn được `app.py` (method `ensemble_based`), `combined.py` (nhánh Ensemble tuỳ chọn) và `run_class_noise.py` import. Đã gỡ hết các chỗ đó rồi mới xoá file.
+    - **Đã sửa:** `app.py` (bỏ import, nhánh `method == "ensemble_based"`, `_ensemble_diagnostics_json`, các trường `ensemble_disagreement` / `diagnostics.ensemble`; `method="ensemble_based"` nay trả 400 "method không hợp lệ"); `combined.py` (bỏ `from_ensemble`, `from_ensemble_diverse`, nhánh chạy Ensemble; `METHOD_ORDER` = single, distance); `run_class_noise.py` (bỏ `--method ensemble`); `web_adapter.py` và `workspace-flow.js` (bỏ nhãn "Ensemble"); chú thích ở `preprocess.py`, `feature_selection.py`.
+    - **Hệ quả:** các mục 11, 38, 46, kế hoạch mục 4/5/7 nhắc Ensemble chỉ còn là LỊCH SỬ (khôi phục bằng `git checkout <commit-trước> -- class_noise/<file>`). Giao diện CŨ (`index.html`, `script.js`) vẫn còn thẻ "Ensemble-based" nhưng bấm sẽ báo lỗi 400 (giao diện cũ không còn được dùng). `summarize_class_noise_multiseed.py` còn nhắc cột `on_ensemble_based` trong file kết quả cũ (chỉ đọc, không import).
+    - **Kiểm chứng:** `python3 -c "import app"`; `tests/test_boruta.py` 46/46; `tests/test_fd_majority.py` 30/30; Flask test client trên `car_noisy_5.csv`: `combined` 200 (71 dòng), `distance_based` 200, `single_learning` 200, `ensemble_based` 400.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có

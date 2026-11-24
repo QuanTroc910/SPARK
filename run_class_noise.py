@@ -8,12 +8,11 @@ Ví dụ:
     python3 run_class_noise.py --file data/class_noise_train.csv \
         --label V153 --features V44,V12,V4 --method single --out ketqua.csv
 
-Ba phương pháp (--method):
+Hai phương pháp (--method):
     single    Confident Learning + Random Forest (chậm nhất)
     distance  Mutual k-NN, dựa vào khoảng cách (không train model)
-    ensemble  3 classifier biểu quyết (LogReg + GaussianNB + LinearSVC)
 
-Giống web: cột đặc trưng phải là cột SỐ. Với distance và ensemble, mặc định tự cap
+Giống web: cột đặc trưng phải là cột SỐ. Với distance, mặc định tự cap
 outlier + log trước khi chạy (thêm --no-prep nếu muốn tắt); với single (cây quyết
 định) thì KHÔNG cap/log vì không có tác dụng đo được (xem CLAUDE.md, kế hoạch mục 3).
 """
@@ -28,7 +27,6 @@ from attribute_noise.pipeline import load_data
 from class_noise.config import ClassNoiseConfig
 from class_noise.confident_learning import detect_class_noise
 from class_noise.distance_based import detect_class_noise_distance
-from class_noise.ensemble_based import detect_class_noise_ensemble
 from class_noise.feature_selection import cap_outliers, log_transform
 
 
@@ -38,12 +36,12 @@ def parse_args():
     p.add_argument("--label", required=True, help="tên cột nhãn")
     p.add_argument("--features", required=True,
                    help="các cột đặc trưng (SỐ), cách nhau bằng dấu phẩy")
-    p.add_argument("--method", choices=["single", "distance", "ensemble"],
+    p.add_argument("--method", choices=["single", "distance"],
                    default="distance", help="thuật toán (mặc định: distance)")
     p.add_argument("--n-estimators", type=int, default=300,
                    help="[single] số cây Random Forest")
     p.add_argument("--cv-folds", type=int, default=5,
-                   help="[single, ensemble] số fold cross-validation")
+                   help="[single] số fold cross-validation")
     p.add_argument("--k", default="5",
                    help="[distance] số láng giềng k (số nguyên), hoặc 'auto' để tự chọn "
                         "k nhỏ nhất đạt độ phủ mục tiêu (mặc định: 5)")
@@ -59,7 +57,7 @@ def parse_args():
     p.add_argument("--out", help="ghi TOÀN BỘ dòng nghi ngờ ra file CSV này")
     p.add_argument("--no-prep", action="store_true",
                    help="không cap outlier + log-transform trước khi chạy "
-                        "(distance/ensemble; single vốn không cap/log)")
+                        "(distance; single vốn không cap/log)")
     return p.parse_args()
 
 
@@ -102,8 +100,6 @@ def main():
             res = detect_class_noise_distance(
                 df, cfg, k=k_value, metric=args.metric,
                 weighting=args.weighting, pca=pca_mode)
-        else:
-            res = detect_class_noise_ensemble(df, cfg, cv_folds=args.cv_folds)
     except Exception as e:  # lỗi thường gặp: cột đặc trưng không phải số
         sys.exit(f"Lỗi: {e}")
     print(f"Xong trong {time.time() - t0:.1f} giây.\n")
@@ -113,10 +109,8 @@ def main():
     for f in res.findings:
         if args.method == "single":
             sug, score = f.confident_label, f.margin
-        elif args.method == "distance":
-            sug, score = f.suggested_label, f.disagreement_ratio
         else:
-            sug, score = f.suggested_label, f.disagree_ratio
+            sug, score = f.suggested_label, f.disagreement_ratio
         rows.append({"row_number": f.row_number, "recorded_label": f.recorded_label,
                      "suggested_label": sug, "score": score})
 
@@ -127,7 +121,7 @@ def main():
         print(f"CV accuracy {d.cv_accuracy:.4f} | baseline {d.majority_baseline_accuracy:.4f}")
         if d.cv_accuracy <= d.majority_baseline_accuracy + 0.02:
             print("!! Model gần như không học được gì -> kết quả KHÔNG đáng tin.")
-    elif args.method == "distance":
+    else:
         print(f"k = {d.k} ({'tự chọn' if d.k_mode == 'auto' else 'đặt tay'}) | "
               f"độ phủ {d.coverage:.1%} ({d.n_rows_with_mutual_neighbors}/{d.n_rows_used} dòng "
               f"có láng giềng lẫn nhau)")
@@ -138,10 +132,6 @@ def main():
               f"PCA: {'bật (' + str(d.pca.get('n_components')) + ' thành phần)' if d.pca.get('applied') else 'tắt'}")
         for w in d.warnings:
             print("!!", w)
-    else:
-        for name, acc in d.per_classifier_accuracy.items():
-            print(f"{name:<20} accuracy {acc:.4f}")
-        print(f"baseline {d.majority_baseline_accuracy:.4f}")
 
     print(f"\n=== {len(rows)} dòng nghi ngờ (cao nhất trước) ===")
     print(f"{'dòng':>8}  {'nhãn ghi':<10} {'gợi ý':<10} {'score':>8}")

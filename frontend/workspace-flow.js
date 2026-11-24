@@ -2027,7 +2027,6 @@ $("apply-handling-btn").addEventListener("click", async () => {
 const CLASS_METHOD_SHORT = {
   single_learning: "Confident Learning",
   distance_based: "Mutual k-NN",
-  ensemble_based: "Ensemble",
 };
 
 function toggleStep3Direction() {

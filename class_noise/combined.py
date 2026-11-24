@@ -1,22 +1,21 @@
 """
 PHƯƠNG PHÁP KẾT HỢP cho Class Noise (kế hoạch mục 4, 22/11/2026) -- đóng góp riêng của đề tài.
 
-Vấn đề: các phương pháp có sẵn (Confident Learning, Mutual k-NN, Ensemble) cho các danh sách
+Vấn đề: các phương pháp có sẵn (Confident Learning, Mutual k-NN) cho các danh sách
 nghi ngờ khác nhau, chất lượng thay đổi theo dữ liệu (trên dữ liệu có đặc trưng yếu thì mô
 hình học máy gần như đoán bừa, trong khi k-NN vẫn dùng được; ngược lại có dữ liệu mô hình
 tốt hơn hẳn). Người dùng không biết nên tin phương pháp nào. Module này gộp chúng lại thành
 MỘT danh sách duy nhất, tự biết phương pháp nào đáng tin trên chính dữ liệu đang xét.
 
 PHƯƠNG PHÁP THÀNH PHẦN (23/11/2026): trên web bộ kết hợp CHỈ gộp Confident Learning + Mutual k-NN
-(`DEFAULT_METHODS`). Ensemble vẫn nằm trong code và gộp được qua tham số `methods` của
-`detect_class_noise_combined()` (dùng cho thực nghiệm), nhưng không còn chạy mặc định.
+(`DEFAULT_METHODS`). Ensemble đã gỡ khỏi dự án (24/11/2026).
 
 Cách làm (đơn giản, kiểm tra được từng bước):
   1. HẠNG PHẦN TRĂM. Điểm của 3 phương pháp khác thang (1 - xác suất, tỉ lệ láng giềng bất
      đồng, tỉ lệ classifier bất đồng) nên không cộng trực tiếp được. Mỗi phương pháp đổi
      điểm thành hạng phần trăm trong chính nó (0..1, hoà điểm thì lấy hạng trung bình):
      dòng đáng ngờ nhất theo phương pháp đó có hạng gần 1.
-  2. CỔNG CHẤT LƯỢNG. Phương pháp dựa trên mô hình (Confident Learning, Ensemble) bị LOẠI
+  2. CỔNG CHẤT LƯỢNG. Phương pháp dựa trên mô hình (Confident Learning) bị LOẠI
      nếu "mức vượt mốc" <= 0, tức mô hình không hơn gì cách đoán bừa lớp đông nhất -- khi
      đó các dòng nó gắn cờ chủ yếu là do mô hình dở. Mutual k-NN LUÔN có mặt vì nó không
      train mô hình nào, không có accuracy để đo.
@@ -54,14 +53,13 @@ import pandas as pd
 from .config import ClassNoiseConfig
 
 # Thứ tự cố định dùng để phá hoà khi 2 phương pháp có trọng số bằng nhau.
-METHOD_ORDER = ("single_learning", "distance_based", "ensemble_based")
+METHOD_ORDER = ("single_learning", "distance_based")
 
-# Phương pháp thành phần mặc định của bộ kết hợp (web): Confident Learning + Mutual k-NN. Ensemble KHÔNG nằm
-# trong mặc định (vẫn gộp được nếu truyền vào `methods`).
+# Phương pháp thành phần của bộ kết hợp: Confident Learning + Mutual k-NN.
 DEFAULT_METHODS = ("single_learning", "distance_based")
 
-# Gọi tắt cho tiện: "single" = Confident Learning, "distance" = Mutual k-NN, "ensemble" = Ensemble.
-METHOD_ALIASES = {"single": "single_learning", "distance": "distance_based", "ensemble": "ensemble_based"}
+# Gọi tắt cho tiện: "single" = Confident Learning, "distance" = Mutual k-NN.
+METHOD_ALIASES = {"single": "single_learning", "distance": "distance_based"}
 
 
 def normalize_methods(methods) -> tuple[str, ...]:
@@ -216,39 +214,6 @@ def from_distance(result) -> MethodOutput:
         quality=None,
         always_on=True,
         note=f"Mutual k-NN, k={result.diagnostics.k}, độ phủ {result.diagnostics.coverage:.1%}",
-    )
-
-
-def from_ensemble(result) -> MethodOutput:
-    """Từ kết quả của ensemble_based.detect_class_noise_ensemble."""
-    s = result.scores
-    return MethodOutput(
-        name="ensemble_based",
-        row_numbers=s.row_numbers,
-        scores=np.asarray(s.disagreement, dtype=float),
-        flagged=_flag_mask(s.row_numbers, result.findings),
-        suggested_labels=s.suggested_labels,
-        quality=float(result.diagnostics.best_excess_over_baseline),
-        note="3 classifier biểu quyết (mức vượt mốc = của classifier tốt nhất)",
-    )
-
-
-def from_ensemble_diverse(result) -> MethodOutput:
-    """Từ kết quả của ensemble_diverse.detect_class_noise_ensemble_diverse (Ensemble 5 họ, kế hoạch mục 7).
-
-    Dùng ĐIỂM MỀM (trung bình 1 - P(nhãn ghi) của 5 mô hình) để xếp hạng, và luật phiếu cứng min_votes để
-    gắn cờ. Mang tên "ensemble_based" để thay đúng chỗ của Ensemble cũ trong thứ tự phá hoà trọng số.
-    Mức vượt mốc = của mô hình tốt nhất tính bằng argmax thuần (không qua ngưỡng cân bằng).
-    """
-    s = result.scores
-    return MethodOutput(
-        name="ensemble_based",
-        row_numbers=s.row_numbers,
-        scores=np.asarray(s.suspicion, dtype=float),
-        flagged=_flag_mask(s.row_numbers, result.findings),
-        suggested_labels=s.suggested_labels,
-        quality=float(result.diagnostics.best_excess_over_baseline),
-        note=f"Ensemble 5 họ, bỏ phiếu {result.diagnostics.min_votes}/5",
     )
 
 
@@ -495,12 +460,12 @@ def detect_class_noise_combined(
     """Chạy các phương pháp thành phần trên df rồi gộp bằng combine_methods.
 
     methods: phương pháp thành phần, mặc định Confident Learning + Mutual k-NN (`DEFAULT_METHODS`). Nhận tên đầy
-        đủ ("single_learning", "distance_based", "ensemble_based") hoặc gọi tắt ("single", "distance", "ensemble").
-        Chỉ phương pháp được chọn mới chạy (Ensemble không chạy nếu không chọn).
+        đủ ("single_learning", "distance_based") hoặc gọi tắt ("single", "distance").
+        Chỉ phương pháp được chọn mới chạy.
     k_neighbors: k của Mutual k-NN (số nguyên hoặc "auto" = chọn theo độ phủ).
-    cv_folds: số fold của Ensemble (Confident Learning lấy `config.cv_folds`); không tác dụng nếu không chọn Ensemble.
-    prepare_features: hàm (df, feature_columns) -> df dùng làm tiền xử lý cho Mutual k-NN và
-        Ensemble (vd cap outlier + log như web); Confident Learning luôn dùng df nguyên (cây
+    cv_folds: giữ lại cho tương thích (Confident Learning lấy `config.cv_folds`), hiện không dùng.
+    prepare_features: hàm (df, feature_columns) -> df dùng làm tiền xử lý cho Mutual k-NN
+        (vd cap outlier + log như web); Confident Learning luôn dùng df nguyên (cây
         quyết định không cần, xem CLAUDE.md kế hoạch mục 3). None = không tiền xử lý.
         Lưu ý: `cap_outliers()` / `log_transform()` của feature_selection.py làm việc trên bảng
         DẠNG CHUỖI như `load_data()` trả về (đọc `dtype=str`); đưa vào bảng đã là số sẽ lỗi kiểu dữ liệu.
@@ -508,10 +473,10 @@ def detect_class_noise_combined(
     selected = normalize_methods(methods)
 
     # Import trong hàm để module này nhẹ khi chỉ dùng combine_methods với điểm đã lưu, và để phương pháp
-    # không được chọn (vd Ensemble) không bị nạp.
+    # không được chọn không bị nạp.
     from .confident_learning import _prepare_usable_subset
 
-    needs_prepared = "distance_based" in selected or "ensemble_based" in selected
+    needs_prepared = "distance_based" in selected
     df_other = prepare_features(df, config.feature_columns) if (prepare_features and needs_prepared) else df
 
     outputs: list[MethodOutput] = []
@@ -526,14 +491,6 @@ def detect_class_noise_combined(
 
         method_results["distance_based"] = detect_class_noise_distance(df_other, config, k=k_neighbors)
         outputs.append(from_distance(method_results["distance_based"]))
-    if "ensemble_based" in selected:
-        from .ensemble_based import detect_class_noise_ensemble
-
-        method_results["ensemble_based"] = detect_class_noise_ensemble(
-            df_other, config, cv_folds=cv_folds, random_state=config.random_state
-        )
-        outputs.append(from_ensemble(method_results["ensemble_based"]))
-
     usable = _prepare_usable_subset(df, config)
     recorded = pd.Series(usable[config.label_column].astype(str).to_numpy(), index=usable.index.to_numpy() + 1)
 

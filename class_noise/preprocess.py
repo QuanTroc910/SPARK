@@ -1,7 +1,7 @@
 """
 PIPELINE CHUẨN BỊ DỮ LIỆU CHUNG cho Class Noise (mục 1 của "Kế hoạch cải tiến Class Noise").
 
-Mục tiêu: trước khi chạy BẤT KỲ phương pháp nào (Single / Distance / Ensemble / bộ kết hợp), dữ liệu
+Mục tiêu: trước khi chạy BẤT KỲ phương pháp nào (Single / Distance / bộ kết hợp), dữ liệu
 đi qua cùng 1 bước làm sạch, và các bước này KHÔNG dùng cột nhãn để quyết định giữ/bỏ cột.
 Lý do: nhãn chính là thứ đang nghi là sai -- nếu chọn cột dựa vào nhãn bẩn thì kết quả bị lệch
 (đã đo: nhiễu kiểu A làm Random Forest + Elbow chỉ giữ 1 cột `Time`, F1 tụt mạnh).

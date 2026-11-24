@@ -26,7 +26,7 @@ class FeatureRanking:
     """Một dòng của bảng xếp hạng cột theo mức quan trọng (cột + mức quan trọng).
 
     Hàm xếp hạng cũ (`rank_by_importance`, `select_by_elbow`) đã bị gỡ ngày 24/11/2026 (thay bằng Boruta);
-    chỉ còn giữ kiểu dữ liệu này vì mã nghiên cứu `categorical_encoding.py` (không được web gọi) còn dùng."""
+    chỉ còn giữ kiểu dữ liệu này (không được web gọi)."""
 
     column: str
     importance: float

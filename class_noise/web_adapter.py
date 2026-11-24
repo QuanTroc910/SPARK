@@ -29,7 +29,6 @@ MAX_LISTED_IN_RESPONSE = 50
 COMPONENT_LABELS = {
     "single_learning": "Confident Learning (Random Forest)",
     "distance_based": "Mutual k-NN",
-    "ensemble_based": "Ensemble",
 }
 
 
