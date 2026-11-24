@@ -501,6 +501,7 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     ĐỘC LẬP từng cột, báo lỗi 400 nếu cột không tồn tại / trùng cột xác định / chọn 2 lần), response
     thêm `rule_breakdown` = [{column, flagged_rows_count}]. Không có `dependent_columns` thì chạy như
     cũ (`dependent_column`, kể cả `/api/detect-noise` của giao diện cũ). Xoá dòng vi phạm = HỢP các cột.
+    **[24/11/2026, mục 51: luật "ĐA SỐ RÕ RÀNG" chạy TRƯỚC luật so cột bên dưới — nhóm có giá trị B phổ biến nhất >= 2 lần và nhiều hơn hẳn giá trị thứ 2 thì luôn kết luận `dependent`.]**
     **Đoán ô sai (Phụ thuộc hàm):** `cross_field_rules.py::analyze_functional_dependency()` (dùng chung
     `_fd_working_frame()` với detect nên luôn cùng tập dòng; chỉ là GỢI Ý, không đổi dòng bị gắn cờ).
     Mỗi nhóm mâu thuẫn (cùng A, nhiều B) so thêm CÁC CỘT CÒN LẠI: >= 50% giống nhau (`FD_SAME_ENTITY_RATIO`)
@@ -2114,6 +2115,30 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Giới hạn / việc nợ:** Boruta VẪN dùng nhãn để chấm cột nên nhãn nhiễu nhiều có thể làm cột thật bị xếp thấp (chỉ đo được bằng thực nghiệm cấy nhiễu hợp lệ trên 3 bộ mới); chạy ĐỒNG BỘ (chưa chạy nền, chưa thanh tiến độ,
       bảng lớn chạy RẤT LÂU vì Boruta luôn chạy trên TOÀN BỘ dòng không lấy mẫu — đo thật (máy 2 nhân, 50 cây): 50.000 × 20 cột ≈ 4,6 giây/vòng (20 vòng ≈ 1,5 phút, 100 vòng ≈ 7,7 phút); 284.807 × 30 cột ≈ 45 giây/vòng (20 vòng ≈ 15 phút, 100 vòng ≈ 75 phút) trong khi route chạy đồng bộ. Ba bộ Quân chọn (≤ 20.000 dòng) thì ổn. Nếu cần chạy file lớn: thêm lấy mẫu phân tầng hoặc giới hạn thời gian cho Boruta (CHƯA làm, vì bản yêu cầu ghi "không lấy mẫu"); mặc định dùng độ quan trọng Gini của Random Forest (như BorutaPy) nên có thể xác nhận nhầm 1–2 cột rác (không ảnh hưởng
       việc bỏ cột, vì chỉ cột kết luận "bỏ" mới bị loại); chưa có thí nghiệm đo Boruta giúp tìm nhãn sai tốt hơn bao nhiêu; chưa push.
+
+51. **24/11/2026 — Sửa luật đoán ô sai của phụ thuộc hàm (thêm "đa số rõ ràng") — ĐÃ XONG, ĐÃ TEST (đã commit hay chưa: xem `git log`; CHƯA push, chờ Quân đồng ý):**
+    - **Phạm vi:** CHỈ bước ĐOÁN Ô NÀO SAI trong nhóm vi phạm A → B (`attribute_noise/cross_field_rules.py::analyze_functional_dependency`). Phần PHÁT HIỆN nhóm vi phạm (`detect_functional_dependency_rule`, `_fd_working_frame`)
+      KHÔNG đổi (có test đối chiếu với `groupby().nunique() > 1`). Không đụng Class Noise.
+    - **Lý do:** luật cũ chỉ tính một cột còn lại là "giống nhau" khi MỌI dòng của nhóm giống hệt (`nunique() <= 1`). Dữ liệu thật có lỗi gõ rải rác nên nhóm lớn hầu như luôn bị coi "khác nhau" ở các cột còn lại → kết luận `determinant`
+      (nghi sai cột xác định A) và tô cả nhóm ở cột A. Hệ quả kèm theo: các nhóm đó KHÔNG có `majority_value`, nên cách xử lý "Sửa về giá trị phổ biến nhất" / "Chỉ xoá dòng nghi sai" không đụng được nhóm nào (đo trên dữ liệu thử:
+      "Sửa về giá trị phổ biến" đổi 0 ô).
+    - **Luật mới (luật 0, chạy trước các luật cũ):** `has_clear_majority = len(counts) > 1 and counts.iloc[0] >= 2 and counts.iloc[0] > counts.iloc[1]` (counts = số lần xuất hiện của từng giá trị B trong nhóm). Có đa số rõ ràng →
+      `dependent`: chỉ các ô B lệch giá trị đa số bị nghi sai, KHÔNG đổ lỗi cho A. Không có đa số rõ ràng (hoà 1-1, 2-2, 1-1-1...) → giữ NGUYÊN luật cũ (không so được cột nào → `unknown`; giống nhau ở >= 50% cột ổn định →
+      `dependent` nhưng chưa rõ giá trị đúng; còn lại → `determinant`). Ghi chú ô nghi sai: «B» lệch giá trị phổ biến rõ ràng «x» (m/n dòng có «A» = «a»), nhiều khả năng gõ sai; câu "x/y cột còn lại giống nhau" chỉ còn ở nhánh hoà
+      (luôn có n_compared > 0 ở đó) nên không bao giờ in "0/0". `_fd_plan`, `_fd_cell_info`, 2 cách xử lý trong `app.py` GIỮ NGUYÊN, đã kiểm lại vẫn chạy đúng.
+    - **Số đo (script ngoài repo, dữ liệu Hospital + Beers của Raha/Baran tải từ `BigDaMa/raha`, đáp án = file clean; ô nghi sai "đúng" = ô thật sự khác bản clean):**
+      · Số của Quân (ràng buộc chính thức của HoloClean): Hospital ô nghi sai 1.740 → 412, đúng 282 → 388, nhầm 1.458 → 24 (Precision 16% → 94%), "sửa về giá trị phổ biến" 404 ô đúng 384; Beers (2.410 dòng, brewery_id → brewery_name, city, state) không đổi (135 ô, đúng 119, Precision 88%).
+      · Mình đo lại độc lập (KHÔNG tải được file ràng buộc chính thức của HoloClean — đường dẫn đoán đều 404 — nên tự suy 53 phụ thuộc hàm 1 cột → 1 cột đúng 100% trên bảng clean, nên số tuyệt đối khác số của Quân nhưng hướng và quy mô giống):
+        Hospital ô nghi sai 3.882 → 402, đúng 377 → 396, nhầm 3.505 → 6 (Precision 9,7% → 98,5%, Recall 74,1% → 77,8%), nhóm `determinant` 242 → 0, "sửa về giá trị phổ biến" 1.197 → 1.559 ô và CẢ HAI đều đúng 100% theo bản clean;
+        Beers: GIỐNG HỆT luật cũ (135 ô, đúng 119, Precision 88,1%; khớp đúng số cũ của Quân nên cách đo của mình trùng cách đo của Quân). Bộ nhân viên của repo (`noisy_employee_dataset_large.csv` id → full_name / email,
+        `test_attribute_noise.csv` ma_nv → ho_ten / ngay_sinh / email): kết luận và ô nghi sai GIỐNG HỆT luật cũ (nhóm chỉ 2–3 dòng nên không có đa số) → các ca đã kiểm chứng ở mục 23 / 36 không đổi.
+    - **HẠN CHẾ (chấp nhận):** nhóm >= 3 dòng mà 2 đối tượng khác nhau dùng chung mã và một đối tượng xuất hiện >= 2 lần (vd NV01: 2 dòng "An" + 1 dòng "Bình" là người khác) thì luật mới coi "Bình" là ô gõ sai thay vì nghi mã.
+      Lợi ích đo được trên benchmark nhờ lỗi gõ ngẫu nhiên; nếu dữ liệu có nhiều mã dùng chung giữa các người thì luật này kém đi (nhóm 2 dòng thì không ảnh hưởng vì không có đa số).
+    - **Kiểm chứng:** `tests/test_fd_majority.py` (chạy `python3 tests/test_fd_majority.py`, không cần pytest): 30 kiểm tra đạt — nhóm lớn kiểu Hospital (mã đo "ami-1" 10 dòng của 10 bệnh viện khác nhau, `condition` "heart attack" x9 + "hearx axxack" x1: chỉ ô lỗi bị tô,
+      KHÔNG tô measure_code), 2 nhân viên khác nhau trùng mã (2 dòng) → vẫn `determinant`, cùng 1 người tên An/Ân → `dependent` chưa rõ giá trị đúng, ranh giới (2-2, 1-1-1, 3-1-1), hạn chế NV01, chỉ 2 cột (không in "0/0"), `_fd_plan`, route detect (`fd_plan`,
+      `fd_analysis`), route apply "Sửa về giá trị phổ biến" (đổi đúng 1 ô) và "Chỉ xoá dòng nghi sai" (xoá đúng 1 dòng), detect cùng tập dòng với pandas. Chạy CHÍNH file này với luật CŨ thì 14 kiểm tra báo lỗi (đúng các ca đa số) nên bộ test có tác dụng.
+      Chạy lại: `tests/test_boruta.py` 46/46, test lõi + hành động Phụ thuộc hàm cũ (`test_fd_core`, `test_fd_actions`) ALL OK, route Biểu thức / hồi quy / outlier 2 phương pháp đạt, Playwright `test_fd_actions_ui.js` ALL PASS (xem trước, áp dụng, bộ nhân viên: 5 nhóm chưa xác định như cũ).
+    - **Chưa làm / ghi nhận:** luật chưa có tham số ngưỡng (đa số tối thiểu 2 lần, hơn giá trị thứ 2) — cố định theo đề; chưa thử trên bộ nào khác ngoài Hospital / Beers / dữ liệu nhân viên của repo; giao diện không đổi (chỉ khác câu giải thích khi bấm vào ô).
 
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 

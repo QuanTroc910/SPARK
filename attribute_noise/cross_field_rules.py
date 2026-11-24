@@ -303,20 +303,24 @@ def analyze_functional_dependency(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -
     """Với mỗi nhóm vi phạm (cùng A, nhiều giá trị B khác nhau), ĐOÁN ô nào nhiều khả năng sai. Chỉ là gợi ý, KHÔNG đổi kết quả detect
     (cùng tập dòng với detect_functional_dependency_rule vì dùng chung _fd_working_frame).
 
-    Quy tắc phụ thuộc hàm tự nó không biết ô nào sai (cả nhóm mâu thuẫn, chưa rõ lỗi ở B hay ở chính A). Ta so thêm CÁC CỘT CÒN LẠI của
-    các dòng trong nhóm:
-      - Các cột còn lại phần lớn GIỐNG nhau (>= FD_SAME_ENTITY_RATIO) -> cùng 1 đối tượng, A đúng, ô sai là B. Trong B, giá trị xuất hiện
-        nhiều nhất là "mốc đúng", các giá trị lệch là nghi sai; hoà số lượng (vd 1 dòng "An", 1 dòng "Ân") thì chưa rõ giá trị nào đúng.
+    Quy tắc phụ thuộc hàm tự nó không biết ô nào sai (cả nhóm mâu thuẫn, chưa rõ lỗi ở B hay ở chính A). Thứ tự xét (đổi ngày 24/11/2026):
+      0. ĐA SỐ RÕ RÀNG TRƯỚC: nếu trong B của nhóm, giá trị phổ biến nhất xuất hiện >= 2 lần VÀ nhiều hơn hẳn giá trị thứ 2 -> kết luận "dependent":
+         A đúng, chỉ các ô B lệch giá trị đa số là nghi sai (không xét các cột còn lại). Lý do: dữ liệu thật có lỗi gõ rải rác, nên với nhóm lớn
+         các cột còn lại hầu như không bao giờ "giống hệt nhau trên mọi dòng" -> luật so cột (bên dưới) kết luận nhầm là "nghi sai A" và tô cả nhóm.
+      Không có đa số rõ ràng (vd 1 dòng "An", 1 dòng "Ân", hoặc 2 - 2) thì dùng luật so CÁC CỘT CÒN LẠI của các dòng trong nhóm:
+      - Các cột còn lại phần lớn GIỐNG nhau (>= FD_SAME_ENTITY_RATIO) -> cùng 1 đối tượng, A đúng, ô sai là B; hoà số lượng nên chưa rõ giá trị nào đúng.
       - Các cột còn lại phần lớn KHÁC nhau -> nhiều khả năng là các đối tượng khác nhau dùng chung A (vd 2 nhân viên cùng mã): ô sai là A,
         nhưng KHÔNG suy ra được dòng nào (dữ liệu không nói).
       - Không có cột nào so được -> chưa xác định.
     Chỉ dùng làm bằng chứng những cột "ổn định": cột mà ở các nhóm không vi phạm vẫn thường giống nhau. Bảng chấm công/lương có cột
     lương, tháng khác nhau giữa các dòng của cùng 1 nhân viên là bình thường -> không được tính "khác nhau" là bằng chứng khác đối tượng.
+    HẠN CHẾ của luật đa số: nhóm >= 3 dòng mà 2 đối tượng khác nhau dùng chung mã và 1 đối tượng xuất hiện >= 2 lần (vd NV01: 2 dòng "An" +
+    1 dòng "Bình" là người khác) thì "Bình" bị coi là ô gõ sai chứ không phải nghi sai mã.
 
     Trả {"rows": {row_index: {"flagged": set tên cột nghi sai, "ref": set cột mốc so sánh, "hint": [câu ngắn], "notes": [câu giải thích]}},
          "groups": [{"key": giá trị A, "column": cột phụ thuộc, "verdict": "dependent" | "determinant" | "unknown", "rows": [row_index...],
                      "majority_value": giá trị B đa số (chuỗi đầy đủ) hoặc None, "suspect_rows": [row_index dòng lệch số đông]}]}.
-    majority_value / suspect_rows chỉ có nghĩa khi kết luận "dependent" VÀ có giá trị đa số rõ ràng (không hoà): đó là nhóm "xác định được" mà
+    majority_value / suspect_rows chỉ có nghĩa khi có giá trị đa số rõ ràng (luôn kéo theo "dependent", xem luật 0): đó là nhóm "xác định được" mà
     cách xử lý "sửa về giá trị phổ biến nhất" / "chỉ xoá dòng nghi sai" dựa vào. Các nhóm còn lại (hoà, nghi sai A, chưa xác định) để None / []."""
     det_col, dep_col = cfg.determinant_column, cfg.dependent_column
     empty: dict = {"rows": {}, "groups": []}
@@ -368,8 +372,12 @@ def analyze_functional_dependency(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -
         n_compared, n_agree = int(compared.get(key, 0)), int(agree.get(key, 0))
         indices = list(group.index)
         a_text = _short(df.at[indices[0], det_col])
-        counts = group["dep"].value_counts()
-        if n_compared == 0:
+        counts = group["dep"].value_counts()  # xếp giảm dần; nhóm vi phạm luôn có >= 2 giá trị khác nhau
+        # Luật 0 (24/11/2026): đa số rõ ràng ở cột B -> chắc chắn "dependent", KHÔNG đổ lỗi cho A. (counts[0] > counts[1] >= 1 nên counts[0] >= 2.)
+        has_clear_majority = len(counts) > 1 and counts.iloc[0] >= 2 and counts.iloc[0] > counts.iloc[1]
+        if has_clear_majority:
+            verdict = "dependent"
+        elif n_compared == 0:
             verdict = "unknown"
         elif n_agree / n_compared >= FD_SAME_ENTITY_RATIO:
             verdict = "dependent"
@@ -390,9 +398,9 @@ def analyze_functional_dependency(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -
             for row_index in indices:
                 put(row_index, {det_col, dep_col}, set(), f"Chưa rõ {det_col}/{dep_col}", note)
         else:
-            same_text = f"{n_agree}/{n_compared} cột còn lại giống nhau nên có vẻ cùng một đối tượng."
-            has_majority = counts.iloc[0] > counts.iloc[1]  # counts đã xếp giảm dần và nhóm vi phạm luôn có >= 2 giá trị
-            if not has_majority:
+            if not has_clear_majority:
+                # Chỉ vào được đây khi verdict "dependent" do luật so cột (n_compared > 0 chắc chắn): giống nhau ở phần lớn cột còn lại nhưng hoà số lượng.
+                same_text = f"{n_agree}/{n_compared} cột còn lại giống nhau nên có vẻ cùng một đối tượng."
                 note = f"«{dep_col}» có {len(counts)} giá trị khác nhau với số lượng ngang nhau nên chưa xác định giá trị nào đúng; {same_text}"
                 for row_index in indices:
                     put(row_index, {dep_col}, {det_col}, f"Chưa rõ {dep_col}", note)
@@ -409,8 +417,8 @@ def analyze_functional_dependency(df: pd.DataFrame, cfg: CrossFieldRuleConfig) -
                             f"Giá trị phổ biến của «{dep_col}» khi «{det_col}» = «{a_text}»: «{majority_text}» ({counts.iloc[0]}/{len(indices)} dòng).")
                     else:
                         put(row_index, {dep_col}, {det_col}, f"Nghi sai {dep_col}",
-                            f"Nghi sai ô «{dep_col}»: «{_short(df.at[row_index, dep_col])}» lệch giá trị phổ biến «{majority_text}» "
-                            f"({counts.iloc[0]}/{len(indices)} dòng có «{det_col}» = «{a_text}»); {same_text}")
+                            f"Nghi sai ô «{dep_col}»: «{_short(df.at[row_index, dep_col])}» lệch giá trị phổ biến rõ ràng «{majority_text}» "
+                            f"({counts.iloc[0]}/{len(indices)} dòng có «{det_col}» = «{a_text}»), nhiều khả năng gõ sai.")
     return {"rows": rows, "groups": groups}
 
 
