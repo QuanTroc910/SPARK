@@ -2180,6 +2180,12 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Kiểm chứng:** `node --check`; Flask + Playwright trên `car_noisy_5.csv` (71 dòng): khoảng thật 0,96–0,99; đặt 0,97–0,98 → bảng còn 47 dòng, mọi điểm trong khoảng; Gán «Xoá dòng» + Áp dụng → hộp xác nhận «⚠ Sẽ xoá 47 dòng (1.728 → 1.681 dòng).»
       → Xác nhận → lịch sử «Nhãn «class»: xoá 47 dòng»; dòng tóm tắt và dòng thông tin dưới khung Gán rỗng; không lỗi JS.
 
+54. **25/11/2026 — Dọn `data/` và 3 script cũ ở gốc repo (Quân yêu cầu) — ĐÃ XONG, ĐÃ TEST, ĐÃ PUSH:**
+    - **Xoá:** `run_class_noise.py`, `summarize_class_noise_multiseed.py`, `analyze_class_noise_same_k.py` (đã hỏng sẵn: import `evaluate_class_noise_multiseed` không còn); trong `data/` xoá mọi tệp trừ `data/benchmarks/` và `data/kaggle_creditcard_fraud.csv` (Quân giữ lại): bộ nhân viên tự sinh (`test_attribute_noise*`, `generate_test_attribute_noise.py`, `noisy_employee_dataset*`, `noise_ground_truth*`, `KICH_BAN_TEST.md`), bộ Car (`car*`, `generate_car_noise.py`), Adult, dữ liệu thầy (`class_noise_train*.csv`, `class_noise_test.csv`), kết quả cũ (`class_noise_multiseed*`, `class_noise_experiment_summary.md`, `creditcard_noise_experiment_results.jsonl`), tệp mẫu lẻ (`sample_*`, `test_*.json/csv/txt`). Khôi phục được từ lịch sử git (commit `da5e22d` trở về trước).
+    - **`.gitignore`:** bỏ dòng `data/class_noise_scores_v2/` (thí nghiệm cũ).
+    - **Hệ quả:** các mục cũ trong file này nhắc tới những tệp trên chỉ còn là LỊCH SỬ. Web không đọc tệp nào trong `data/`.
+    - **Kiểm chứng:** `tests/test_boruta.py` 46/46, `tests/test_fd_majority.py` 30/30; Flask test client `/`, `/style.css`, `/workspace.js` trả 200; `experiments/attribute_hospital.py` vẫn ra hợp ba công cụ 404/509.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
