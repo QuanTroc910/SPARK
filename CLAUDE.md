@@ -2146,6 +2146,15 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Hệ quả:** các mục 11, 38, 46, kế hoạch mục 4/5/7 nhắc Ensemble chỉ còn là LỊCH SỬ (khôi phục bằng `git checkout <commit-trước> -- class_noise/<file>`). Giao diện CŨ (`index.html`, `script.js`) vẫn còn thẻ "Ensemble-based" nhưng bấm sẽ báo lỗi 400 (giao diện cũ không còn được dùng). `summarize_class_noise_multiseed.py` còn nhắc cột `on_ensemble_based` trong file kết quả cũ (chỉ đọc, không import).
     - **Kiểm chứng:** `python3 -c "import app"`; `tests/test_boruta.py` 46/46; `tests/test_fd_majority.py` 30/30; Flask test client trên `car_noisy_5.csv`: `combined` 200 (71 dòng), `distance_based` 200, `single_learning` 200, `ensemble_based` 400.
 
+53. **25/11/2026 — Bỏ bớt chú thích chữ nhỏ ở khối Nhãn sai (giao diện Denoise) — ĐÃ XONG, ĐÃ XEM ẢNH CHỤP (chưa commit lúc ghi):**
+    - **Theo yêu cầu của Quân (kèm ảnh chụp):** bỏ dòng nhỏ "theo số dòng Confident Learning tự gắn cờ" dưới số "dòng nghi sai nhãn" (`renderClassSummary`, class `stat-sub`);
+      bỏ cả thẻ "Bước chuẩn bị dữ liệu / Giảm số cột (Boruta)" ở bước Kết quả (`renderClassResults` không gọi `renderClassPreprocess()` nữa, chỉ ẩn `#class-preprocess-card`;
+      hàm `renderClassPreprocess()` + `PREPROCESS_REASONS` VẪN CÒN trong `workspace-flow.js` nhưng không còn được gọi; backend vẫn trả `preprocess` như cũ);
+      bước Xử lý: bỏ "Chưa có thay đổi nào." (lịch sử), dòng tóm tắt "N dòng nghi ngờ. Chưa chọn dòng nào." / "Đã chọn: xoá… · sửa nhãn…" (`chRenderSummary`, chỉ còn lời nhắc khi chưa có kết quả phát hiện),
+      và "Khớp N dòng chưa xử lý. Bấm Áp dụng ở cuối trang để thực hiện." (`chRenderBulkInfo`; nút Gán vẫn bật/tắt như cũ).
+    - **Hệ quả:** người dùng không còn thấy báo cáo cột nào bị bỏ vì luật gì, dòng bị gộp, nhóm dòng mâu thuẫn, cảnh báo của bước chuẩn bị (dữ liệu vẫn có trong response `preprocess`).
+    - **Kiểm chứng:** `node --check`, Flask + Playwright trên `car_noisy_5.csv` (71 dòng nghi sai): bước Kết quả và bước Xử lý không còn các dòng trên, không lỗi JS, nút Áp dụng / Gán / Hoàn tác vẫn hiện.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có

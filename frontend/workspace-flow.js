@@ -2196,7 +2196,7 @@ function renderClassResults() {
   const diag = state.classDiagnostics;
   if (!diag) return;
   renderClassSummary(diag);
-  renderClassPreprocess();
+  $("class-preprocess-card").hidden = true;   // thẻ báo cáo bước chuẩn bị đã bỏ khỏi giao diện (24/11/2026)
   renderClassFindingsTable();
   renderClassMore();
 }
@@ -2318,7 +2318,6 @@ function renderClassPreprocess() {
 // Chỉ 2 thẻ (dòng dùng được, dòng nghi ngờ). Các chỉ số tin cậy của từng phương pháp (mức vượt mốc của Confident
 // Learning, độ phủ của Mutual k-NN, trọng số...) nằm ở phần "Xem thêm" bên dưới danh sách.
 function renderClassSummary(diag) {
-  const kMethod = CLASS_METHOD_SHORT[diag.k_method] || diag.k_method || "—";
   $("class-stats-grid").innerHTML = `
     <div class="stat-card">
       <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
@@ -2327,7 +2326,6 @@ function renderClassSummary(diag) {
     <div class="stat-card stat-amber">
       <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
       <span class="stat-label">Dòng nghi sai nhãn</span>
-      <span class="stat-sub mono">theo số dòng ${escapeHtml(kMethod)} tự gắn cờ</span>
     </div>
   `;
   setClassWarnings([
@@ -2619,7 +2617,7 @@ function chRenderHistory() {
   const h = classHandling.history;
   const list = $("ch-history-log");
   if (h.entries.length === 0) {
-    list.innerHTML = '<li class="history-log-empty">Chưa có thay đổi nào.</li>';
+    list.innerHTML = "";
   } else {
     list.innerHTML = h.entries
       .slice()
@@ -2693,9 +2691,7 @@ function chRenderBulk() {
 function chRenderBulkInfo() {
   const matches = chBulkMatches();
   const action = $("ch-bulk-action").value;
-  $("ch-bulk-info").textContent = state.classFindings.length
-    ? `Khớp ${chNum(matches.length)} dòng chưa xử lý. Bấm Áp dụng ở cuối trang để thực hiện.`
-    : "Chưa có danh sách nghi ngờ.";
+  $("ch-bulk-info").textContent = "";
   $("ch-bulk-assign-btn").disabled = classHandling.busy || !action || matches.length === 0;
 }
 // Đổi hướng -> bảng bên dưới chỉ hiện các dòng của hướng đó, về trang 1.
@@ -2866,22 +2862,9 @@ function chPlanCounts() {
   return c;
 }
 function chRenderSummary() {
-  const total = state.classFindings.length;
-  const handled = classHandling.done.size;
-  const c = chPlanCounts();
   const chosen = classHandling.plan.size;
-  const parts = [];
-  if (!state.classDiagnostics) {
-    $("ch-summary").textContent = "Chưa có kết quả phát hiện. Quay lại bước Kết quả.";
-  } else {
-    parts.push(`${chNum(total)} dòng nghi ngờ` + (handled ? `, ${chNum(handled)} đã xử lý` : "") + ".");
-    parts.push(
-      chosen
-        ? `Đã chọn: xoá ${chNum(c.remove)} · sửa nhãn ${chNum(c.relabel)} · giữ nguyên ${chNum(c.keep)} · còn ${chNum(total - handled - chosen)} chưa chọn.`
-        : `Chưa chọn dòng nào.`
-    );
-    $("ch-summary").textContent = parts.join(" ");
-  }
+  // Không còn dòng tóm tắt "N dòng nghi ngờ / Chưa chọn dòng nào" (24/11/2026); chỉ giữ lời nhắc khi chưa có kết quả.
+  $("ch-summary").textContent = state.classDiagnostics ? "" : "Chưa có kết quả phát hiện. Quay lại bước Kết quả.";
   $("ch-apply-btn").disabled = classHandling.busy || chosen === 0;
   $("ch-apply-btn").textContent = chosen ? `Áp dụng ${chNum(chosen)} dòng đã chọn` : "Áp dụng các dòng đã chọn";
   $("ch-clear-plan-btn").disabled = classHandling.busy || chosen === 0;
