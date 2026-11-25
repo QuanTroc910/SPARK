@@ -2146,6 +2146,13 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Hệ quả:** các mục 11, 38, 46, kế hoạch mục 4/5/7 nhắc Ensemble chỉ còn là LỊCH SỬ (khôi phục bằng `git checkout <commit-trước> -- class_noise/<file>`). Giao diện CŨ (`index.html`, `script.js`) vẫn còn thẻ "Ensemble-based" nhưng bấm sẽ báo lỗi 400 (giao diện cũ không còn được dùng). `summarize_class_noise_multiseed.py` còn nhắc cột `on_ensemble_based` trong file kết quả cũ (chỉ đọc, không import).
     - **Kiểm chứng:** `python3 -c "import app"`; `tests/test_boruta.py` 46/46; `tests/test_fd_majority.py` 30/30; Flask test client trên `car_noisy_5.csv`: `combined` 200 (71 dòng), `distance_based` 200, `single_learning` 200, `ensemble_based` 400.
 
+53. **25/11/2026 — Thêm script thực nghiệm Chương 4 vào repo (`experiments/`) và dữ liệu đánh giá (`data/benchmarks/`) — ĐÃ XONG, ĐÃ CHẠY LẠI (CHƯA commit/push, chờ Quân đồng ý):**
+    - **Lý do:** mục 1.4.1 và Phụ lục D của khóa luận nói người khác chạy lại được thực nghiệm bằng script, nhưng các script đo trước đây chỉ nằm trên máy làm việc của Claude (đường dẫn cứng `/home/claude/...`). Nay đưa vào repo, đường dẫn tương đối, chạy từ thư mục gốc.
+    - **`data/benchmarks/` (~1,8 MB):** `beers_dirty.csv`, `beers_clean.csv`, `hospital_dirty.csv`, `hospital_clean.csv` (kho mã Raha), `hospital_constraints.txt` (15 ràng buộc của HoloClean; dùng 13 ràng buộc một cột xác định, gộp thành 6 khai báo theo cột xác định), `pendigits.tsv.gz`, `letter.tsv.gz`, `waveform_40.tsv.gz` (UCI, bản TSV nén của PMLB, cột nhãn `target`).
+    - **`experiments/`:** `_common.py` (đường dẫn, đổi nhãn có kiểm soát: mỗi lớp đổi round(mức × số dòng) dòng sang lớp khác ngẫu nhiên, RNG `default_rng(1000*seed + round(mức*1000))`, chấm P/R/F1 theo số dòng đếm từ 1); `attribute_beers.py`, `attribute_hospital.py` (gọi đúng các hàm route dùng: `auto_column_types`, `find_format_errors`, `blank_mask`, `_run_config_tool_detect`, `_fd_analyses`, `_fd_cell_info`, `_fd_plan`); `class_noise_web.py` (Flask test client: đăng ký → `/api/upload` → `/api/class-noise/detect` method `combined`; ghi jsonl gồm F1 của bộ kết hợp và hai danh sách riêng, bước chuẩn bị, mức vượt mốc, độ phủ k-NN, cảnh báo, số nhãn gợi ý đúng); `class_noise_report.py` (Bảng 4.5–4.7, thắng/hòa/thua, Wilcoxon); `README.md`.
+    - **`.gitignore`:** thêm `results/` (nơi `class_noise_web.py` ghi kết quả mặc định).
+    - **Kiểm chứng (code 6af4f9f):** `attribute_beers.py` ra đúng Bảng 4.3 (hợp bốn công cụ kiểu đã sửa 4.354/4.362, Precision 98,1%; kiểu tự đoán 1.251); `attribute_hospital.py` ra đúng Bảng 4.3–4.4 (hợp 404/509, Precision 94,4%; FD 388/412; sửa về phổ biến 404 ô, 384 đúng; giá trị chuẩn từ bản sạch 124 ô); `class_noise_web.py` với Pendigits 5% hạt giống 0 và Letter, Waveform-40 ở 0% và 5% hạt giống 0 ra đúng từng số dòng gắn cờ, F1, mức vượt mốc, nhãn gợi ý đúng (656/681, 174/189) như lần chạy chính thức; `class_noise_report.py` trên kết quả chính thức ra 62/9/4 và 75/0/0. `tests/test_boruta.py` 46/46, `tests/test_fd_majority.py` 30/30.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -2479,8 +2486,8 @@ dòng mâu thuẫn); dùng lại `feature_selection.py` (sửa `filter_correlate
   cần đăng nhập (chưa đăng nhập thì form đăng nhập tự hiện). Giao diện cũ vẫn mở
   được: `http://localhost:5000/index.html` (app 5 bước cũ) và `/landing.html`.
   Backend cần chạy ở 1 terminal riêng, để yên không gõ lệnh khác vào đó.
-- Test tự động KHÔNG nằm trong repo (viết ở thư mục tạm mỗi phiên, mất khi máy ảo dựng lại).
-  Muốn chạy lại cần viết lại; các con số đã kiểm chứng ghi ở từng mục trên.
+- Test tự động: `tests/test_boruta.py`, `tests/test_fd_majority.py` (chạy từ gốc repo). Script thực nghiệm
+  Chương 4: `experiments/` (xem `experiments/README.md`, mục 53).
 
 ## Ghi chú giao tiếp
 
