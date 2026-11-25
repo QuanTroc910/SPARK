@@ -2207,6 +2207,12 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Kiểm chứng:** `tests/test_purge.py` (21 kiểm tra: xoá đúng file quá hạn khỏi MỌI dict, giữ file mới, ranh giới đúng bằng TTL / hơn 1 giây, id chưa có mốc, mầm lẻ trong `HANDLING_HISTORY`, download, qua route thật: upload ghi mốc, dùng file làm mới mốc,
       file quá hạn trả 404 + lời nhắc tải lại, dọn kèm request bị chặn trong khoảng chờ và chạy khi hết khoảng chờ mà request vẫn trả 200, `app.run` không còn cứng `debug=True`); `tests/test_boruta.py` 46/46; `tests/test_fd_majority.py` 30/30.
 
+60. **25/11/2026 — Quy tắc liên cột (Phụ thuộc hàm): rút gọn chú thích — ĐÃ XONG, ĐÃ CHẠY THỬ TRÊN TRÌNH DUYỆT (chưa commit lúc ghi):**
+    - **Theo yêu cầu của Quân (kèm ảnh):** (1) chú thích dưới bảng kết quả chỉ còn "Ô tô đậm = nghi sai · ô tô nhạt = mốc so sánh." (bỏ câu "Chỉ hiện N dòng lỗi đầu tiên", "rê chuột vào cột «Gợi ý»…", và câu "Phân tích: N nhóm nghi sai «cột»");
+      (2) bỏ dòng hướng dẫn dưới ô chọn cột xác định / phụ thuộc ("Mỗi giá trị A chỉ đi với đúng 1 giá trị… Không dùng cho cột là kết quả giao dịch"). Chỉ sửa `workspace.js`; hàm `fdAnalysisText()` không còn ai gọi nên đã xoá.
+    - **Hệ quả:** người dùng không còn thấy lời báo kết quả bị cắt ở 200 dòng (backend vẫn cắt như cũ, `data.truncated` vẫn có trong response) và không còn thấy tóm tắt số nhóm nghi sai cột A / cột B (`fd_analysis` vẫn trả về).
+    - **Kiểm chứng:** `node --check`; Flask + Playwright trên `data/benchmarks/hospital_dirty.csv`, quy tắc `name → city`: 578 ô lỗi / 578 dòng, chú thích dưới bảng đúng 1 câu, dòng hướng dẫn đã mất, không lỗi JS.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có

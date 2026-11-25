@@ -2565,8 +2565,7 @@ function renderCfRuleFields() {
     renderCfValueChips(state.cf.valueCol); // dựng lại form (đổi tab / đọc lại cột): hiện lại giá trị của cột đang chọn nếu còn
     scheduleLiveCheck(); // ... và kiểm tra lại biểu thức đang có (đầu vào có thể vừa đổi)
   } else {
-    box.innerHTML = `<div class="cf-row cf-fd-row">${c("cf-det-col", "Cột xác định (A)")}<div class="field" id="cf-fd-deps"></div></div>
-      <p class="hint-note">Mỗi giá trị A chỉ đi với đúng 1 giá trị của từng cột phụ thuộc (vd ma_nv → ten). Không dùng cho cột là kết quả giao dịch.</p>`;
+    box.innerHTML = `<div class="cf-row cf-fd-row">${c("cf-det-col", "Cột xác định (A)")}<div class="field" id="cf-fd-deps"></div></div>`;
     renderCfFdDeps();
   }
 }
@@ -2827,18 +2826,6 @@ function renderExprInfo(info) {
     warns.map(([k, t]) => `<p class="cf-expr-warn is-${k}">${t}</p>`).join("");
   box.hidden = false;
 }
-// Câu tóm tắt phân tích Phụ thuộc hàm: mỗi cột phụ thuộc có bao nhiêu nhóm mâu thuẫn, nghi sai ở cột xác định (A) hay cột phụ thuộc (B).
-function fdAnalysisText(fa) {
-  if (!fa || !fa.rules) return "";
-  const parts = fa.rules.filter((r) => r.groups > 0).map((r) => {
-    const bits = [];
-    if (r.determinant) bits.push(`${r.determinant} nhóm có vẻ là đối tượng khác nhau dùng chung «${fa.determinant}» (nghi sai «${fa.determinant}»)`);
-    if (r.dependent) bits.push(`${r.dependent} nhóm nghi sai «${r.column}»`);
-    if (r.unknown) bits.push(`${r.unknown} nhóm chưa xác định được`);
-    return `${fa.rules.length > 1 ? `«${r.column}»: ` : ""}${bits.join(", ")}`;
-  });
-  return parts.length ? `Phân tích: ${parts.join(" · ")}.` : "";
-}
 $("cf-detect-btn").addEventListener("click", async () => {
   const T = TOOLSEC.cf;
   setError($(T.error), "");
@@ -2895,13 +2882,9 @@ $("cf-detect-btn").addEventListener("click", async () => {
   $("cf-result-table-wrap").hidden = false;
   renderFlaggedTable($(T.resultTable), data.columns, data.flagged_rows);
   note.classList.remove("is-only");
+  // Chú thích dưới bảng chỉ còn giải thích 2 kiểu tô ô (chỉ khi có cột "Gợi ý", tức Phụ thuộc hàm).
   const noteParts = [];
-  if (data.truncated) noteParts.push(`Chỉ hiện ${data.flagged_rows.length} dòng lỗi đầu tiên.`);
-  if (data.flagged_rows.some((r) => r.hint)) {
-    noteParts.push("Ô tô đậm = nghi sai · ô tô nhạt = mốc so sánh · rê chuột vào cột «Gợi ý» để xem lý do.");
-    const analysis = fdAnalysisText(data.fd_analysis);
-    if (analysis) noteParts.push(analysis);
-  }
+  if (data.flagged_rows.some((r) => r.hint)) noteParts.push("Ô tô đậm = nghi sai · ô tô nhạt = mốc so sánh.");
   note.hidden = !noteParts.length;
   note.classList.toggle("is-long", data.flagged_rows.some((r) => r.hint));
   note.textContent = noteParts.join(" ");
