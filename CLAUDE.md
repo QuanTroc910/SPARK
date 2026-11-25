@@ -2213,6 +2213,11 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Hệ quả:** người dùng không còn thấy lời báo kết quả bị cắt ở 200 dòng (backend vẫn cắt như cũ, `data.truncated` vẫn có trong response) và không còn thấy tóm tắt số nhóm nghi sai cột A / cột B (`fd_analysis` vẫn trả về).
     - **Kiểm chứng:** `node --check`; Flask + Playwright trên `data/benchmarks/hospital_dirty.csv`, quy tắc `name → city`: 578 ô lỗi / 578 dòng, chú thích dưới bảng đúng 1 câu, dòng hướng dẫn đã mất, không lỗi JS.
 
+61. **26/11/2026 — Dọn mã nguồn trước khi nộp + thêm README.md (Quân yêu cầu) — ĐÃ XONG, ĐÃ TEST, ĐÃ PUSH:**
+    - **Xoá:** giao diện cũ `frontend/index.html`, `frontend/script.js`, `frontend/landing.html`, `frontend/landing.js` (trang chủ "/" đã trả `workspace.html` từ trước, không trang nào còn trỏ tới 4 tệp này; 6 API cũ chỉ index.html gọi vẫn còn trong `app.py`, không ảnh hưởng). GIỮ `frontend/style.css` (workspace.html vẫn nạp). Xoá `data/kaggle_creditcard_fraud.csv` (103 MB; khoá luận đã bỏ Credit Card). `data/` giờ chỉ còn `benchmarks/`.
+    - **Thêm `README.md`** ở gốc: mô tả, cài đặt/chạy, biến môi trường (SPARK_SECRET_KEY, SPARK_FILE_TTL_MINUTES, SPARK_DEBUG), cấu trúc thư mục, dữ liệu đánh giá, lệnh chạy lại thực nghiệm và kiểm thử (khớp Phụ lục A–D của khoá luận).
+    - **Kiểm chứng:** 3 bộ test đạt; Flask test client: `/`, `/style.css`, `/workspace.css`, `/workspace.js`, `/workspace-flow.js` trả 200; `experiments/attribute_hospital.py` vẫn ra hợp ba công cụ 404/509.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
