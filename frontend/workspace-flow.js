@@ -2318,11 +2318,23 @@ function renderClassPreprocess() {
 // Chỉ 2 thẻ (dòng dùng được, dòng nghi ngờ). Các chỉ số tin cậy của từng phương pháp (mức vượt mốc của Confident
 // Learning, độ phủ của Mutual k-NN, trọng số...) nằm ở phần "Xem thêm" bên dưới danh sách.
 function renderClassSummary(diag) {
+  // Số cột có ích = số cột còn lại sau bước chuẩn bị (kể cả Boruta) / tổng cột đặc trưng đã chọn.
+  const pp = state.classPreprocess;
+  let colCard = "";
+  if (pp && Array.isArray(pp.kept_columns)) {
+    const kept = pp.kept_columns.length;
+    const total = kept + (pp.dropped_columns || []).length;
+    colCard = `
+    <div class="stat-card">
+      <span class="stat-value mono">${classNum(kept)}</span>
+      <span class="stat-label">Cột có ích / ${classNum(total)} cột đã chọn</span>
+    </div>`;
+  }
   $("class-stats-grid").innerHTML = `
     <div class="stat-card">
       <span class="stat-value mono">${classNum(diag.n_rows_used)}</span>
       <span class="stat-label">Dòng dùng được / ${classNum(diag.n_rows_total)} tổng</span>
-    </div>
+    </div>${colCard}
     <div class="stat-card stat-amber">
       <span class="stat-value mono">${classNum(state.classFindings.length)}</span>
       <span class="stat-label">Dòng nghi sai nhãn</span>

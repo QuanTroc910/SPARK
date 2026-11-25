@@ -2180,6 +2180,11 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Kiểm chứng:** `node --check`; Flask + Playwright trên `car_noisy_5.csv` (71 dòng): khoảng thật 0,96–0,99; đặt 0,97–0,98 → bảng còn 47 dòng, mọi điểm trong khoảng; Gán «Xoá dòng» + Áp dụng → hộp xác nhận «⚠ Sẽ xoá 47 dòng (1.728 → 1.681 dòng).»
       → Xác nhận → lịch sử «Nhãn «class»: xoá 47 dòng»; dòng tóm tắt và dòng thông tin dưới khung Gán rỗng; không lỗi JS.
 
+57. **25/11/2026 — Bước Kết quả (Nhãn sai): thêm thẻ số "Cột có ích / N cột đã chọn" — ĐÃ XONG, ĐÃ CHẠY THỬ TRÊN TRÌNH DUYỆT (chưa commit lúc ghi):**
+    - **Theo yêu cầu của Quân (kèm ảnh):** giữa thẻ "Dòng dùng được" và "Dòng nghi sai nhãn" thêm 1 thẻ cho biết sau bước chuẩn bị (gồm Boruta) còn bao nhiêu cột có ích.
+      Số cột có ích = `preprocess.kept_columns.length`; tổng = kept + `preprocess.dropped_columns.length` (số cột đặc trưng đã chọn). Chỉ sửa `renderClassSummary()` trong `workspace-flow.js`; backend không đổi. Không có `preprocess` thì không hiện thẻ.
+    - **Kiểm chứng:** `node --check`; Flask + Playwright trên `car_noisy_5.csv`: "1.728 dòng | 6 / 6 cột | 71 dòng nghi sai", không lỗi JS.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
