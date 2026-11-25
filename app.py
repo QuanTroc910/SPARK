@@ -211,6 +211,69 @@ def _peek_working_df(file_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Tự xoá dữ liệu cũ khỏi RAM (24/11/2026 -> 25/11/2026).
+#
+# Trước đây UPLOADED_FILES / WORKING_FILES / CLEANED_FILES / FILE_OWNERS /
+# DOWNLOAD_OWNERS / HANDLING_HISTORY chỉ lớn lên, không có chỗ nào xoá theo thời
+# gian -> server chạy lâu là RAM đầy dần. Nay mỗi file_id / download_id có "lần
+# dùng gần nhất"; không ai đụng tới trong SPARK_FILE_TTL_MINUTES phút (mặc định 60)
+# thì bị xoá khỏi mọi dict nói trên. Người dùng quay lại sau đó sẽ gặp lỗi 404
+# "hãy upload lại file" (đúng như khi server khởi động lại).
+#
+# "Lần dùng" được cập nhật ở _require_file_owner() / _require_download_owner()
+# -- mọi route dùng file_id / download_id đều gọi 2 hàm này ở dòng đầu -- nên
+# một file đang được thao tác liên tục không bao giờ bị xoá giữa chừng.
+# Dọn chạy kèm mỗi request (không cần luồng nền), tối đa 1 lần / 60 giây.
+# Request đang chạy dở (vd phát hiện nhãn sai kéo dài vài phút) giữ sẵn tham chiếu
+# tới bảng của nó nên không bị hỏng nếu file bị dọn giữa chừng.
+# ---------------------------------------------------------------------------
+FILE_TTL_SECONDS = max(1, int(os.environ.get("SPARK_FILE_TTL_MINUTES", "60"))) * 60
+PURGE_INTERVAL_SECONDS = 60
+FILE_LAST_USED: dict[str, float] = {}
+DOWNLOAD_LAST_USED: dict[str, float] = {}
+_last_purge_at = 0.0
+_PURGE_LOCK = threading.Lock()
+
+
+def _purge_expired(now: Optional[float] = None) -> dict:
+    """Xoá file_id / download_id không được dùng quá FILE_TTL_SECONDS. Trả số lượng đã xoá
+    (để test). id chưa có mốc thời gian (vừa được thêm vào dict) thì bắt đầu tính từ bây giờ."""
+    now = time.monotonic() if now is None else now
+    removed_files = removed_downloads = 0
+    with HANDLING_LOCK:  # không xoá giữa lúc một thao tác Áp dụng / Hoàn tác đang ghi
+        for file_id in list(UPLOADED_FILES.keys() | WORKING_FILES.keys() | HANDLING_HISTORY.keys() | FILE_OWNERS.keys()):
+            last = FILE_LAST_USED.setdefault(file_id, now)
+            if now - last > FILE_TTL_SECONDS:
+                for store in (UPLOADED_FILES, WORKING_FILES, HANDLING_HISTORY, FILE_OWNERS, FILE_LAST_USED):
+                    store.pop(file_id, None)
+                removed_files += 1
+        for download_id in list(CLEANED_FILES.keys() | DOWNLOAD_OWNERS.keys()):
+            last = DOWNLOAD_LAST_USED.setdefault(download_id, now)
+            if now - last > FILE_TTL_SECONDS:
+                for store in (CLEANED_FILES, DOWNLOAD_OWNERS, DOWNLOAD_LAST_USED):
+                    store.pop(download_id, None)
+                removed_downloads += 1
+    return {"files": removed_files, "downloads": removed_downloads}
+
+
+@app.before_request
+def _purge_expired_before_request():
+    """Gọi dọn kèm request, nhưng không quá PURGE_INTERVAL_SECONDS một lần."""
+    global _last_purge_at
+    now = time.monotonic()
+    if now - _last_purge_at < PURGE_INTERVAL_SECONDS:
+        return None
+    if not _PURGE_LOCK.acquire(blocking=False):  # đã có request khác đang dọn
+        return None
+    try:
+        _last_purge_at = now
+        _purge_expired(now)
+    finally:
+        _PURGE_LOCK.release()
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Lịch sử xử lý ở Bước 5 -- phục vụ nút "Hoàn tác" + nhật ký thao tác.
 #
 # HANDLING_HISTORY[file_id] là danh sách (CŨ -> MỚI) các lần "Áp dụng" ĐÃ GHI
@@ -413,6 +476,7 @@ def _require_file_owner(file_id):
     owner_id = FILE_OWNERS.get(file_id)
     if user_id is None or owner_id is None or owner_id != user_id:
         return jsonify({"error": "file_id không tồn tại, hãy upload lại file"}), 404
+    FILE_LAST_USED[file_id] = time.monotonic()  # còn đang dùng -> hoãn việc tự xoá khỏi RAM
     return None
 
 
@@ -424,6 +488,7 @@ def _require_download_owner(download_id):
     owner_id = DOWNLOAD_OWNERS.get(download_id)
     if user_id is None or owner_id is None or owner_id != user_id:
         return jsonify({"error": "download_id không tồn tại hoặc đã hết hạn"}), 404
+    DOWNLOAD_LAST_USED[download_id] = time.monotonic()
     return None
 
 
@@ -526,6 +591,7 @@ def upload_file():
         save_path.unlink(missing_ok=True)
     UPLOADED_FILES[file_id] = df
     FILE_OWNERS[file_id] = session["user_id"]
+    FILE_LAST_USED[file_id] = time.monotonic()
 
     return jsonify(
         {
@@ -2597,4 +2663,8 @@ if __name__ == "__main__":
     # PHÚT với file lớn) không chặn luôn các request khác (vd health check
     # của frontend) trong lúc chờ -- Flask dev server mặc định xử lý tuần tự
     # từng request 1 nếu không bật tuỳ chọn này.
-    app.run(port=5000, debug=True, threaded=True)
+    # debug TẮT mặc định (25/11/2026): debug=True khiến server tự khởi động lại khi file .py đổi (mất hết dữ liệu
+    # trong RAM) và, nếu server mở ra ngoài máy, trang lỗi debug của Flask có thể lộ mã nguồn / cho chạy lệnh từ xa.
+    # Khi đang sửa code và muốn tự nạp lại: đặt biến môi trường SPARK_DEBUG=1 trước khi chạy `python3 app.py`.
+    debug_mode = os.environ.get("SPARK_DEBUG", "").strip().lower() in ("1", "true", "yes")
+    app.run(port=5000, debug=debug_mode, threaded=True)

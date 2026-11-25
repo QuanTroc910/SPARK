@@ -2195,6 +2195,18 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       Số cột có ích = `preprocess.kept_columns.length`; tổng = kept + `preprocess.dropped_columns.length` (số cột đặc trưng đã chọn). Chỉ sửa `renderClassSummary()` trong `workspace-flow.js`; backend không đổi. Không có `preprocess` thì không hiện thẻ.
     - **Kiểm chứng:** `node --check`; Flask + Playwright trên `car_noisy_5.csv`: "1.728 dòng | 6 / 6 cột | 71 dòng nghi sai", không lỗi JS.
 
+59. **25/11/2026 — Tắt debug mặc định + tự xoá dữ liệu cũ khỏi RAM — ĐÃ XONG, ĐÃ TEST (chưa commit lúc ghi):**
+    - **Nguồn gốc:** Quân hỏi 3 điểm yếu khi chạy file lớn (chậm, RAM không giải phóng, server bật debug) rồi bảo "tắt debug, và tự xóa dữ liệu cũ khỏi RAM, dung lượng thì sửa sau".
+    - **Tắt debug:** `app.py` cuối file: `debug` đọc từ biến môi trường `SPARK_DEBUG` (mặc định TẮT). Hệ quả: sửa code xong phải TỰ khởi động lại `python3 app.py` (không còn tự nạp lại); muốn tự nạp lại khi đang sửa code thì chạy `SPARK_DEBUG=1 python3 app.py`.
+    - **Tự xoá:** `FILE_LAST_USED` / `DOWNLOAD_LAST_USED` ghi lần dùng gần nhất của mỗi `file_id` / `download_id`; `_purge_expired()` xoá id không được dùng quá `FILE_TTL_SECONDS` (mặc định 60 phút, đổi bằng `SPARK_FILE_TTL_MINUTES`)
+      khỏi `UPLOADED_FILES`, `WORKING_FILES`, `HANDLING_HISTORY`, `FILE_OWNERS`, `FILE_LAST_USED` (file) và `CLEANED_FILES`, `DOWNLOAD_OWNERS`, `DOWNLOAD_LAST_USED` (bản tải về). Mốc "lần dùng" cập nhật trong `_require_file_owner()` /
+      `_require_download_owner()` (mọi route dùng id đều gọi chúng đầu hàm) và lúc upload, nên file đang thao tác liên tục không bị xoá giữa chừng. Dọn chạy kèm request qua `@app.before_request`, tối đa 1 lần / 60 giây
+      (`PURGE_INTERVAL_SECONDS`), không có luồng nền, chạy trong `HANDLING_LOCK` để không xoá giữa lúc một thao tác Áp dụng / Hoàn tác đang ghi. Id chưa có mốc thì bắt đầu tính từ lúc dọn thấy nó lần đầu. Request đang chạy dở
+      (vd phát hiện nhãn sai kéo dài vài phút) giữ sẵn tham chiếu bảng nên không hỏng nếu file bị dọn giữa chừng. Người dùng quay lại sau khi hết hạn gặp lỗi 404 "file_id không tồn tại, hãy upload lại file" (như khi server khởi động lại).
+    - **Chưa làm (Quân bảo sửa sau):** giới hạn dung lượng upload (đã đề xuất 50 MB qua `MAX_CONTENT_LENGTH` + lỗi 413 tiếng Việt); chạy nền + thanh tiến độ cho phát hiện nhãn sai; Boruta vẫn không lấy mẫu nên file rất lớn vẫn chạy rất lâu.
+    - **Kiểm chứng:** `tests/test_purge.py` (21 kiểm tra: xoá đúng file quá hạn khỏi MỌI dict, giữ file mới, ranh giới đúng bằng TTL / hơn 1 giây, id chưa có mốc, mầm lẻ trong `HANDLING_HISTORY`, download, qua route thật: upload ghi mốc, dùng file làm mới mốc,
+      file quá hạn trả 404 + lời nhắc tải lại, dọn kèm request bị chặn trong khoảng chờ và chạy khi hết khoảng chờ mà request vẫn trả 200, `app.run` không còn cứng `debug=True`); `tests/test_boruta.py` 46/46; `tests/test_fd_majority.py` 30/30.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
@@ -2518,7 +2530,7 @@ dòng mâu thuẫn); dùng lại `feature_selection.py` (sửa `filter_correlate
 - Anaconda (`(base)` env), Ubuntu, có cả VS Code lẫn PyCharm.
 - User có 2 bản clone trên máy: `~/SPARK` (dùng chính thức) và
   `~/PycharmProjects/SPARK` (bản cũ/dễ lệch code — tránh dùng để đỡ nhầm lẫn).
-- Chạy: `pip install -r requirements.txt` → `python3 app.py` (port 5000) →
+- Chạy: `pip install -r requirements.txt` → `python3 app.py` (port 5000; debug tắt mặc định, đang sửa code muốn tự nạp lại thì `SPARK_DEBUG=1 python3 app.py`) →
   mở `http://localhost:5000/` bằng trình duyệt (**MỚI, mục 14**: KHÔNG còn
   mở trực tiếp file `frontend/index.html` nữa — từ khi có tài khoản đăng
   nhập, Flask tự phục vụ luôn frontend để cookie session hoạt động đúng,
