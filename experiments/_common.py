@@ -12,8 +12,8 @@ CLASS_DATASETS = ["pendigits", "letter", "waveform_40"]
 
 
 def load_class_dataset(name):
-    """Bộ class noise dạng TSV nén, cột nhãn tên 'target'."""
-    return pd.read_csv(os.path.join(DATA, f"{name}.tsv.gz"), sep="\t")
+    """Bộ class noise dạng CSV (đổi từ bản TSV nén của PMLB, giữ nguyên giá trị), cột nhãn tên 'target'."""
+    return pd.read_csv(os.path.join(DATA, f"{name}.csv"))
 
 
 def flip_labels(y0, level, seed):

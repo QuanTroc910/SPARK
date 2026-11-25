@@ -2186,6 +2186,10 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Hệ quả:** các mục cũ trong file này nhắc tới những tệp trên chỉ còn là LỊCH SỬ. Web không đọc tệp nào trong `data/`.
     - **Kiểm chứng:** `tests/test_boruta.py` 46/46, `tests/test_fd_majority.py` 30/30; Flask test client `/`, `/style.css`, `/workspace.js` trả 200; `experiments/attribute_hospital.py` vẫn ra hợp ba công cụ 404/509.
 
+55. **25/11/2026 — Đổi 3 bộ class noise trong `data/benchmarks/` từ `.tsv.gz` sang `.csv` (Quân yêu cầu, để tải thẳng lên web được) — ĐÃ XONG, ĐÃ TEST, ĐÃ PUSH:**
+    - `pendigits.csv` (10.992 × 17), `letter.csv` (20.000 × 17), `waveform_40.csv` (5.000 × 41), cột nhãn vẫn tên `target`; đọc lại bằng pandas khớp từng giá trị với bản `.tsv.gz` cũ (đã xoá). `experiments/_common.py` đọc `.csv`; README sửa theo.
+    - **Kiểm chứng:** `class_noise_web.py` Pendigits 5% hạt giống 0 ra F1 0,84463 như lần chạy chính thức; `/api/upload` nhận cả ba tệp (200).
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
