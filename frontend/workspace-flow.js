@@ -2543,6 +2543,7 @@ function chResetForNewFindings() {
   classHandling.pendingRows = null;
   $("ch-search").value = "";
   $("ch-bulk-min-score").value = "";
+  $("ch-bulk-max-score").value = "";
   $("ch-bulk-action").value = "";
   $("ch-bulk-direction").value = ""; // danh sách mới -> bỏ lọc hướng cũ
   chDismissConfirm();
@@ -2585,10 +2586,7 @@ function chDescribeEntry(entry) {
   const effects = [];
   if (entry.rows_removed > 0) effects.push(`xoá ${chNum(entry.rows_removed)} dòng`);
   if (entry.cells_changed > 0) effects.push(`đổi nhãn ${chNum(entry.cells_changed)} dòng`);
-  const parts = [];
-  Object.entries(entry.relabel_directions || {}).forEach(([k, v]) => parts.push(`${escapeHtml(k)} ×${Number(v)}`));
-  Object.entries(entry.removed_by_label || {}).forEach(([k, v]) => parts.push(`xoá nhãn «${escapeHtml(k)}» ×${Number(v)}`));
-  return `<strong>Nhãn «${escapeHtml(entry.column || "")}»</strong>: ${effects.join(", ")} <span class="history-actions">— ${parts.join("; ")}</span>`;
+  return `<strong>Nhãn «${escapeHtml(entry.column || "")}»</strong>: ${effects.join(", ")}`;
 }
 function chRenderHistory() {
   const h = classHandling.history;
@@ -2607,37 +2605,37 @@ function chRenderHistory() {
   }
   $("ch-undo-btn").disabled = !h.can_undo || classHandling.busy;
   $("ch-reset-btn").disabled = h.entries.length === 0 || classHandling.busy;
-  $("ch-history-hint").textContent =
-    h.entries.length > 0 && !h.can_undo
-      ? `Hết bước để hoàn tác (nhớ ${h.undo_limit} bước gần nhất).`
-      : `Hoàn tác tối đa ${h.undo_limit} bước.`;
+  $("ch-history-hint").textContent = ""; // không còn chú thích "Hoàn tác tối đa N bước" (25/11/2026)
 }
 
 // ---- Gán hàng loạt ----
-function chBulkMatches() {
-  const dir = $("ch-bulk-direction").value;
-  const minScore = chMinScoreValue();
-  return state.classFindings.filter((f) => {
-    if (classHandling.done.has(f.row_number)) return false;
-    if (dir && chDirectionKey(f) !== dir) return false;
-    if (minScore !== null && f.score < minScore) return false;
-    return true;
-  });
-}
-// Khoảng mức đáng ngờ THẬT của danh sách (làm tròn ra 3 số lẻ để bao trọn). null nếu chưa có danh sách.
+// Độ tin cậy hiển thị 2 chữ số lẻ; mọi so sánh theo khoảng dùng ĐÚNG giá trị đã làm tròn này để khớp với số người dùng thấy.
+const chRoundScore = (x) => Math.round(x * 100) / 100;
+// Khoảng độ tin cậy THẬT của danh sách (đã làm tròn 2 số lẻ). null nếu chưa có danh sách.
 function chScoreRange() {
-  const scores = state.classFindings.map((f) => f.score).filter((s) => Number.isFinite(s));
+  const scores = state.classFindings.map((f) => f.score).filter((x) => Number.isFinite(x)).map(chRoundScore);
   if (!scores.length) return null;
-  return { min: Math.floor(Math.min(...scores) * 1000) / 1000, max: Math.ceil(Math.max(...scores) * 1000) / 1000 };
+  return { min: Math.min(...scores), max: Math.max(...scores) };
 }
-// Giá trị ô "Mức đáng ngờ từ" đã kẹp vào khoảng cho phép; null = bỏ trống (lấy tất cả).
-function chMinScoreValue() {
-  const raw = $("ch-bulk-min-score").value.trim();
+// Giá trị 1 ô "từ" / "đến" đã kẹp vào khoảng cho phép; null = bỏ trống (không giới hạn phía đó).
+function chScoreBound(id) {
+  const raw = $(id).value.trim();
   const range = chScoreRange();
   if (raw === "" || !range) return null;
   const n = Number(raw);
   if (!Number.isFinite(n)) return null;
   return Math.min(range.max, Math.max(range.min, n));
+}
+// Dòng có độ tin cậy (đã làm tròn) nằm trong khoảng [từ, đến] đang nhập không (bỏ trống = không giới hạn).
+function chInScoreRange(f) {
+  const lo = chScoreBound("ch-bulk-min-score");
+  const hi = chScoreBound("ch-bulk-max-score");
+  const r = chRoundScore(f.score);
+  return (lo === null || r >= lo) && (hi === null || r <= hi);
+}
+// Nhóm dòng chưa xử lý khớp hướng đổi nhãn + khoảng độ tin cậy: là nhóm bảng bên dưới đang hiện và là nhóm nút "Gán" tác động.
+function chBulkMatches() {
+  return chFiltered().filter((f) => !classHandling.done.has(f.row_number));
 }
 function chRenderBulk() {
   const sel = $("ch-bulk-direction");
@@ -2652,17 +2650,19 @@ function chRenderBulk() {
       .join("");
   if (counts.has(previous)) sel.value = previous;
 
-  const input = $("ch-bulk-min-score");
   const range = chScoreRange();
-  if (range) {
-    input.min = String(range.min);
-    input.max = String(range.max);
-    input.placeholder = `${range.min.toFixed(3)} – ${range.max.toFixed(3)}`;
-  } else {
-    input.removeAttribute("min");
-    input.removeAttribute("max");
-    input.placeholder = "tất cả";
-  }
+  ["ch-bulk-min-score", "ch-bulk-max-score"].forEach((id, k) => {
+    const input = $(id);
+    if (range) {
+      input.min = range.min.toFixed(2);
+      input.max = range.max.toFixed(2);
+      input.placeholder = (k === 0 ? range.min : range.max).toFixed(2);
+    } else {
+      input.removeAttribute("min");
+      input.removeAttribute("max");
+      input.placeholder = "";
+    }
+  });
   chRenderBulkInfo();
 }
 function chRenderBulkInfo() {
@@ -2677,22 +2677,34 @@ $("ch-bulk-direction").addEventListener("change", () => {
   chRenderTable();
   chRenderBulkInfo();
 });
-// Ô "Mức đáng ngờ từ" chỉ nhận số trong khoảng [nhỏ nhất, lớn nhất] của danh sách:
-// chặn gõ e / + / - ; gõ quá lớn thì kẹp ngay về mức lớn nhất; rời ô hoặc Enter thì kẹp luôn cả phía nhỏ.
-$("ch-bulk-min-score").addEventListener("keydown", (e) => {
-  if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
-});
-$("ch-bulk-min-score").addEventListener("input", () => {
-  const range = chScoreRange();
-  const input = $("ch-bulk-min-score");
-  if (range && input.value !== "" && Number(input.value) > range.max) input.value = String(range.max);
+// Hai ô "Độ tin cậy từ ... đến ...": chỉ nhận số trong khoảng [nhỏ nhất, lớn nhất] của danh sách (chặn gõ e / + / -;
+// gõ quá lớn thì kẹp ngay về mức lớn nhất; rời ô thì kẹp cả phía nhỏ). Bảng bên dưới lọc theo khoảng này ngay khi gõ.
+function chOnScoreRangeChanged() {
+  classHandling.page = 1;
+  chRenderTable();
   chRenderBulkInfo();
-});
-$("ch-bulk-min-score").addEventListener("change", () => {
-  const input = $("ch-bulk-min-score");
-  const clamped = chMinScoreValue();
-  input.value = clamped === null ? "" : String(Number(clamped.toFixed(3)));
-  chRenderBulkInfo();
+}
+["ch-bulk-min-score", "ch-bulk-max-score"].forEach((id) => {
+  $(id).addEventListener("keydown", (e) => {
+    if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+  });
+  $(id).addEventListener("input", () => {
+    const range = chScoreRange();
+    const input = $(id);
+    if (range && input.value !== "" && Number(input.value) > range.max) input.value = String(range.max);
+    chOnScoreRangeChanged();
+  });
+  $(id).addEventListener("change", () => {
+    const from = $("ch-bulk-min-score");
+    const to = $("ch-bulk-max-score");
+    const clamped = chScoreBound(id);
+    $(id).value = clamped === null ? "" : String(Number(clamped.toFixed(2)));
+    // "từ" không được lớn hơn "đến": nếu lỡ ngược thì kéo ô còn lại về cùng giá trị.
+    const lo = chScoreBound("ch-bulk-min-score");
+    const hi = chScoreBound("ch-bulk-max-score");
+    if (lo !== null && hi !== null && lo > hi) (id === "ch-bulk-min-score" ? to : from).value = $(id).value;
+    chOnScoreRangeChanged();
+  });
 });
 $("ch-bulk-action").addEventListener("change", chRenderBulkInfo);
 $("ch-bulk-assign-btn").addEventListener("click", () => {
@@ -2731,6 +2743,7 @@ function chFiltered() {
   const text = classHandling.filterText.trim().toLowerCase();
   return state.classFindings.filter((f) => {
     if (dir && chDirectionKey(f) !== dir) return false;
+    if (!chInScoreRange(f)) return false;
     return !text || `${f.row_number} ${f.recorded_label} ${f.suggested_label}`.toLowerCase().includes(text);
   });
 }
@@ -2967,16 +2980,7 @@ function chShowConfirm(p, rows, sig) {
   if (p.labels_changed > 0) summary.push(`đổi nhãn <strong>${chNum(p.labels_changed)}</strong> dòng`);
   lines.push(`⚠ Sẽ ${summary.join(" và ")}.`);
   const dirs = Object.entries(p.relabel_directions);
-  if (dirs.length) lines.push("Đổi nhãn theo hướng: " + dirs.map(([k, v]) => `${escapeHtml(k)}: ${chNum(v)} dòng`).join(" · ") + ".");
   const rem = Object.entries(p.removed_by_label);
-  if (rem.length) lines.push("Xoá theo nhãn đang ghi: " + rem.map(([k, v]) => `«${escapeHtml(k)}»: ${chNum(v)} dòng`).join(" · ") + ".");
-  lines.push(
-    "Phân bố nhãn: " +
-      Object.keys({ ...p.label_counts_before, ...p.label_counts_after })
-        .map((k) => `«${escapeHtml(k)}» ${chNum(p.label_counts_before[k] || 0)} → ${chNum(p.label_counts_after[k] || 0)}`)
-        .join(" · ") +
-      "."
-  );
   dirs.forEach(([k, v]) => {
     const target = k.split(" → ")[1];
     const targetNote = target;
@@ -2991,7 +2995,6 @@ function chShowConfirm(p, rows, sig) {
   if (p.skipped_missing + p.skipped_stale > 0) {
     lines.push(`Bỏ qua ${chNum(p.skipped_missing + p.skipped_stale)} dòng (đã xoá hoặc đã đổi nhãn).`);
   }
-  lines.push("Chỉ khi bấm «Xác nhận» dữ liệu mới đổi.");
 
   const box = $("ch-confirm");
   box.innerHTML = `

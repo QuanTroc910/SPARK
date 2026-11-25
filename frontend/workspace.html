@@ -1011,9 +1011,13 @@
                 <select class="select" id="ch-bulk-direction"></select>
               </div>
               <div class="field">
-                <label for="ch-bulk-min-score">Mức đáng ngờ từ</label>
-                <!-- min / max / placeholder do workspace-flow.js đặt theo khoảng mức đáng ngờ thật của danh sách (chỉ nhận số trong khoảng đó) -->
-                <input class="input mono" id="ch-bulk-min-score" type="number" step="0.01" inputmode="decimal" placeholder="tất cả" />
+                <label for="ch-bulk-min-score">Độ tin cậy từ</label>
+                <!-- min / max / placeholder do workspace-flow.js đặt theo khoảng độ tin cậy thật của danh sách (chỉ nhận số trong khoảng đó) -->
+                <input class="input mono" id="ch-bulk-min-score" type="number" step="0.01" inputmode="decimal" />
+              </div>
+              <div class="field">
+                <label for="ch-bulk-max-score">đến</label>
+                <input class="input mono" id="ch-bulk-max-score" type="number" step="0.01" inputmode="decimal" />
               </div>
               <div class="field">
                 <label for="ch-bulk-action">Cách xử lý</label>

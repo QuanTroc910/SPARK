@@ -2170,6 +2170,16 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
       Tên trường JSON / backend (`score`, `supporters`...) không đổi. Không còn nơi nào trên giao diện chính hiện phương pháp nào gắn cờ từng dòng ngoài hai danh sách riêng trong "Xem thêm".
     - **Kiểm chứng:** `node --check`; Flask + Playwright trên `car_noisy_5.csv`: bảng chính 4 cột, bảng xử lý 6 cột (STT…), "Xem thêm" mở được, không còn các chú thích đã bỏ, không lỗi JS.
 
+56. **25/11/2026 — Bước Xử lý (Nhãn sai): lọc + gán theo KHOẢNG độ tin cậy, hộp xác nhận 1 dòng, bỏ chú thích lịch sử — ĐÃ XONG, ĐÃ CHẠY THỬ TRÊN TRÌNH DUYỆT (chưa commit lúc ghi):**
+    - **Theo yêu cầu của Quân (kèm ảnh):** (1) hộp xác nhận chỉ còn 1 dòng "⚠ Sẽ đổi nhãn N dòng." / "Sẽ xoá N dòng (a → b dòng)." (bỏ dòng hướng đổi nhãn, phân bố nhãn, "Chỉ khi bấm «Xác nhận»…"; VẪN GIỮ các cảnh báo
+      chỉ hiện khi xảy ra: lớp hiếm, xoá ≥ 20% số dòng, dòng bị bỏ qua); (2) lịch sử xử lý bỏ chữ "Hoàn tác tối đa N bước." và phần "— 1→0 ×1; …" sau "đổi nhãn N dòng" (chỉ còn «Nhãn «class»: đổi nhãn 16 dòng»);
+      (3) ô "Mức đáng ngờ từ" thành HAI ô "Độ tin cậy từ … đến …" (`#ch-bulk-min-score`, `#ch-bulk-max-score`): bảng bên dưới chỉ hiện các dòng có độ tin cậy trong khoảng (cộng hướng đổi nhãn + ô tìm kiếm) và nút «Gán» tác động
+      đúng nhóm dòng chưa xử lý đang hiện (`chBulkMatches()` = `chFiltered()` bỏ dòng đã xử lý). Ví dụ đặt 0,8–0,9 rồi gán «Xoá dòng» thì chỉ xoá các dòng độ tin cậy 0,8–0,9. Bỏ trống một ô = không giới hạn phía đó.
+    - **Chi tiết:** so sánh khoảng dùng GIÁ TRỊ ĐÃ LÀM TRÒN 2 chữ số lẻ (`chRoundScore`) cho khớp số hiện trong bảng (trước đó ô hiện 3 số lẻ còn bảng 2 số lẻ nên lệch); `min`/`max`/placeholder của 2 ô = khoảng thật của danh sách;
+      chặn gõ e/+/-; gõ quá lớn kẹp về max; "từ" > "đến" thì kéo ô còn lại về cùng giá trị; tiêu đề «Dòng nghi ngờ (N)» đếm theo khoảng; phát hiện lại / tải file mới thì xoá cả 2 ô. Số trong ngoặc ở ô «Hướng đổi nhãn» vẫn đếm cả danh sách (không theo khoảng).
+    - **Kiểm chứng:** `node --check`; Flask + Playwright trên `car_noisy_5.csv` (71 dòng): khoảng thật 0,96–0,99; đặt 0,97–0,98 → bảng còn 47 dòng, mọi điểm trong khoảng; Gán «Xoá dòng» + Áp dụng → hộp xác nhận «⚠ Sẽ xoá 47 dòng (1.728 → 1.681 dòng).»
+      → Xác nhận → lịch sử «Nhãn «class»: xoá 47 dòng»; dòng tóm tắt và dòng thông tin dưới khung Gán rỗng; không lỗi JS.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có
