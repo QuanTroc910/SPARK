@@ -490,7 +490,7 @@
             <ol class="tx-steps">
               <li><b>Tải file.</b> Chọn file CSV hoặc Excel rồi bấm "Tải lên &amp; tiếp tục".</li>
               <li><b>Nhãn &amp; đặc trưng.</b> Chọn cột nhãn, rồi tick các cột SỐ dùng để dự đoán nhãn (cột chữ chưa được hỗ trợ nên bị khoá). Bấm "Phát hiện nhãn sai"; file lớn có thể mất vài phút. Denoise tự bỏ cột thừa trước khi chạy (cột hằng, mã định danh, trùng thông tin, và cột Boruta thấy không liên quan tới nhãn); cột nào bị bỏ sẽ được ghi ở bước Kết quả.</li>
-              <li><b>Kết quả.</b> Đọc cảnh báo và bước chuẩn bị dữ liệu (cột nào bị bỏ, dòng nào gộp hoặc mâu thuẫn) trước. Cảnh báo đỏ nghĩa là danh sách rất khó tin, hãy chọn lại cột đặc trưng. Cột «Cùng nghi» cho biết phương pháp nào cũng gắn cờ dòng đó; bấm "Xem thêm" để xem mức tin cậy và danh sách riêng của từng phương pháp.</li>
+              <li><b>Kết quả.</b> Đọc cảnh báo và bước chuẩn bị dữ liệu (cột nào bị bỏ, dòng nào gộp hoặc mâu thuẫn) trước. Cảnh báo đỏ nghĩa là danh sách rất khó tin, hãy chọn lại cột đặc trưng. Bấm "Xem thêm" để xem mức tin cậy và danh sách riêng của từng phương pháp.</li>
               <li><b>Xử lý.</b> Mỗi dòng nghi ngờ có 3 cách: giữ nguyên, xoá dòng hoặc sửa nhãn (theo gợi ý hoặc sang nhãn khác đã có). Có thể gán hàng loạt theo hướng đổi nhãn và mức đáng ngờ. "Áp dụng" chạy thử và hỏi xác nhận trước khi ghi, hoàn tác được; xong thì xuất file CSV.</li>
             </ol>
           </section>
@@ -928,7 +928,7 @@
 
           <div class="chart-card" id="class-preprocess-card" hidden></div>
 
-          <h3 class="sub-title">Danh sách dòng nghi ngờ (điểm kết hợp giảm dần)</h3>
+          <h3 class="sub-title">Danh sách dòng nghi ngờ (độ tin cậy giảm dần)</h3>
           <div class="toolbar">
             <input type="search" class="input search-input" id="class-findings-search" placeholder="Tìm theo số dòng hoặc nhãn…" />
           </div>

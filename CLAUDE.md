@@ -2162,6 +2162,14 @@ KHÔNG còn là luồng người dùng thấy. Việc nợ chưa làm xem mục 
     - **Hệ quả:** người dùng không còn thấy báo cáo cột nào bị bỏ vì luật gì, dòng bị gộp, nhóm dòng mâu thuẫn, cảnh báo của bước chuẩn bị (dữ liệu vẫn có trong response `preprocess`).
     - **Kiểm chứng:** `node --check`, Flask + Playwright trên `car_noisy_5.csv` (71 dòng nghi sai): bước Kết quả và bước Xử lý không còn các dòng trên, không lỗi JS, nút Áp dụng / Gán / Hoàn tác vẫn hiện.
 
+55. **25/11/2026 — Bảng kết quả Nhãn sai: bỏ cột "Cùng nghi", đổi "Điểm kết hợp" thành "Độ tin cậy", bỏ 4 chú thích ở bảng "Mức tin cậy" — ĐÃ XONG, ĐÃ XEM ẢNH CHỤP (đã commit hay chưa: xem `git log`):**
+    - **Theo yêu cầu của Quân (kèm ảnh chụp):** bảng danh sách ở bước Kết quả còn 4 cột: Dòng / Nhãn ghi / Nhãn gợi ý / **Độ tin cậy** (trước là "Điểm kết hợp", số vẫn là điểm kết hợp: trung bình có trọng số hạng phần trăm, 0–1; nay hiện 2 chữ số lẻ, ở cả bước Kết quả và bước Xử lý
+      vì dùng chung `CLASS_COLUMN_LABELS`). Tiêu đề bảng ghi "(độ tin cậy giảm dần)". Đã xoá hàm `classReasonText()` + luật CSS `#class-findings-table .class-reason-cell` + câu về cột «Cùng nghi» ở phần Hướng dẫn.
+    - **Bảng "Mức tin cậy" (trong "Xem thêm"):** bỏ 4 dòng chữ nhỏ: "CV accuracy … · mốc đoán bừa …", "N / M dòng có láng giềng lẫn nhau · k = 5", và 2 dòng lý do dưới "Đang dùng" ("Mức vượt mốc 0.722 > 0", "Luôn được dùng (không có mô hình để đo chất lượng)"). Chữ đậm "Đang dùng" / "Bị loại" giữ nguyên.
+    - **LƯU Ý ngữ nghĩa:** "Độ tin cậy" ở đây là mức một dòng ĐÁNG NGHI (số càng cao càng nghi sai nhãn), KHÔNG phải độ tin cậy của phương pháp; dễ gây hiểu nhầm với bảng "Mức tin cậy" (đo phương pháp). Ô "Mức đáng ngờ từ" ở khung Gán hàng loạt vẫn giữ tên cũ.
+      Tên trường JSON / backend (`score`, `supporters`...) không đổi. Không còn nơi nào trên giao diện chính hiện phương pháp nào gắn cờ từng dòng ngoài hai danh sách riêng trong "Xem thêm".
+    - **Kiểm chứng:** `node --check`; Flask + Playwright trên `car_noisy_5.csv`: bảng chính 4 cột, bảng xử lý 6 cột (STT…), "Xem thêm" mở được, không còn các chú thích đã bỏ, không lỗi JS.
+
 ## Kế hoạch tiếp theo (chưa code) — THỨ TỰ đã thống nhất
 
 - [x] Tạo bộ dữ liệu lớn hơn để luyện lại 7 detector hiện có

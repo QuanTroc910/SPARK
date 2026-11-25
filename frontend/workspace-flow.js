@@ -2023,7 +2023,7 @@ $("apply-handling-btn").addEventListener("click", async () => {
 // ================================================================
 
 // ---- Bước 2: chọn nhãn + đặc trưng ----
-// Tên ngắn của từng phương pháp thành phần của bộ kết hợp (bảng "Cùng nghi", phần "Xem thêm").
+// Tên ngắn của từng phương pháp thành phần của bộ kết hợp (phần "Xem thêm").
 const CLASS_METHOD_SHORT = {
   single_learning: "Confident Learning",
   distance_based: "Mutual k-NN",
@@ -2344,30 +2344,13 @@ function getFilteredClassFindings() {
 }
 
 // Tên cột của bảng danh sách kết hợp (dùng cả ở bước Xử lý). Nhãn gợi ý = bỏ phiếu có trọng số giữa các phương
-// pháp đang dùng; điểm kết hợp = trung bình có trọng số hạng phần trăm của các phương pháp.
-const CLASS_COLUMN_LABELS = { suggested: "Nhãn gợi ý", score: "Điểm kết hợp" };
+// pháp đang dùng; độ tin cậy (tên hiển thị) = điểm kết hợp = trung bình có trọng số hạng phần trăm của các phương pháp.
+const CLASS_COLUMN_LABELS = { suggested: "Nhãn gợi ý", score: "Độ tin cậy" };
 
 // Số dòng hiển thị kèm ghi chú nếu dòng này là bản trùng của 1 dòng đại diện đã bị gắn cờ (bước chuẩn bị đã gộp).
 function classRowCell(f) {
   return f.duplicate_of ? `${f.row_number} <span class="hint-note">trùng dòng ${f.duplicate_of}</span>` : `${f.row_number}`;
 }
-// Lý do nghi ngờ từng dòng = phương pháp nào cùng gắn cờ + các chỉ số thành phần của chính dòng đó.
-function classReasonText(f) {
-  // Dòng 1: phương pháp nào cùng gắn cờ; dòng 2 (chữ nhỏ): các chỉ số thành phần của chính dòng đó.
-  const head =
-    f.supporters && f.supporters.length
-      ? "Cùng nghi: " + f.supporters.map((m) => CLASS_METHOD_SHORT[m] || m).join(", ")
-      : "Chưa phương pháp nào tự gắn cờ";
-  const parts = [];
-  if (f.distance_disagreement !== null && f.distance_disagreement !== undefined)
-    parts.push(`láng giềng bất đồng ${classPct(f.distance_disagreement, 0)}`);
-  if (f.model_probability_recorded !== null && f.model_probability_recorded !== undefined)
-    parts.push(`xác suất mô hình cho nhãn ghi ${f.model_probability_recorded.toFixed(2)}`);
-  if (f.ensemble_disagreement !== null && f.ensemble_disagreement !== undefined)
-    parts.push(`classifier bất đồng ${classPct(f.ensemble_disagreement, 0)}`);
-  return { head, detail: parts.join(" · ") };
-}
-
 function renderClassFindingsTable() {
   const all = getFilteredClassFindings();
   const perPage = state.classFindingsPerPage;
@@ -2377,15 +2360,14 @@ function renderClassFindingsTable() {
   const pageRows = all.slice(start, start + perPage);
 
   const table = $("class-findings-table");
-  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${CLASS_COLUMN_LABELS.suggested}</th><th>${CLASS_COLUMN_LABELS.score}</th><th>Cùng nghi</th></tr></thead>`;
+  const headHtml = `<thead><tr><th>Dòng</th><th>Nhãn ghi</th><th>${CLASS_COLUMN_LABELS.suggested}</th><th>${CLASS_COLUMN_LABELS.score}</th></tr></thead>`;
   if (!pageRows.length) {
     const empty = state.classFindings.length ? "Không có dòng nào khớp." : "Không phát hiện dòng nào nghi sai nhãn.";
-    table.innerHTML = `${headHtml}<tbody><tr><td colspan="5" class="empty-cell">${empty}</td></tr></tbody>`;
+    table.innerHTML = `${headHtml}<tbody><tr><td colspan="4" class="empty-cell">${empty}</td></tr></tbody>`;
   } else {
     table.innerHTML = `${headHtml}<tbody>${pageRows
       .map((f) => {
-        const r = classReasonText(f);
-        return `<tr><td class="mono">${classRowCell(f)}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label || "—")}</td><td class="mono">${f.score.toFixed(4)}</td><td class="class-reason-cell">${escapeHtml(r.head)}<br><span class="hint-note">${escapeHtml(r.detail)}</span></td></tr>`;
+        return `<tr><td class="mono">${classRowCell(f)}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label || "—")}</td><td class="mono">${f.score.toFixed(2)}</td></tr>`;
       })
       .join("")}</tbody>`;
   }
@@ -2410,15 +2392,10 @@ function classTrustTableHTML(diag) {
       const m = diag.methods[key];
       let metric = "—";
       if (key === "single_learning" && diag.single) {
-        const s = diag.single;
-        metric =
-          `Mức vượt mốc <strong>${m.quality === null || m.quality === undefined ? "—" : classPct(m.quality)}</strong>` +
-          `<br><span class="hint-note">CV accuracy ${classPct(s.cv_accuracy, 2)} · mốc đoán bừa ${classPct(s.majority_baseline_accuracy, 2)}</span>`;
+        metric = `Mức vượt mốc <strong>${m.quality === null || m.quality === undefined ? "—" : classPct(m.quality)}</strong>`;
       } else if (key === "distance_based" && diag.distance) {
         const d = diag.distance;
-        metric =
-          `Độ phủ <strong>${d.coverage === null || d.coverage === undefined ? "—" : classPct(d.coverage)}</strong>` +
-          `<br><span class="hint-note">${classNum(d.n_rows_with_mutual_neighbors)} / ${classNum(d.n_rows_used)} dòng có láng giềng lẫn nhau · k = ${d.k}</span>`;
+        metric = `Độ phủ <strong>${d.coverage === null || d.coverage === undefined ? "—" : classPct(d.coverage)}</strong>`;
       }
       const status = m.on
         ? `<strong>Đang dùng</strong>`
@@ -2427,7 +2404,7 @@ function classTrustTableHTML(diag) {
         <td>${escapeHtml(CLASS_METHOD_SHORT[key])}</td>
         <td class="class-reason-cell">${metric}</td>
         <td class="mono">${m.on && m.weight !== null && m.weight !== undefined ? m.weight.toFixed(2) : "—"}</td>
-        <td class="class-reason-cell">${status}<br><span class="hint-note">${escapeHtml(m.reason || "")}</span></td>
+        <td class="class-reason-cell">${status}</td>
         <td class="mono">${classNum(m.n_flagged_rows !== undefined ? m.n_flagged_rows : m.n_flagged)}</td>
       </tr>`;
     })
@@ -2801,7 +2778,7 @@ function chRenderTable() {
           const cell = d
             ? `<span class="status-text is-ok">${chDoneText(d)}</span>`
             : `<select class="select ch-row-action" data-row="${f.row_number}" aria-label="Cách xử lý dòng ${f.row_number}">${chRowOptions(f, classHandling.plan.get(f.row_number))}</select>`;
-          return `<tr><td class="mono">${start + i + 1}</td><td class="mono">${classRowCell(f)}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label || "—")}</td><td class="mono">${f.score.toFixed(4)}</td><td>${cell}</td></tr>`;
+          return `<tr><td class="mono">${start + i + 1}</td><td class="mono">${classRowCell(f)}</td><td>${escapeHtml(f.recorded_label)}</td><td>${escapeHtml(f.suggested_label || "—")}</td><td class="mono">${f.score.toFixed(2)}</td><td>${cell}</td></tr>`;
         })
         .join("") +
       "</tbody>";
