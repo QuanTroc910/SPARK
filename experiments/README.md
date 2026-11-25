@@ -15,4 +15,5 @@ Chạy từ thư mục gốc của mã nguồn, sau khi `pip install -r requirem
 
 Nguồn dữ liệu: Beers, Hospital lấy từ kho mã của Raha (bản chứa lỗi `*_dirty.csv`, bản sạch `*_clean.csv`);
 `hospital_constraints.txt` (15 ràng buộc) lấy từ kho mã của HoloClean, thực nghiệm dùng 13 ràng buộc có một cột xác định;
-Pendigits, Letter Recognition, Waveform-40 là dữ liệu UCI ở dạng TSV nén của kho PMLB, cột nhãn tên `target`.
+Pendigits, Letter Recognition, Waveform-40 là dữ liệu UCI lấy từ kho PMLB (bản gốc là TSV nén), đã đổi sang CSV giữ nguyên giá trị,
+cột nhãn tên `target`; các tệp này tải thẳng lên web được.
